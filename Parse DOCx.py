@@ -142,7 +142,7 @@ def extract_from_core_xml(xmlcontent):
                 "category": re.search(r'<cp:category>(.*?)</cp:category>', xmlcontent),
                 "contentStatus": re.search(r'<cp:contentStatus>(.*?)</cp:contentStatus>', xmlcontent)}
 
-    for key, value in core_xml.items():  # check the resutls of the GREP searches
+    for key, value in core_xml.items():  # check the results of the GREP searches
         if value is None:  # if no hit, assign empty value
             core_xml[key] = ""
         else:  # if a hit, extract group(1) from the search hit
