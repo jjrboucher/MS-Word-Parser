@@ -1,5 +1,5 @@
 ####################################
-#Written by Jacques Boucher
+# Written by Jacques Boucher
 # jjrboucher@gmail.com
 #
 # Version Date: 4 September 2023
@@ -89,7 +89,7 @@ def extract_rsids_from_xml(xml_content):
         return [] # if it can't find any RSID (that should never happen), it returns an empty list.
 
 def extract_from_apps_xml(xml_content):
-	# a try/except is used for each otherwise the script will produce an error if one of the grep values is not in the file.
+    # a try/except is used for each otherwise the script will produce an error if one of the grep values is not in the file.
         try:
             template=re.search(r'<Template>(.*?)</Template>', xml_content).group(1)
         except:
@@ -138,7 +138,7 @@ def extract_from_apps_xml(xml_content):
         return template, totalTime, pages, words, characters, application, docSecurity, lines, paragraphs, charactersWithSpaces, appVersion
 
 def extract_from_core_xml(xml_content):
-	# a try/except is used for each otherwise the script will produce an error if one of the grep values is not in the file.
+        # a try/except is used for each otherwise the script will produce an error if one of the grep values is not in the file.
         try:
             title=re.search(r'<dc:title>(.*?)</dc:title>', xml_content).group(1)
         except:
