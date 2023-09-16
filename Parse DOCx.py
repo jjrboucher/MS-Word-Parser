@@ -162,10 +162,7 @@ def list_of_xml_files(filename_path, file_name):
         return xml_files
 
 
-def write_to_excel(xml_files, excel_filepath, file_name, all_rsids, rsid_root, creator, created, last_modified_by,
-                   modified, last_printed, manager, company, revision, total_time, pages, paragraphs, lines, words,
-                   characters, characters_with_spaces, title, subject, keywords, description, application, app_version,
-                   template, doc_security, category, content_status):
+def write_to_excel(excel_filepath, file_name, xml_files, all_rsids, rsid_root, all_metadata):
     try:
         if os.path.exists(excel_filepath):  # if the file exists, open it.
             workbook = load_workbook(excel_filepath)
@@ -180,8 +177,9 @@ def write_to_excel(xml_files, excel_filepath, file_name, all_rsids, rsid_root, c
             worksheet = workbook.create_sheet(title="XML_files")
             worksheet.append(["File Name", "XML", "Size (bytes)", "MD5Hash"])
 
-        for fn, xml, size, md5hash in xml_files:  # Loop through all the embedded files
-            worksheet.append([fn, xml, size, md5hash])  # Write a row to the spreadsheet for each embedded file.
+        for msword_file, xml_file, file_size, md5hash in xml_files:  # Loop through all the embedded files
+            # Write a row to the spreadsheet for each embedded file.
+            worksheet.append([msword_file, xml_file, file_size, md5hash])
 
         print(f"List of XML files along with size and hash appended to worksheet 'XML_files'")
 
@@ -191,7 +189,7 @@ def write_to_excel(xml_files, excel_filepath, file_name, all_rsids, rsid_root, c
         else:
             # Create the worksheet "rsids"
             worksheet = workbook.create_sheet(title="rsids_summary")
-            worksheet.append(["File Name", "Unique RSID", "RSID Root"])
+            worksheet.append(["File Name", "Unique RSIDs", "RSID Root"])
 
         worksheet.append([file_name, len(rsids), rsid_root])
 
@@ -216,17 +214,13 @@ def write_to_excel(xml_files, excel_filepath, file_name, all_rsids, rsid_root, c
         else:
             # Create the worksheet "metadata"
             worksheet = workbook.create_sheet(title="metadata")
-            worksheet.append(
-                ["File Name", "Author", "Created Date", "Last Modified By", "Modified Date", "Last Printed Date",
-                 "Manager", "Company", "Revision", "Total Editing Time", "Pages",
-                 "Paragraphs", "Lines", "Words", "Characters", "Characters With Spaces", "Title", "Subject", "Keywords",
-                 "Description", "Application", "App Version", "Template",
-                 "Doc Security", "Category", "Content Status"])
+            headings = list(all_metadata.keys())  # Adds the keys as column headings to a list
+            headings.insert(0, "File Name")  # Adds column heading "File Name" at the start of the list
+            worksheet.append(headings)  # Writes the headings to the spreadsheet
 
-        worksheet.append(
-            [file_name, creator, created, last_modified_by, modified, last_printed, manager, company, revision,
-             total_time, pages, paragraphs, lines, words, characters, characters_with_spaces, title, subject,
-             keywords, description, application, app_version, template, doc_security, category, content_status])
+        metadata = list(all_metadata.values())  # Adds values to the list
+        metadata.insert(0, file_name)  # Adds the file name to the start of the list
+        worksheet.append(metadata)  # Writes the metadata to the spreadsheet
 
         print(f"Metadata appended to '{excel_file_path}' in worksheet 'metadata'")
 
@@ -306,15 +300,32 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"An error occurred: {e}")
 
-        write_to_excel(XMLFiles, excel_file_path, filename, rsids, rsidRoot, core_xml_metadata["creator"],
-                       core_xml_metadata["created"], core_xml_metadata["lastModifiedBy"], core_xml_metadata["modified"],
-                       core_xml_metadata["lastPrinted"], app_xml_metadata["manager"], app_xml_metadata["company"],
-                       core_xml_metadata["revision"], app_xml_metadata["totalTime"], app_xml_metadata["pages"],
-                       app_xml_metadata["paragraphs"], app_xml_metadata["lines"], app_xml_metadata["words"],
-                       app_xml_metadata["characters"], app_xml_metadata["charactersWithSpaces"],
-                       core_xml_metadata["title"], core_xml_metadata["subject"], core_xml_metadata["keywords"],
-                       core_xml_metadata["description"], app_xml_metadata["application"],
-                       app_xml_metadata["appVersion"],
-                       app_xml_metadata["template"], app_xml_metadata["docSecurity"], core_xml_metadata["category"],
-                       core_xml_metadata[
-                           "contentStatus"])  # Executes the function to write everything to the Excel file.
+        # The keys will be used as the column heading in the spreadsheet
+        allMetadata = {"Author": core_xml_metadata["creator"],
+                       "Created Date": core_xml_metadata["created"],
+                       "Last Modified By": core_xml_metadata["lastModifiedBy"],
+                       "Modified Date": core_xml_metadata["modified"],
+                       "Last Printed Date": core_xml_metadata["lastPrinted"],
+                       "Manager": app_xml_metadata["manager"],
+                       "Company": app_xml_metadata["company"],
+                       "Revision": core_xml_metadata["revision"],
+                       "Total Editing Time": app_xml_metadata["totalTime"],
+                       "Pages": app_xml_metadata["pages"],
+                       "Paragraphs": app_xml_metadata["paragraphs"],
+                       "Lines": app_xml_metadata["lines"],
+                       "Words": app_xml_metadata["words"],
+                       "Characters": app_xml_metadata["characters"],
+                       "Characters With Spaces": app_xml_metadata["charactersWithSpaces"],
+                       "Title": core_xml_metadata["title"],
+                       "Subject": core_xml_metadata["subject"],
+                       "Keywords": core_xml_metadata["keywords"],
+                       "Description": core_xml_metadata["description"],
+                       "Application": app_xml_metadata["application"],
+                       "App Version": app_xml_metadata["appVersion"],
+                       "Template": app_xml_metadata["template"],
+                       "Doc Security": app_xml_metadata["docSecurity"],
+                       "Category": core_xml_metadata["category"],
+                       "Content Status": core_xml_metadata["contentStatus"]
+                       }
+
+        write_to_excel(excel_file_path, filename, XMLFiles, rsids, rsidRoot, allMetadata)
