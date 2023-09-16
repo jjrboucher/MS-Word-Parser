@@ -6,16 +6,17 @@
 #
 # Written in Python 3.11
 #
-########## Description ##########
+# ********** Description **********
 #
 # Script will open a windows dialog to allow you to select a DOCx file.
 # The script does not attempt to validate the file.
 # A docx file is nothing more than a ZIP file, hence why this script uses the zipfile library.
 #
-# It will extract the results to a file called docx-artifacts.xlsx as defined by the variable excel_file_path at the start of the main part of the script.
+# It will extract the results to a file called docx-artifacts.xlsx as defined by the variable excel_file_path at the
+# start of the main part of the script.
 # If the file does not exist, it creates it. If the file does exist, it appends to it.
 # The file will be located in the folder where the script is executed from.
-# If executing from the GUI by double clicking on the .py file, it should be stored in that same folder.
+# If executing from the GUI by double-clicking on the .py file, it should be stored in that same folder.
 # If executing it from the command line, it will create it in whichever folder you are in when executing it.
 #
 # This allows you to run this repeatedly against many DOCx file for an investigation and compare them.
@@ -27,28 +28,36 @@
 #     In this worksheet, it will save the following information to a row:
 #     "File Name", "XML", "Size (bytes)", "MD5Hash"
 #
-# 2 - It will extract all the unique RSIDs from the file word/settings.xml and write it to a worksheet called rsids_summary.
+# 2 - It will extract all the unique RSIDs from the file word/settings.xml and write it to a worksheet
+#     called rsids_summary.
 #     In this worksheet, it will save the following information to a row:
 #     "File Name", "Unique RSID", "RSID Root"
 #     Where "Unique RSID" is a numerical count of the # of RSIDs in the file.
 #
-#     What is an RSID (Revision Save ID)? See https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.rsid?view=openxml-2.8.1
+#     What is an RSID (Revision Save ID)?
+#     See https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.rsid?view=openxml-2.8.1
 #
 # 3 - It will extract all the unique RSIDs from the file word/settings.xml and write it to a worksheet called rsids.
 #     In this worksheet, it will save the following information to rows (one for each unique RSID):
 #     "File Name", "RSID"
 #
-# 3 - It will extract all known relevant metadata from the files docProps/app.xml and docProps/core.xml and write it to a worksheet called metadata.
+# 3 - It will extract all known relevant metadata from the files docProps/app.xml and docProps/core.xml
+#     and write it to a worksheet called metadata.
 #     In this worksheet, it will save the following information to a row:
-#     "File Name", "Author", "Created Date","Last Modified By","Modified Date","Last Printed Date","Manager","Company","Revision","Total Editing Time","Pages","Paragraphs","Lines","Words","Characters","Characters With Spaces","Title","Subject","Keywords","Description","Application","App Version","Template","Doc Security","Category","contentStatus"
+#     "File Name", "Author", "Created Date","Last Modified By","Modified Date","Last Printed Date","Manager","Company",
+#     "Revision","Total Editing Time","Pages","Paragraphs","Lines","Words","Characters","Characters With Spaces",
+#     "Title","Subject","Keywords","Description","Application","App Version","Template","Doc Security","Category",
+#     "contentStatus"
 #
 #
-########## Dependencies ##########
+# ********** Dependencies **********
 #
-# If running the script on a Linux system, you may need to install python-tk. You can do this with the following command on a Debian (e.g. Ubuntu) system from the temrinal window:
+# If running the script on a Linux system, you may need to install python-tk. You can do this with the following
+# command on a Debian (e.g. Ubuntu) system from the terminal window:
 # sudo apt-get install python3-tk
 #
-# Whether running on Linux, Mac, or Windows, you may need to install some of the libraries if they are not included in your installation of Python 3.
+# Whether running on Linux, Mac, or Windows, you may need to install some of the libraries if they are not included in
+# your installation of Python 3.
 # In particular, you may need to install openpyxl and hashlib. You can do so as follows from a terminal window:
 #
 # pip3 install openpyxl
@@ -68,97 +77,98 @@ from openpyxl import load_workbook
 from openpyxl import Workbook
 
 
-def extract_rsids_from_xml(xml_content):
+def extract_rsids_from_xml(xmlcontent):
     try:
-        rsids = []
+        all_rsids = []
         pattern = r'<w:rsid(?:[^>]*)/>'
-        matches = re.findall(pattern, xml_content)  # Find all RSIDs
+        matches = re.findall(pattern, xmlcontent)  # Find all RSIDs
 
         for match in matches:
             rsid_match = re.search(r'<w:rsid w:val="([^"]*)"', match)  # Loops through them
             if rsid_match:
-                rsid = rsid_match.group(1)
-                rsids.append(rsid)  # Appends it to the list
-        try:
-            rsidRoot = re.search(r'<w:rsidRoot w:val="([^"]*)"', xml_content).group(1)
-        except:
-            rsidRoot = ""
-        return rsids, rsidRoot
+                all_rsids.append(rsid_match.group(1))  # Appends it to the list
 
-    except Exception as e:
-        print(f"An error occurred while extracting RSIDs: {e}")
+        rsid_root = re.search(r'<w:rsidRoot w:val="([^"]*)"', xmlcontent)
+
+        if rsid_root is None:
+            rsid_root = ""
+        else:
+            rsid_root = rsid_root.group(1)
+
+        return all_rsids, rsid_root
+
+    except Exception as function_error:
+        print(f"An error occurred while extracting RSIDs: {function_error}")
         return []  # if it can't find any RSID (that should never happen), it returns an empty list.
 
 
-def extract_from_app_xml(xml_content):
+def extract_from_app_xml(xmlcontent):
     # extract relevant metadata from app.xml file using a GREP expression
-    appXML = {}
-    appXML["template"] = re.search(r'<Template>(.*?)</Template>', xml_content)
-    appXML["totalTime"] = re.search(r'<TotalTime>(.*?)</TotalTime>', xml_content)
-    appXML["pages"] = re.search(r'<Pages>(.*?)</Pages>', xml_content)
-    appXML["words"] = re.search(r'<Words>(.*?)</Words>', xml_content)
-    appXML["characters"] = re.search(r'<Characters>(.*?)</Characters>', xml_content)
-    appXML["application"] = re.search(r'<Application>(.*?)</Application>', xml_content)
-    appXML["docSecurity"] = re.search(r'<DocSecurity>(.*?)</DocSecurity>', xml_content)
-    appXML["lines"] = re.search(r'<Lines>(.*?)</Lines>', xml_content)
-    appXML["paragraphs"] = re.search(r'<Paragraphs>(.*?)</Paragraphs>', xml_content)
-    appXML["charactersWithSpaces"] = re.search(r'<CharactersWithSpaces>(.*?)</CharactersWithSpaces>', xml_content)
-    appXML["appVersion"] = re.search(r'<AppVersion>(.*?)</AppVersion>', xml_content)
-    appXML["manager"] = re.search(r'<Manager>(.*?)</Manager>', xml_content)
-    appXML["company"] = re.search(r'<Company>(.*?)</Company>', xml_content)
+    app_xml = {"template": re.search(r'<Template>(.*?)</Template>', xmlcontent),
+               "totalTime": re.search(r'<TotalTime>(.*?)</TotalTime>', xmlcontent),
+               "pages": re.search(r'<Pages>(.*?)</Pages>', xmlcontent),
+               "words": re.search(r'<Words>(.*?)</Words>', xmlcontent),
+               "characters": re.search(r'<Characters>(.*?)</Characters>', xmlcontent),
+               "application": re.search(r'<Application>(.*?)</Application>', xmlcontent),
+               "docSecurity": re.search(r'<DocSecurity>(.*?)</DocSecurity>', xmlcontent),
+               "lines": re.search(r'<Lines>(.*?)</Lines>', xmlcontent),
+               "paragraphs": re.search(r'<Paragraphs>(.*?)</Paragraphs>', xmlcontent),
+               "charactersWithSpaces": re.search(r'<CharactersWithSpaces>(.*?)</CharactersWithSpaces>', xmlcontent),
+               "appVersion": re.search(r'<AppVersion>(.*?)</AppVersion>', xmlcontent),
+               "manager": re.search(r'<Manager>(.*?)</Manager>', xmlcontent),
+               "company": re.search(r'<Company>(.*?)</Company>', xmlcontent)}
 
-    for key, value in appXML.items():  # check the resutls of the GREP searches
-        if value == None:  # if no hit, assign empty value
-            appXML[key] = ""
+    for key, value in app_xml.items():  # check the results of the GREP searches
+        if value is None:  # if no hit, assign empty value
+            app_xml[key] = ""
         else:  # if a hit, extract group(1) from the search hit
-            appXML[key] = appXML[key].group(1)
+            app_xml[key] = app_xml[key].group(1)
 
-    return appXML
+    return app_xml
 
 
-def extract_from_core_xml(xml_content):
+def extract_from_core_xml(xmlcontent):
     # extract relevant metadata from core.xml file using a GREP expression
-    coreXML = {}
-    coreXML["title"] = re.search(r'<dc:title>(.*?)</dc:title>', xml_content)
-    coreXML["subject"] = re.search(r'<dc:subject>(.*?)</dc:subject>', xml_content)
-    coreXML["creator"] = re.search(r'<dc:creator>(.*?)</dc:creator>', xml_content)
-    coreXML["keywords"] = re.search(r'<cp:keywords>(.*?)</cp:keywords>', xml_content)
-    coreXML["description"] = re.search(r'<dc:description>(.*?)</dc:description>', xml_content)
-    coreXML["revision"] = re.search(r'<cp:revision>(.*?)</cp:revision>', xml_content)
-    coreXML["created"] = re.search(r'<dcterms:created.*?>(.*?)</dcterms:created>', xml_content)
-    coreXML["modified"] = re.search(r'<dcterms:modified.*?>(.*?)</dcterms:modified>', xml_content)
-    coreXML["lastModifiedBy"] = re.search(r'<cp:lastModifiedBy>(.*?)</cp:lastModifiedBy>', xml_content)
-    coreXML["lastPrinted"] = re.search(r'<cp:lastPrinted>(.*?)</cp:lastPrinted>', xml_content)
-    coreXML["category"] = re.search(r'<cp:category>(.*?)</cp:category>', xml_content)
-    coreXML["contentStatus"] = re.search(r'<cp:contentStatus>(.*?)</cp:contentStatus>', xml_content)
+    core_xml = {"title": re.search(r'<dc:title>(.*?)</dc:title>', xmlcontent),
+                "subject": re.search(r'<dc:subject>(.*?)</dc:subject>', xmlcontent),
+                "creator": re.search(r'<dc:creator>(.*?)</dc:creator>', xmlcontent),
+                "keywords": re.search(r'<cp:keywords>(.*?)</cp:keywords>', xmlcontent),
+                "description": re.search(r'<dc:description>(.*?)</dc:description>', xmlcontent),
+                "revision": re.search(r'<cp:revision>(.*?)</cp:revision>', xmlcontent),
+                "created": re.search(r'<dcterms:created.*?>(.*?)</dcterms:created>', xmlcontent),
+                "modified": re.search(r'<dcterms:modified.*?>(.*?)</dcterms:modified>', xmlcontent),
+                "lastModifiedBy": re.search(r'<cp:lastModifiedBy>(.*?)</cp:lastModifiedBy>', xmlcontent),
+                "lastPrinted": re.search(r'<cp:lastPrinted>(.*?)</cp:lastPrinted>', xmlcontent),
+                "category": re.search(r'<cp:category>(.*?)</cp:category>', xmlcontent),
+                "contentStatus": re.search(r'<cp:contentStatus>(.*?)</cp:contentStatus>', xmlcontent)}
 
-    for key, value in coreXML.items():  # check the resutls of the GREP searches
-        if value == None:  # if no hit, assign empty value
-            coreXML[key] = ""
+    for key, value in core_xml.items():  # check the resutls of the GREP searches
+        if value is None:  # if no hit, assign empty value
+            core_xml[key] = ""
         else:  # if a hit, extract group(1) from the search hit
-            coreXML[key] = coreXML[key].group(1)
-    return coreXML
+            core_xml[key] = core_xml[key].group(1)
+    return core_xml
 
 
-def list_of_XML_files(filename_path, file_name):
+def list_of_xml_files(filename_path, file_name):
     with zipfile.ZipFile(filename_path, 'r') as zip_file:
         # list content of the DOCx file
-        XMLFiles = []
+        xml_files = []
         for file_info in zip_file.infolist():
             with zipfile.ZipFile(filename_path, 'r') as zip_ref:
                 with zip_ref.open(file_info.filename) as xml_file:
                     md5hash = hashlib.md5(xml_file.read()).hexdigest()
-            XMLFiles.append([file_name, file_info.filename, file_info.file_size, md5hash])
-        return (XMLFiles)
+            xml_files.append([file_name, file_info.filename, file_info.file_size, md5hash])
+        return xml_files
 
 
-def write_to_excel(xml_files, excel_file_path, file_name, rsids, rsidRoot, creator, created, lastModifiedBy, modified,
-                   lastPrinted, manager, company, revision, totalTime, pages, paragraphs, lines, words, characters,
-                   charactersWithSpaces, title, subject, keywords, description, application, appVersion, template,
-                   docSecurity, category, contentStatus):
+def write_to_excel(xml_files, excel_filepath, file_name, all_rsids, rsid_root, creator, created, last_modified_by,
+                   modified, last_printed, manager, company, revision, total_time, pages, paragraphs, lines, words,
+                   characters, characters_with_spaces, title, subject, keywords, description, application, app_version,
+                   template, doc_security, category, content_status):
     try:
-        if os.path.exists(excel_file_path):  # if the file exists, open it.
-            workbook = load_workbook(excel_file_path)
+        if os.path.exists(excel_filepath):  # if the file exists, open it.
+            workbook = load_workbook(excel_filepath)
         else:  # otherwise, create it
             workbook = Workbook()
 
@@ -183,7 +193,7 @@ def write_to_excel(xml_files, excel_file_path, file_name, rsids, rsidRoot, creat
             worksheet = workbook.create_sheet(title="rsids_summary")
             worksheet.append(["File Name", "Unique RSID", "RSID Root"])
 
-        worksheet.append([file_name, len(rsids), rsidRoot])
+        worksheet.append([file_name, len(rsids), rsid_root])
 
         print(f"RSIDs summary appended to worksheet 'rsids_summary'")
 
@@ -195,7 +205,7 @@ def write_to_excel(xml_files, excel_file_path, file_name, rsids, rsidRoot, creat
             worksheet = workbook.create_sheet(title="rsids")
             worksheet.append(["File Name", "RSID"])
 
-        for rsid in set(rsids):
+        for rsid in set(all_rsids):
             worksheet.append([file_name, rsid])
 
         print(f"Unique RSIDs appended to '{excel_file_path}' in worksheet 'rsids'")
@@ -214,12 +224,11 @@ def write_to_excel(xml_files, excel_file_path, file_name, rsids, rsidRoot, creat
                  "Doc Security", "Category", "Content Status"])
 
         worksheet.append(
-            [file_name, creator, created, lastModifiedBy, modified, lastPrinted, manager, company, revision, totalTime,
-             pages, paragraphs, lines, words, characters,
-             charactersWithSpaces, title, subject, keywords, description, application, appVersion, template,
-             docSecurity, category, contentStatus])
+            [file_name, creator, created, last_modified_by, modified, last_printed, manager, company, revision,
+             total_time, pages, paragraphs, lines, words, characters, characters_with_spaces, title, subject,
+             keywords, description, application, app_version, template, doc_security, category, content_status])
 
-        print(f"Metadata appeneded to '{excel_file_path}' in worksheet 'metadata'")
+        print(f"Metadata appended to '{excel_file_path}' in worksheet 'metadata'")
 
         # Remove the default sheet created by openpyxl
         default_sheet = workbook.active
@@ -228,13 +237,14 @@ def write_to_excel(xml_files, excel_file_path, file_name, rsids, rsidRoot, creat
 
         workbook.save(excel_file_path)  # save the file
 
-    except Exception as e:
-        print(f"An error occurred while writing to Excel: {e}")
+    except Exception as function_error:
+        print(f"An error occurred while writing to Excel: {function_error}")
 
 
 if __name__ == "__main__":
 
-    # Output file - same path as where the script is run. It will create it if it does not exist, or append to it if it does.
+    # Output file - same path as where the script is run. It will create it if it does not exist,
+    # or append to it if it does.
     excel_file_path = "docx-artifacts.xlsx"
 
     root = tk.Tk()
@@ -248,16 +258,16 @@ if __name__ == "__main__":
         filename = os.path.basename(zip_file_path)
 
         # list of XML file in DOCx
-        XMLFiles = list_of_XML_files(zip_file_path,
-                                     filename)  # Executes the function to get a list of all XML files within the DOCx file
+        XMLFiles = list_of_xml_files(zip_file_path,
+                                     filename)  # Executes the function to get a list of all XML files in DOCx file
 
         # parse word/settings.xml artifacts
         xml_file_path_within_zip = "word/settings.xml"  # Path of the XML file within the ZIP
 
         try:
-            with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
-                with zip_ref.open(xml_file_path_within_zip) as xml_file:
-                    xml_content = xml_file.read().decode("utf-8")
+            with zipfile.ZipFile(zip_file_path, 'r') as zipref:
+                with zipref.open(xml_file_path_within_zip) as xmlFile:
+                    xml_content = xmlFile.read().decode("utf-8")
 
                     rsids, rsidRoot = extract_rsids_from_xml(
                         xml_content)  # Executes the function to get all unique RSIDs.
@@ -271,9 +281,9 @@ if __name__ == "__main__":
         xml_file_path_within_zip = "docProps/app.xml"  # Path of the XML file within the ZIP
 
         try:
-            with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
-                with zip_ref.open(xml_file_path_within_zip) as xml_file:
-                    xml_content = xml_file.read().decode("utf-8")
+            with zipfile.ZipFile(zip_file_path, 'r') as zipref:
+                with zipref.open(xml_file_path_within_zip) as xmlFile:
+                    xml_content = xmlFile.read().decode("utf-8")
                     app_xml_metadata = extract_from_app_xml(
                         xml_content)  # Executes the function to get metadata from app.xml
 
@@ -285,9 +295,9 @@ if __name__ == "__main__":
         # parse docProps/core.xml artifacts
         xml_file_path_within_zip = "docProps/core.xml"  # Path of the XML file within the ZIP
         try:
-            with zipfile.ZipFile(zip_file_path, 'r') as zip_ref:
-                with zip_ref.open(xml_file_path_within_zip) as xml_file:
-                    xml_content = xml_file.read().decode("utf-8")
+            with zipfile.ZipFile(zip_file_path, 'r') as zipref:
+                with zipref.open(xml_file_path_within_zip) as xmlFile:
+                    xml_content = xmlFile.read().decode("utf-8")
                     core_xml_metadata = extract_from_core_xml(
                         xml_content)  # Executes the function to get the metadata from core.xml
 
