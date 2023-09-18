@@ -168,26 +168,15 @@ def list_of_xml_files(filename_path, file_name):
         return xml_files
 
 
-def extract_from_document_xml(xmlcontent, all_rsids):
+def extract_from_document_xml(xmlcontent):
     # extract relevant artifacts from document.xml
     document_xml = {"paragraphs": len(re.findall(r'</w:p>', xmlcontent)),
                     "runs": len(re.findall(r'</w:r>', xmlcontent)),
                     "text": len(re.findall(r'</w:t>', xmlcontent))}
-
-    # Count number of <w:p>, <w:r>, and <w:t> for each RSID
-    elements_by_rsid_count = {}
-    print("Processing word/document.xml for total <w:p> and <w:t> elements for each RSID in the document.")
-    for r in all_rsids:
-        paragraph_pattern = r'<w:p .*?w:rsidP="' + r + '"[^>]*>'
-        runs_pattern = r'<w:r .*?w:rsidRPr="' + r + '">'
-
-        elements_by_rsid_count[r] = {"paragraphs": len(re.findall(paragraph_pattern, xmlcontent)),
-                                     "runs": len(re.findall(runs_pattern, xmlcontent))
-                                     }
-    return document_xml, elements_by_rsid_count
+    return document_xml
 
 
-def write_to_excel(excel_filepath, file_name, xml_files, all_rsids, document_summary, rsid_count_by_element, rsid_root,
+def write_to_excel(excel_filepath, file_name, xml_files, all_rsids, document_summary, rsid_root,
                    all_metadata):
     try:
         if os.path.exists(excel_filepath):  # if the file exists, open it.
@@ -231,11 +220,10 @@ def write_to_excel(excel_filepath, file_name, xml_files, all_rsids, document_sum
         else:
             # Create the worksheet "rsids"
             worksheet = workbook.create_sheet(title="rsids")
-            worksheet.append(["File Name", "RSID", "<w:p> tags", "<w:r> tags"])
+            worksheet.append(["File Name", "RSID"])
 
         for rsid in set(all_rsids):
-            worksheet.append([file_name, rsid, rsid_count_by_element[rsid]["paragraphs"],
-                              rsid_count_by_element[rsid]["runs"]])
+            worksheet.append([file_name, rsid])
 
         print(f"Unique RSIDs appended to '{excel_file_path}' in worksheet 'rsids'")
 
@@ -338,8 +326,8 @@ if __name__ == "__main__":
             with zipfile.ZipFile(zip_file_path, 'r') as zipref:
                 with zipref.open(xml_file_path_within_zip) as xmlFile:
                     xml_content = xmlFile.read().decode("utf-8")
-                    document_xml_metadata, rsidCountByElement = extract_from_document_xml(
-                        xml_content, rsids)  # Executes the function to get the metadata from core.xml
+                    document_xml_metadata = extract_from_document_xml(xml_content)
+                    # Executes the function to get the metadata from core.xml
 
         except FileNotFoundError:
             print(f"File '{xml_file_path_within_zip}' not found in the ZIP archive.")
@@ -377,5 +365,5 @@ if __name__ == "__main__":
                        "Content Status": core_xml_metadata["contentStatus"]
                        }
 
-        write_to_excel(excel_file_path, filename, XMLFiles, rsids, document_xml_metadata, rsidCountByElement, rsidRoot,
+        write_to_excel(excel_file_path, filename, XMLFiles, rsids, document_xml_metadata, rsidRoot,
                        allMetadata)
