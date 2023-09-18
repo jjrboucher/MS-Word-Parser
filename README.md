@@ -36,7 +36,7 @@ The script will do the following processing:
 
 <h6>If running the script on a Linux system, you may need to install python-tk. You can do this with the following
 command on a Debian (e.g. Ubuntu) system from the terminal window:<br>
-<br>sudo apt-get install python3-tk
+<br>sudo apt-get install python3-tk<br>
 <br>
 Whether running on Linux, Mac, or Windows, you may need to install some of the libraries if they are not included in
 your installation of Python 3.
