@@ -39,8 +39,7 @@
 #
 # 3 - It will extract all the unique RSIDs from the file word/settings.xml and write it to a worksheet called rsids.
 #     In this worksheet, it will save the following information to rows (one for each unique RSID):
-#     "File Name", "RSID", "<w:p> tags", "<w:r> tags"
-#     where <w:p> and <w:r> is a count of # of those elements for the RSID in question.
+#     "File Name", "RSID"
 #
 # 3 - It will extract all known relevant metadata from the files docProps/app.xml and docProps/core.xml
 #     and write it to a worksheet called metadata.
