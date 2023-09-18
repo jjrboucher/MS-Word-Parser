@@ -43,7 +43,7 @@ your installation of Python 3.
 <br>
 In particular, you may need to install openpyxl and hashlib.  
     
-You can do so as follows from a terminal window:
+<br>You can do so as follows from a terminal window:
 <hr>
     pip3 install openpyxl<br>
     <br>pip3 install hashlib  
