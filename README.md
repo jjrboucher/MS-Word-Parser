@@ -42,8 +42,8 @@ Whether running on Linux, Mac, or Windows, you may need to install some of the l
 your installation of Python 3.
 <br>
 In particular, you may need to install openpyxl and hashlib.  
+    
     You can do so as follows from a terminal window:  
-
 <hr>    
 pip3 install openpyxl  
 
