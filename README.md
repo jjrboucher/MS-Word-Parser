@@ -46,6 +46,6 @@ In particular, you may need to install openpyxl and hashlib.
 You can do so as follows from a terminal window:
 <hr>
     pip3 install openpyxl<br>
-    pip3 install hashlib  
+    <br>pip3 install hashlib  
 <hr>
 If any other libraries are missing when trying to execute the script, install those in the same manner.</h6>
