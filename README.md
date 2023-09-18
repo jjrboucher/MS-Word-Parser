@@ -32,7 +32,7 @@ The script will do the following processing:
     "contentStatus"</h6>
 
 
-<h1>********** Dependencies **********</h1>
+<h2>********** Dependencies **********</h2>
 
 <h6>If running the script on a Linux system, you may need to install python-tk. You can do this with the following
 command on a Debian (e.g. Ubuntu) system from the terminal window:
