@@ -169,6 +169,7 @@ def list_of_xml_files(filename_path, file_name):
 
 def extract_from_document_xml(xmlcontent):
     # extract relevant artifacts from document.xml
+    print("Processing word/document.xml to count # of <w:p>, <w:r>, and <w:t> tags.")
     document_xml = {"paragraphs": len(re.findall(r'</w:p>', xmlcontent)),
                     "runs": len(re.findall(r'</w:r>', xmlcontent)),
                     "text": len(re.findall(r'</w:t>', xmlcontent))}
@@ -184,7 +185,6 @@ def write_to_excel(excel_filepath, file_name, xml_files, all_rsids, document_sum
             workbook = Workbook()
 
         # List of files in DOCx document
-        print("Writing worksheet XML_files  to Excel")
         if "XML_files" in workbook.sheetnames:  # if the worksheet XML_files already exists, select it.
             worksheet = workbook["XML_files"]
         else:
@@ -199,7 +199,6 @@ def write_to_excel(excel_filepath, file_name, xml_files, all_rsids, document_sum
         print(f"List of XML files along with size and hash appended to worksheet 'XML_files'")
 
         # Summary worksheet of # of RSIDs in a document
-        print("Writing worksheet doc_summary to Excel.")
         if "doc_summary" in workbook.sheetnames:  # if the worksheet doc_summary already exits, select it.
             worksheet = workbook["doc_summary"]
         else:
@@ -213,7 +212,6 @@ def write_to_excel(excel_filepath, file_name, xml_files, all_rsids, document_sum
         print(f"Document summary appended to worksheet 'doc_summary'")
 
         # Check if the worksheet "rsids" already exists
-        print("Writing worksheet rsids to Excel.")
         if "rsids" in workbook.sheetnames:  # if the worksheet rsids already exists, select it.
             worksheet = workbook["rsids"]
         else:
@@ -224,10 +222,9 @@ def write_to_excel(excel_filepath, file_name, xml_files, all_rsids, document_sum
         for rsid in set(all_rsids):
             worksheet.append([file_name, rsid])
 
-        print(f"Unique RSIDs appended to '{excel_file_path}' in worksheet 'rsids'")
+        print(f"Unique RSIDs appended to worksheet 'rsids'")
 
         # Check if the worksheet "metadata" already exists
-        print("Writing worksheet metatdata to Excel.")
         if "metadata" in workbook.sheetnames:  # if the worksheet metadata already exists, select it.
             worksheet = workbook["metadata"]
         else:
@@ -241,7 +238,7 @@ def write_to_excel(excel_filepath, file_name, xml_files, all_rsids, document_sum
         metadata.insert(0, file_name)  # Adds the file name to the start of the list
         worksheet.append(metadata)  # Writes the metadata to the spreadsheet
 
-        print(f"Metadata appended to '{excel_file_path}' in worksheet 'metadata'")
+        print(f"Metadata appended to worksheet 'metadata'")
 
         # Remove the default sheet created by openpyxl
         default_sheet = workbook.active
@@ -249,6 +246,8 @@ def write_to_excel(excel_filepath, file_name, xml_files, all_rsids, document_sum
             workbook.remove(default_sheet)
 
         workbook.save(excel_file_path)  # save the file
+
+        print(f"Results written to {excel_file_path}.")
 
     except Exception as function_error:
         print(f"An error occurred while writing to Excel: {function_error}")
