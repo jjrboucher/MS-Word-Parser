@@ -167,7 +167,7 @@ def list_of_xml_files(filename_path, file_name):
         return xml_files
 
 
-def extract_from_document_xml(xmlcontent):
+def extract_tags_from_document_xml(xmlcontent):
     # extract relevant artifacts from document.xml
     print("Processing word/document.xml to count # of <w:p>, <w:r>, and <w:t> tags.")
     document_xml = {"paragraphs": len(re.findall(r'</w:p>', xmlcontent)),
@@ -324,7 +324,7 @@ if __name__ == "__main__":
             with zipfile.ZipFile(zip_file_path, 'r') as zipref:
                 with zipref.open(xml_file_path_within_zip) as xmlFile:
                     xml_content = xmlFile.read().decode("utf-8")
-                    document_xml_metadata = extract_from_document_xml(xml_content)
+                    documentXMLTagSummary = extract_tags_from_document_xml(xml_content)
                     # Executes the function to get the metadata from core.xml
 
         except FileNotFoundError:
@@ -363,5 +363,5 @@ if __name__ == "__main__":
                        "Content Status": core_xml_metadata["contentStatus"]
                        }
 
-        write_to_excel(excel_file_path, filename, XMLFiles, rsids, document_xml_metadata, rsidRoot,
+        write_to_excel(excel_file_path, filename, XMLFiles, rsids, documentXMLTagSummary, rsidRoot,
                        allMetadata)
