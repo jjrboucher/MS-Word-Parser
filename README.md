@@ -14,9 +14,8 @@ The script will do the following processing:
     called doc_summary.
     In this worksheet, it will save the following information to a row:
     "File Name", "Unique RSIDs", "RSID Root", "<w:p> tags", "<w:r> tags", "<w:t> tags"
-    Where "Unique RSID" is a numerical count of the # of RSIDs in the file.
-
-    What is an RSID (Revision Save ID)?
+    Where "Unique RSID" is a numerical count of the # of RSIDs in the file.<br>
+    <br>What is an RSID (Revision Save ID)?<br>
     See https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.rsid?view=openxml-2.8.1
 
 3 - It will extract all the unique RSIDs from the file word/settings.xml and write it to a worksheet called rsids.
@@ -32,11 +31,12 @@ The script will do the following processing:
     "contentStatus"</h6>
 
 
-<h2>********** Dependencies **********</h2>
+<h2>Dependencies</h2>
 
 <h6>If running the script on a Linux system, you may need to install python-tk. You can do this with the following
-command on a Debian (e.g. Ubuntu) system from the terminal window:<br>
-<br>sudo apt-get install python3-tk<br>
+command on a Debian (e.g. Ubuntu) system from the terminal window:<br>  
+    
+    sudo apt-get install python3-tk
 <br>
 Whether running on Linux, Mac, or Windows, you may need to install some of the libraries if they are not included in
 your installation of Python 3.
@@ -44,8 +44,8 @@ your installation of Python 3.
 In particular, you may need to install openpyxl and hashlib.  
     
 <br>You can do so as follows from a terminal window:
-<hr>
-    pip3 install openpyxl<br>
-    <br>pip3 install hashlib 
+
+    pip3 install openpyxl
+    pip3 install hashlib 
 <hr>
 If any other libraries are missing when trying to execute the script, install those in the same manner.</h6>
