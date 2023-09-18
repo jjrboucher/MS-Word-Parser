@@ -1,5 +1,5 @@
-# MS-Word-Parser
-
+<h1>MS-Word-Parser</h1>
+<h6>
 This script will prompt you for a DOCx file and parse data from it and dump it to an Excel file.
 
 The script does not validate that the file being passed to it is indeed a DOCx. It's up to the user to make sure he/she passes a DOCx.
@@ -29,12 +29,12 @@ The script will do the following processing:
     "File Name", "Author", "Created Date","Last Modified By","Modified Date","Last Printed Date","Manager","Company",
     "Revision","Total Editing Time","Pages","Paragraphs","Lines","Words","Characters","Characters With Spaces",
     "Title","Subject","Keywords","Description","Application","App Version","Template","Doc Security","Category",
-    "contentStatus"
+    "contentStatus"</h6>
 
 
-# ********** Dependencies **********
+<h1>********** Dependencies **********</h1>
 
-If running the script on a Linux system, you may need to install python-tk. You can do this with the following
+<h6>If running the script on a Linux system, you may need to install python-tk. You can do this with the following
 command on a Debian (e.g. Ubuntu) system from the terminal window:
 sudo apt-get install python3-tk
 
@@ -45,4 +45,4 @@ In particular, you may need to install openpyxl and hashlib. You can do so as fo
 pip3 install openpyxl
 pip3 install hashlib
 
-If any other libraries are missing when trying to execute the script, install those in the same manner.
+If any other libraries are missing when trying to execute the script, install those in the same manner.</h6>
