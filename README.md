@@ -41,9 +41,9 @@ sudo apt-get install python3-tk
 Whether running on Linux, Mac, or Windows, you may need to install some of the libraries if they are not included in
 your installation of Python 3.
 <br>
-    In particular, you may need to install openpyxl and hashlib. You can do so as follows from a terminal window:
-
+In particular, you may need to install openpyxl and hashlib. You can do so as follows from a terminal window:
+<br>
 pip3 install openpyxl<br>
 pip3 install hashlib
-
+<br>
 If any other libraries are missing when trying to execute the script, install those in the same manner.</h6>
