@@ -29,9 +29,9 @@
 #     "File Name", "XML", "Size (bytes)", "MD5Hash"
 #
 # 2 - It will extract all the unique RSIDs from the file word/settings.xml and write it to a worksheet
-#     called rsids_summary.
+#     called doc_summary.
 #     In this worksheet, it will save the following information to a row:
-#     "File Name", "Unique RSID", "RSID Root"
+#     "File Name", "Unique RSIDs", "RSID Root", "<w:p> tags", "<w:r> tags", "<w:t> tags"
 #     Where "Unique RSID" is a numerical count of the # of RSIDs in the file.
 #
 #     What is an RSID (Revision Save ID)?
@@ -39,7 +39,8 @@
 #
 # 3 - It will extract all the unique RSIDs from the file word/settings.xml and write it to a worksheet called rsids.
 #     In this worksheet, it will save the following information to rows (one for each unique RSID):
-#     "File Name", "RSID"
+#     "File Name", "RSID", "<w:p> tags", "<w:r> tags"
+#     where <w:p> and <w:r> is a count of # of those elements for the RSID in question.
 #
 # 3 - It will extract all known relevant metadata from the files docProps/app.xml and docProps/core.xml
 #     and write it to a worksheet called metadata.
@@ -83,11 +84,13 @@ def extract_rsids_from_xml(xmlcontent):
         pattern = r'<w:rsid(?:[^>]*)/>'
         matches = re.findall(pattern, xmlcontent)  # Find all RSIDs
 
+        print("Processing word/settings.xml for RSIDs")
         for match in matches:
             rsid_match = re.search(r'<w:rsid w:val="([^"]*)"', match)  # Loops through them
             if rsid_match:
                 all_rsids.append(rsid_match.group(1))  # Appends it to the list
 
+        print("Processing word/settings.xml for rsidRoot.")
         rsid_root = re.search(r'<w:rsidRoot w:val="([^"]*)"', xmlcontent)
 
         if rsid_root is None:
@@ -118,6 +121,7 @@ def extract_from_app_xml(xmlcontent):
                "manager": re.search(r'<Manager>(.*?)</Manager>', xmlcontent),
                "company": re.search(r'<Company>(.*?)</Company>', xmlcontent)}
 
+    print("Processing docProps/app.xml for metadata.")
     for key, value in app_xml.items():  # check the results of the GREP searches
         if value is None:  # if no hit, assign empty value
             app_xml[key] = ""
@@ -142,6 +146,7 @@ def extract_from_core_xml(xmlcontent):
                 "category": re.search(r'<cp:category>(.*?)</cp:category>', xmlcontent),
                 "contentStatus": re.search(r'<cp:contentStatus>(.*?)</cp:contentStatus>', xmlcontent)}
 
+    print("Processing docProps/core.xml for metadata.")
     for key, value in core_xml.items():  # check the results of the GREP searches
         if value is None:  # if no hit, assign empty value
             core_xml[key] = ""
@@ -151,6 +156,7 @@ def extract_from_core_xml(xmlcontent):
 
 
 def list_of_xml_files(filename_path, file_name):
+    print("Processing word/document.xml for list of XML files.")
     with zipfile.ZipFile(filename_path, 'r') as zip_file:
         # list content of the DOCx file
         xml_files = []
@@ -162,7 +168,27 @@ def list_of_xml_files(filename_path, file_name):
         return xml_files
 
 
-def write_to_excel(excel_filepath, file_name, xml_files, all_rsids, rsid_root, all_metadata):
+def extract_from_document_xml(xmlcontent, all_rsids):
+    # extract relevant artifacts from document.xml
+    document_xml = {"paragraphs": len(re.findall(r'</w:p>', xmlcontent)),
+                    "runs": len(re.findall(r'</w:r>', xmlcontent)),
+                    "text": len(re.findall(r'</w:t>', xmlcontent))}
+
+    # Count number of <w:p>, <w:r>, and <w:t> for each RSID
+    elements_by_rsid_count = {}
+    print("Processing word/document.xml for total <w:p> and <w:t> elements for each RSID in the document.")
+    for r in all_rsids:
+        paragraph_pattern = r'<w:p .*?w:rsidP="' + r + '"[^>]*>'
+        runs_pattern = r'<w:r .*?w:rsidRPr="' + r + '">'
+
+        elements_by_rsid_count[r] = {"paragraphs": len(re.findall(paragraph_pattern, xmlcontent)),
+                                     "runs": len(re.findall(runs_pattern, xmlcontent))
+                                     }
+    return document_xml, elements_by_rsid_count
+
+
+def write_to_excel(excel_filepath, file_name, xml_files, all_rsids, document_summary, rsid_count_by_element, rsid_root,
+                   all_metadata):
     try:
         if os.path.exists(excel_filepath):  # if the file exists, open it.
             workbook = load_workbook(excel_filepath)
@@ -170,6 +196,7 @@ def write_to_excel(excel_filepath, file_name, xml_files, all_rsids, rsid_root, a
             workbook = Workbook()
 
         # List of files in DOCx document
+        print("Writing worksheet XML_files  to Excel")
         if "XML_files" in workbook.sheetnames:  # if the worksheet XML_files already exists, select it.
             worksheet = workbook["XML_files"]
         else:
@@ -184,31 +211,36 @@ def write_to_excel(excel_filepath, file_name, xml_files, all_rsids, rsid_root, a
         print(f"List of XML files along with size and hash appended to worksheet 'XML_files'")
 
         # Summary worksheet of # of RSIDs in a document
-        if "rsids_summary" in workbook.sheetnames:  # if the worksheet rsids_summary already exits, select it.
-            worksheet = workbook["rsids_summary"]
+        print("Writing worksheet doc_summary to Excel.")
+        if "doc_summary" in workbook.sheetnames:  # if the worksheet doc_summary already exits, select it.
+            worksheet = workbook["doc_summary"]
         else:
-            # Create the worksheet "rsids"
-            worksheet = workbook.create_sheet(title="rsids_summary")
-            worksheet.append(["File Name", "Unique RSIDs", "RSID Root"])
+            # Create the worksheet "doc_summary"
+            worksheet = workbook.create_sheet(title="doc_summary")
+            worksheet.append(["File Name", "Unique RSIDs", "RSID Root", "<w:p> tags", "<w:r> tags", "<w:t> tags"])
 
-        worksheet.append([file_name, len(rsids), rsid_root])
+        worksheet.append([file_name, len(rsids), rsid_root, document_summary["paragraphs"],
+                          document_summary["runs"], document_summary["text"]])
 
-        print(f"RSIDs summary appended to worksheet 'rsids_summary'")
+        print(f"Document summary appended to worksheet 'doc_summary'")
 
         # Check if the worksheet "rsids" already exists
+        print("Writing worksheet rsids to Excel.")
         if "rsids" in workbook.sheetnames:  # if the worksheet rsids already exists, select it.
             worksheet = workbook["rsids"]
         else:
             # Create the worksheet "rsids"
             worksheet = workbook.create_sheet(title="rsids")
-            worksheet.append(["File Name", "RSID"])
+            worksheet.append(["File Name", "RSID", "<w:p> tags", "<w:r> tags"])
 
         for rsid in set(all_rsids):
-            worksheet.append([file_name, rsid])
+            worksheet.append([file_name, rsid, rsid_count_by_element[rsid]["paragraphs"],
+                              rsid_count_by_element[rsid]["runs"]])
 
         print(f"Unique RSIDs appended to '{excel_file_path}' in worksheet 'rsids'")
 
         # Check if the worksheet "metadata" already exists
+        print("Writing worksheet metatdata to Excel.")
         if "metadata" in workbook.sheetnames:  # if the worksheet metadata already exists, select it.
             worksheet = workbook["metadata"]
         else:
@@ -300,7 +332,24 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"An error occurred: {e}")
 
+        # parse word/document.xml artifacts
+        xml_file_path_within_zip = "word/document.xml"  # Path of the XML file within the ZIP
+        try:
+            with zipfile.ZipFile(zip_file_path, 'r') as zipref:
+                with zipref.open(xml_file_path_within_zip) as xmlFile:
+                    xml_content = xmlFile.read().decode("utf-8")
+                    document_xml_metadata, rsidCountByElement = extract_from_document_xml(
+                        xml_content, rsids)  # Executes the function to get the metadata from core.xml
+
+        except FileNotFoundError:
+            print(f"File '{xml_file_path_within_zip}' not found in the ZIP archive.")
+        except Exception as e:
+            print(f"An error occurred: {e}")
+
         # The keys will be used as the column heading in the spreadsheet
+        # The order they are in is the order that the columns will be in the spreadsheet
+        # Corresponding values passed, resulting in a dictionary being passed called allMetadata
+        # containing column headings and associated extracted metadata value.
         allMetadata = {"Author": core_xml_metadata["creator"],
                        "Created Date": core_xml_metadata["created"],
                        "Last Modified By": core_xml_metadata["lastModifiedBy"],
@@ -328,4 +377,5 @@ if __name__ == "__main__":
                        "Content Status": core_xml_metadata["contentStatus"]
                        }
 
-        write_to_excel(excel_file_path, filename, XMLFiles, rsids, rsidRoot, allMetadata)
+        write_to_excel(excel_file_path, filename, XMLFiles, rsids, document_xml_metadata, rsidCountByElement, rsidRoot,
+                       allMetadata)
