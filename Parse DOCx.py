@@ -75,17 +75,19 @@ from tkinter import filedialog
 import re
 from openpyxl import load_workbook
 from openpyxl import Workbook
+from functions.metadata import core_xml, app_xml  # functions to extract metadata from core.xml and app.xml
 
 
 def extract_rsids_from_xml(xmlcontent):
     try:
         all_rsids = []
-        pattern = r'<w:rsid(?:[^>]*)/>'
-        matches = re.findall(pattern, xmlcontent)  # Find all RSIDs
+        pattern = r'<w:rsid w:val="[^>]*/>'
+        matches = re.findall(pattern, xmlcontent)  # Find all RSIDs, not rsidRoot. rsidRoot is repeated in rsids
 
         print("Processing word/settings.xml for RSIDs")
-        for match in matches:
-            rsid_match = re.search(r'<w:rsid w:val="([^"]*)"', match)  # Loops through them
+        for match in matches:  # loops through all matches
+            # greps for rsid using a group to extract the actual RSID from the string.
+            rsid_match = re.search(r'<w:rsid w:val="([^"]*)"', match)
             if rsid_match:
                 all_rsids.append(rsid_match.group(1))  # Appends it to the list
 
@@ -102,56 +104,6 @@ def extract_rsids_from_xml(xmlcontent):
     except Exception as function_error:
         print(f"An error occurred while extracting RSIDs: {function_error}")
         return []  # if it can't find any RSID (that should never happen), it returns an empty list.
-
-
-def extract_from_app_xml(xmlcontent):
-    # extract relevant metadata from app.xml file using a GREP expression
-    app_xml = {"template": re.search(r'<Template>(.*?)</Template>', xmlcontent),
-               "totalTime": re.search(r'<TotalTime>(.*?)</TotalTime>', xmlcontent),
-               "pages": re.search(r'<Pages>(.*?)</Pages>', xmlcontent),
-               "words": re.search(r'<Words>(.*?)</Words>', xmlcontent),
-               "characters": re.search(r'<Characters>(.*?)</Characters>', xmlcontent),
-               "application": re.search(r'<Application>(.*?)</Application>', xmlcontent),
-               "docSecurity": re.search(r'<DocSecurity>(.*?)</DocSecurity>', xmlcontent),
-               "lines": re.search(r'<Lines>(.*?)</Lines>', xmlcontent),
-               "paragraphs": re.search(r'<Paragraphs>(.*?)</Paragraphs>', xmlcontent),
-               "charactersWithSpaces": re.search(r'<CharactersWithSpaces>(.*?)</CharactersWithSpaces>', xmlcontent),
-               "appVersion": re.search(r'<AppVersion>(.*?)</AppVersion>', xmlcontent),
-               "manager": re.search(r'<Manager>(.*?)</Manager>', xmlcontent),
-               "company": re.search(r'<Company>(.*?)</Company>', xmlcontent)}
-
-    print("Processing docProps/app.xml for metadata.")
-    for key, value in app_xml.items():  # check the results of the GREP searches
-        if value is None:  # if no hit, assign empty value
-            app_xml[key] = ""
-        else:  # if a hit, extract group(1) from the search hit
-            app_xml[key] = app_xml[key].group(1)
-
-    return app_xml
-
-
-def extract_from_core_xml(xmlcontent):
-    # extract relevant metadata from core.xml file using a GREP expression
-    core_xml = {"title": re.search(r'<dc:title>(.*?)</dc:title>', xmlcontent),
-                "subject": re.search(r'<dc:subject>(.*?)</dc:subject>', xmlcontent),
-                "creator": re.search(r'<dc:creator>(.*?)</dc:creator>', xmlcontent),
-                "keywords": re.search(r'<cp:keywords>(.*?)</cp:keywords>', xmlcontent),
-                "description": re.search(r'<dc:description>(.*?)</dc:description>', xmlcontent),
-                "revision": re.search(r'<cp:revision>(.*?)</cp:revision>', xmlcontent),
-                "created": re.search(r'<dcterms:created.*?>(.*?)</dcterms:created>', xmlcontent),
-                "modified": re.search(r'<dcterms:modified.*?>(.*?)</dcterms:modified>', xmlcontent),
-                "lastModifiedBy": re.search(r'<cp:lastModifiedBy>(.*?)</cp:lastModifiedBy>', xmlcontent),
-                "lastPrinted": re.search(r'<cp:lastPrinted>(.*?)</cp:lastPrinted>', xmlcontent),
-                "category": re.search(r'<cp:category>(.*?)</cp:category>', xmlcontent),
-                "contentStatus": re.search(r'<cp:contentStatus>(.*?)</cp:contentStatus>', xmlcontent)}
-
-    print("Processing docProps/core.xml for metadata.")
-    for key, value in core_xml.items():  # check the results of the GREP searches
-        if value is None:  # if no hit, assign empty value
-            core_xml[key] = ""
-        else:  # if a hit, extract group(1) from the search hit
-            core_xml[key] = core_xml[key].group(1)
-    return core_xml
 
 
 def list_of_xml_files(filename_path, file_name):
@@ -296,8 +248,7 @@ if __name__ == "__main__":
             with zipfile.ZipFile(zip_file_path, 'r') as zipref:
                 with zipref.open(xml_file_path_within_zip) as xmlFile:
                     xml_content = xmlFile.read().decode("utf-8")
-                    app_xml_metadata = extract_from_app_xml(
-                        xml_content)  # Executes the function to get metadata from app.xml
+                    app_xml_metadata = app_xml(xml_content)  # Executes the function to get metadata from app.xml
 
         except FileNotFoundError:
             print(f"File '{xml_file_path_within_zip}' not found in the ZIP archive.")
@@ -310,8 +261,7 @@ if __name__ == "__main__":
             with zipfile.ZipFile(zip_file_path, 'r') as zipref:
                 with zipref.open(xml_file_path_within_zip) as xmlFile:
                     xml_content = xmlFile.read().decode("utf-8")
-                    core_xml_metadata = extract_from_core_xml(
-                        xml_content)  # Executes the function to get the metadata from core.xml
+                    core_xml_metadata = core_xml(xml_content)  # Executes the function to get the metadata from core.xml
 
         except FileNotFoundError:
             print(f"File '{xml_file_path_within_zip}' not found in the ZIP archive.")
