@@ -2,8 +2,16 @@ import zipfile
 import hashlib
 import re
 
-#
+
 class Docx:
+    """
+    Accepts a docx file. Has the following methods to extract data from core.xml, app.xml, document.xml
+
+    app_version, application, category, characters, characters_with_spaces, company, content_status, created, creator,
+    description, filename, keywords, last_modified_by, last_printed, lines, manager, modified, pages, paragraph_tags,
+    paragraphs, revision, runs_tags, security, subject, template, text_tags, title, total_editing_time, words,
+    xml_files, xml_hash, xml_size
+    """
 
     def __init__(self, msword_file):
         """.docx file to pass to the class"""
