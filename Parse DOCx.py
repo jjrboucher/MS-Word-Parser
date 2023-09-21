@@ -275,7 +275,7 @@ if __name__ == "__main__":
                 with zipref.open(xml_file_path_within_zip) as xmlFile:
                     xml_content = xmlFile.read().decode("utf-8")
                     documentXMLTagSummary = extract_tags_from_document_xml(xml_content)
-                    # Executes the function to get the metadata from core.xml
+                    # Executes the function to get the metadata from document.xml
 
         except FileNotFoundError:
             print(f"File '{xml_file_path_within_zip}' not found in the ZIP archive.")
