@@ -2,7 +2,7 @@ import zipfile
 import hashlib
 import re
 
-
+#
 class Docx:
 
     def __init__(self, msword_file):
