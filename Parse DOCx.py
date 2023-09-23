@@ -2,7 +2,7 @@
 # Written by Jacques Boucher
 # jjrboucher@gmail.com
 #
-# Version Date: 23 September 2023 - test for dev branch
+# Version Date: 23 September 2023
 #
 # Written in Python 3.11
 #
@@ -68,219 +68,57 @@
 ###################################
 
 import os
-import zipfile
 import tkinter as tk
-import hashlib
 from tkinter import filedialog
-import re
-from openpyxl import load_workbook
-from openpyxl import Workbook
 from functions.metadata import core_xml, app_xml  # functions to extract metadata from core.xml and app.xml
-
-
-def extract_rsids_from_xml(xmlcontent):
-    try:
-        all_rsids = []
-        pattern = r'<w:rsid w:val="[^>]*/>'
-        matches = re.findall(pattern, xmlcontent)  # Find all RSIDs, not rsidRoot. rsidRoot is repeated in rsids
-
-        print("Processing word/settings.xml for RSIDs")
-        for match in matches:  # loops through all matches
-            # greps for rsid using a group to extract the actual RSID from the string.
-            rsid_match = re.search(r'<w:rsid w:val="([^"]*)"', match)
-            if rsid_match:
-                all_rsids.append(rsid_match.group(1))  # Appends it to the list
-
-        print("Processing word/settings.xml for rsidRoot.")
-        rsid_root = re.search(r'<w:rsidRoot w:val="([^"]*)"', xmlcontent)
-
-        if rsid_root is None:
-            rsid_root = ""
-        else:
-            rsid_root = rsid_root.group(1)
-
-        return all_rsids, rsid_root
-
-    except Exception as function_error:
-        print(f"An error occurred while extracting RSIDs: {function_error}")
-        return []  # if it can't find any RSID (that should never happen), it returns an empty list.
-
-
-def list_of_xml_files(filename_path, file_name):
-    print("Processing word/document.xml for list of XML files.")
-    with zipfile.ZipFile(filename_path, 'r') as zip_file:
-        # list content of the DOCx file
-        xml_files = []
-        for file_info in zip_file.infolist():
-            with zipfile.ZipFile(filename_path, 'r') as zip_ref:
-                with zip_ref.open(file_info.filename) as xml_file:
-                    md5hash = hashlib.md5(xml_file.read()).hexdigest()
-            xml_files.append([file_name, file_info.filename, file_info.file_size, md5hash])
-        return xml_files
-
-
-def extract_tags_from_document_xml(xmlcontent):
-    # extract relevant artifacts from document.xml
-    print("Processing word/document.xml to count # of <w:p>, <w:r>, and <w:t> tags.")
-    document_xml = {"paragraphs": len(re.findall(r'</w:p>', xmlcontent)),
-                    "runs": len(re.findall(r'</w:r>', xmlcontent)),
-                    "text": len(re.findall(r'</w:t>', xmlcontent))}
-    return document_xml
-
-
-def write_to_excel(excel_filepath, file_name, xml_files, all_rsids, document_summary, rsid_root,
-                   all_metadata):
-    try:
-        if os.path.exists(excel_filepath):  # if the file exists, open it.
-            workbook = load_workbook(excel_filepath)
-        else:  # otherwise, create it
-            workbook = Workbook()
-
-        # List of files in DOCx document
-        if "XML_files" in workbook.sheetnames:  # if the worksheet XML_files already exists, select it.
-            worksheet = workbook["XML_files"]
-        else:
-            # Create the worksheet "XML_files"
-            worksheet = workbook.create_sheet(title="XML_files")
-            worksheet.append(["File Name", "XML", "Size (bytes)", "MD5Hash"])
-
-        for msword_file, xml_file, file_size, md5hash in xml_files:  # Loop through all the embedded files
-            # Write a row to the spreadsheet for each embedded file.
-            worksheet.append([msword_file, xml_file, file_size, md5hash])
-
-        print(f"List of XML files along with size and hash appended to worksheet 'XML_files'")
-
-        # Summary worksheet of # of RSIDs in a document
-        if "doc_summary" in workbook.sheetnames:  # if the worksheet doc_summary already exits, select it.
-            worksheet = workbook["doc_summary"]
-        else:
-            # Create the worksheet "doc_summary"
-            worksheet = workbook.create_sheet(title="doc_summary")
-            worksheet.append(["File Name", "Unique RSIDs", "RSID Root", "<w:p> tags", "<w:r> tags", "<w:t> tags"])
-
-        worksheet.append([file_name, len(rsids), rsid_root, document_summary["paragraphs"],
-                          document_summary["runs"], document_summary["text"]])
-
-        print(f"Document summary appended to worksheet 'doc_summary'")
-
-        # Check if the worksheet "rsids" already exists
-        if "rsids" in workbook.sheetnames:  # if the worksheet rsids already exists, select it.
-            worksheet = workbook["rsids"]
-        else:
-            # Create the worksheet "rsids"
-            worksheet = workbook.create_sheet(title="rsids")
-            worksheet.append(["File Name", "RSID"])
-
-        for rsid in set(all_rsids):
-            worksheet.append([file_name, rsid])
-
-        print(f"Unique RSIDs appended to worksheet 'rsids'")
-
-        # Check if the worksheet "metadata" already exists
-        if "metadata" in workbook.sheetnames:  # if the worksheet metadata already exists, select it.
-            worksheet = workbook["metadata"]
-        else:
-            # Create the worksheet "metadata"
-            worksheet = workbook.create_sheet(title="metadata")
-            headings = list(all_metadata.keys())  # Adds the keys as column headings to a list
-            headings.insert(0, "File Name")  # Adds column heading "File Name" at the start of the list
-            worksheet.append(headings)  # Writes the headings to the spreadsheet
-
-        metadata = list(all_metadata.values())  # Adds values to the list
-        metadata.insert(0, file_name)  # Adds the file name to the start of the list
-        worksheet.append(metadata)  # Writes the metadata to the spreadsheet
-
-        print(f"Metadata appended to worksheet 'metadata'")
-
-        # Remove the default sheet created by openpyxl
-        default_sheet = workbook.active
-        if default_sheet.title == "Sheet":
-            workbook.remove(default_sheet)
-
-        workbook.save(excel_file_path)  # save the file
-
-        print(f"Results written to {excel_file_path}.")
-
-    except Exception as function_error:
-        print(f"An error occurred while writing to Excel: {function_error}")
+from functions.excel import write_to_excel  # function to write results to an Excel file
+from functions.rsids import extract_rsids_from_xml  # function to extract rsids and rsidRoot from settings.xml
+from functions.xml import list_of_xml_files  # function to return list of xml files in a DOCx file.
+from functions.xml import extract_content_of_xml  # function to read an XML file and return as utf-8 text.
+from functions.extracttags import extract_tags_from_document_xml  # extracts count of p, r, and t tags
 
 
 if __name__ == "__main__":
 
     # Output file - same path as where the script is run. It will create it if it does not exist,
     # or append to it if it does.
-    excel_file_path = "docx-artifacts.xlsx"
+    excel_file_path = "docx-artifacts.xlsx"  # default file name - will be created in the script folder.
 
     root = tk.Tk()
     root.withdraw()  # Hide the main window
 
-    zip_file_path = filedialog.askopenfilename(title="Select DOCx File", filetypes=[("DOCx Files", "*.docx")])
-    if not zip_file_path:
+    msword_file_path = filedialog.askopenfilename(title="Select DOCx file to process", initialdir=".",
+                                                  filetypes=[("DOCx Files", "*.docx")])
+    if not msword_file_path:
         print("No DOCx file selected. Exiting.")
     else:
 
-        filename = os.path.basename(zip_file_path)
+        filename = os.path.basename(msword_file_path)
 
         # list of XML file in DOCx
-        XMLFiles = list_of_xml_files(zip_file_path,
+        XMLFiles = list_of_xml_files(msword_file_path,
                                      filename)  # Executes the function to get a list of all XML files in DOCx file
 
         # parse word/settings.xml artifacts
         xml_file_path_within_zip = "word/settings.xml"  # Path of the XML file within the ZIP
-
-        try:
-            with zipfile.ZipFile(zip_file_path, 'r') as zipref:
-                with zipref.open(xml_file_path_within_zip) as xmlFile:
-                    xml_content = xmlFile.read().decode("utf-8")
-
-                    rsids, rsidRoot = extract_rsids_from_xml(
-                        xml_content)  # Executes the function to get all unique RSIDs.
-
-        except FileNotFoundError:
-            print(f"File '{xml_file_path_within_zip}' not found in the ZIP archive.")
-        except Exception as e:
-            print(f"An error occurred: {e}")
+        # Executes the function to get rsids and rsidRoot from settings.xml
+        rsids, rsidRoot = extract_rsids_from_xml(extract_content_of_xml(msword_file_path, xml_file_path_within_zip))
 
         # parse docProps/app.xml artifacts
         xml_file_path_within_zip = "docProps/app.xml"  # Path of the XML file within the ZIP
-
-        try:
-            with zipfile.ZipFile(zip_file_path, 'r') as zipref:
-                with zipref.open(xml_file_path_within_zip) as xmlFile:
-                    xml_content = xmlFile.read().decode("utf-8")
-                    app_xml_metadata = app_xml(xml_content)  # Executes the function to get metadata from app.xml
-
-        except FileNotFoundError:
-            print(f"File '{xml_file_path_within_zip}' not found in the ZIP archive.")
-        except Exception as e:
-            print(f"An error occurred: {e}")
+        # Executes the function to get metadata from app.xml
+        app_xml_metadata = app_xml(extract_content_of_xml(msword_file_path, xml_file_path_within_zip))
 
         # parse docProps/core.xml artifacts
         xml_file_path_within_zip = "docProps/core.xml"  # Path of the XML file within the ZIP
-        try:
-            with zipfile.ZipFile(zip_file_path, 'r') as zipref:
-                with zipref.open(xml_file_path_within_zip) as xmlFile:
-                    xml_content = xmlFile.read().decode("utf-8")
-                    core_xml_metadata = core_xml(xml_content)  # Executes the function to get the metadata from core.xml
-
-        except FileNotFoundError:
-            print(f"File '{xml_file_path_within_zip}' not found in the ZIP archive.")
-        except Exception as e:
-            print(f"An error occurred: {e}")
+        # Executes the function to get the metadata from core.xml
+        core_xml_metadata = core_xml(extract_content_of_xml(msword_file_path, xml_file_path_within_zip))
 
         # parse word/document.xml artifacts
         xml_file_path_within_zip = "word/document.xml"  # Path of the XML file within the ZIP
-        try:
-            with zipfile.ZipFile(zip_file_path, 'r') as zipref:
-                with zipref.open(xml_file_path_within_zip) as xmlFile:
-                    xml_content = xmlFile.read().decode("utf-8")
-                    documentXMLTagSummary = extract_tags_from_document_xml(xml_content)
-                    # Executes the function to get the metadata from document.xml
-
-        except FileNotFoundError:
-            print(f"File '{xml_file_path_within_zip}' not found in the ZIP archive.")
-        except Exception as e:
-            print(f"An error occurred: {e}")
+        # Executes the function to get the metadata from document.xml
+        documentXMLTagSummary = extract_tags_from_document_xml(extract_content_of_xml
+                                                               (msword_file_path, xml_file_path_within_zip))
 
         # The keys will be used as the column heading in the spreadsheet
         # The order they are in is the order that the columns will be in the spreadsheet
