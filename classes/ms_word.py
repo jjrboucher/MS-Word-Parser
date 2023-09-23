@@ -25,6 +25,9 @@ class Docx:
         self.settings_xml_file = "word/settings.xml"
         self.settings_xml_content = self.load_settings_xml()
         self.rsids = self.extract_all_rsids()
+        self.p_tags = len(re.findall(r'</w:t>', self.document_xml_content))
+        self.r_tags = len(re.findall(r'</w:r>', self.document_xml_content))
+        self.t_tags = len(re.findall(r'</w:t>', self.document_xml_content))
 
     def load_core_xml(self):
         # load core.xml
@@ -308,19 +311,19 @@ class Docx:
         """
         :return: the total number of paragraph tags in document.xml
         """
-        return len(re.findall(r'</w:p>', self.document_xml_content))
+        return self.p_tags
 
     def runs_tags(self):
         """
         :return: the total number of runs tags in document.xml
         """
-        return len(re.findall(r'</w:r>', self.document_xml_content))
+        return self.r_tags
 
     def text_tags(self):
         """
         :return: the total number of text tags in document.xml
         """
-        return len(re.findall(r'</w:t>', self.document_xml_content))
+        return self.t_tags
 
     def rsid_root(self):
         """
