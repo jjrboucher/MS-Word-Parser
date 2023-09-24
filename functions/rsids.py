@@ -1,7 +1,7 @@
 import re
 
 
-def extract_rsids_from_xml(xmlcontent):
+def extract_rsids_from_settings_xml(xmlcontent):
     """
     function to extract rsids and rsidRoot from settings.xml
     :param xmlcontent:

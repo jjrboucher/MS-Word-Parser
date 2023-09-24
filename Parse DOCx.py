@@ -72,7 +72,7 @@ import tkinter as tk
 from tkinter import filedialog
 from functions.metadata import core_xml, app_xml  # functions to extract metadata from core.xml and app.xml
 from functions.excel import write_to_excel  # function to write results to an Excel file
-from functions.rsids import extract_rsids_from_xml  # function to extract rsids and rsidRoot from settings.xml
+from functions.rsids import extract_rsids_from_settings_xml  # function to extract rsids and rsidRoot from settings.xml
 from functions.xml import list_of_xml_files  # function to return list of xml files in a DOCx file.
 from functions.xml import extract_content_of_xml  # function to read an XML file and return as utf-8 text.
 from functions.extracttags import extract_tags_from_document_xml  # extracts count of p, r, and t tags
@@ -102,7 +102,8 @@ if __name__ == "__main__":
         # parse word/settings.xml artifacts
         xml_file_path_within_zip = "word/settings.xml"  # Path of the XML file within the ZIP
         # Executes the function to get rsids and rsidRoot from settings.xml
-        rsids, rsidRoot = extract_rsids_from_xml(extract_content_of_xml(msword_file_path, xml_file_path_within_zip))
+        rsids, rsidRoot = extract_rsids_from_settings_xml(extract_content_of_xml(msword_file_path,
+                                                                                 xml_file_path_within_zip))
 
         # parse docProps/app.xml artifacts
         xml_file_path_within_zip = "docProps/app.xml"  # Path of the XML file within the ZIP
