@@ -2,7 +2,7 @@ import hashlib
 import zipfile
 
 
-def list_of_xml_files(filename_path, file_name):
+def list_of_xml_files(filename_path):
     print("Processing word/document.xml for list of XML files.")
     with zipfile.ZipFile(filename_path, 'r') as zip_file:
         # list content of the DOCx file
@@ -11,7 +11,7 @@ def list_of_xml_files(filename_path, file_name):
             with zipfile.ZipFile(filename_path, 'r') as zip_ref:
                 with zip_ref.open(file_info.filename) as xml_file:
                     md5hash = hashlib.md5(xml_file.read()).hexdigest()
-            xml_files.append([file_name, file_info.filename, file_info.file_size, md5hash])
+            xml_files.append([file_info.filename, file_info.file_size, md5hash])
         return xml_files
 
 

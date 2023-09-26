@@ -71,7 +71,7 @@ import os
 import tkinter as tk
 from tkinter import filedialog
 from functions.metadata import core_xml, app_xml  # functions to extract metadata from core.xml and app.xml
-from functions.excel import write_to_excel  # function to write results to an Excel file
+from functions.excel import write_worksheet  # function to write results to an Excel file
 from functions.rsids import extract_rsids_from_settings_xml  # function to extract rsids and rsidRoot from settings.xml
 from functions.xml import list_of_xml_files  # function to return list of xml files in a DOCx file.
 from functions.xml import extract_content_of_xml  # function to read an XML file and return as utf-8 text.
@@ -95,9 +95,8 @@ if __name__ == "__main__":
 
         filename = os.path.basename(msword_file_path)
 
-        # list of XML file in DOCx
-        XMLFiles = list_of_xml_files(msword_file_path,
-                                     filename)  # Executes the function to get a list of all XML files in DOCx file
+        # Executes the function to get a list of all XML files in DOCx file
+        XMLFiles = list_of_xml_files(msword_file_path)
 
         # parse word/settings.xml artifacts
         xml_file_path_within_zip = "word/settings.xml"  # Path of the XML file within the ZIP
@@ -125,7 +124,8 @@ if __name__ == "__main__":
         # The order they are in is the order that the columns will be in the spreadsheet
         # Corresponding values passed, resulting in a dictionary being passed called allMetadata
         # containing column headings and associated extracted metadata value.
-        allMetadata = {"Author": core_xml_metadata["creator"],
+        allMetadata = {"File Name": filename,
+                       "Author": core_xml_metadata["creator"],
                        "Created Date": core_xml_metadata["created"],
                        "Last Modified By": core_xml_metadata["lastModifiedBy"],
                        "Modified Date": core_xml_metadata["modified"],
@@ -152,5 +152,28 @@ if __name__ == "__main__":
                        "Content Status": core_xml_metadata["contentStatus"]
                        }
 
-        write_to_excel(excel_file_path, filename, XMLFiles, rsids, documentXMLTagSummary, rsidRoot,
-                       allMetadata)
+        # Writing document summary worksheet.
+        headers = ["File Name", "Unique rsidR", "RSID Root", "<w:p> tags", "<w:r> tags", "<w:t> tags"]
+        rows = [[filename, len(rsids), rsidRoot, documentXMLTagSummary["paragraphs"],
+                 documentXMLTagSummary["runs"], documentXMLTagSummary["text"]]]
+        write_worksheet(excel_file_path, "Doc_Summary", headers, rows)  # "Doc_Summary" worksheet
+
+        # Writing rsids from settings.xml to "rsids" worksheet
+        headers = ["File Name", "rsid Type", "RSID", "Count in document.xml"]
+        rows = []  # declare empty list
+        for rsid in rsids:
+            rows.append([filename, "rsidR", rsid, "pending function"])
+        write_worksheet(excel_file_path, "RSIDs", headers, rows)  # "RSIDs" worksheet
+
+        # Writing XML files to "XML Files" worksheet
+        headers = ["File Name", "XML", "Size (bytes)", "MD5Hash"]
+        rows = []  # declare empty list
+        for xml in XMLFiles:
+            xml.insert(0, filename)
+            rows.append(xml)
+        write_worksheet(excel_file_path, "XML Files", headers, rows)  # "XML Files" worksheet
+
+        # Writing metadata "metadata" worksheet
+        headers = (list(allMetadata.keys()))
+        rows = [list(allMetadata.values())]
+        write_worksheet(excel_file_path, "metadata", headers, rows)  # "metadata" worksheet

@@ -3,18 +3,20 @@ from openpyxl import Workbook
 import os
 
 
-def write_to_excel(excel_filepath, file_name, xml_files, all_rsids, document_summary, rsid_root,
-                   all_metadata):
+def write_worksheet(excel_filepath, worksheet_name, headers, rows_of_data):
     """
-    This function writes the artifacts collected from the MS Word document to an Excel file.
-    :param excel_filepath:
-    :param file_name:
-    :param xml_files:
-    :param all_rsids:
-    :param document_summary:
-    :param rsid_root:
-    :param all_metadata:
-    :return: nil
+    This function will write data to a worksheet within an Excel file.
+    It will iterate over the list rows_of_data passed ot it.
+    In some cases, there will only be one row. In others, there will be several.
+    In either case, the function works.
+
+    param: excel_filepath
+    param: docx_file
+    param: worksheet_name
+    param: headers
+    param: rows_of_data - Must be a two-dimensional list, as Excel requires a list to write a row to a worksheet.
+
+    return: True/False depending on if it was successful in writing the worksheet.
     """
     try:
         if os.path.exists(excel_filepath):  # if the file exists, open it.
@@ -22,70 +24,25 @@ def write_to_excel(excel_filepath, file_name, xml_files, all_rsids, document_sum
         else:  # otherwise, create it
             workbook = Workbook()
 
-        # List of files in DOCx document
-        if "XML_files" in workbook.sheetnames:  # if the worksheet XML_files already exists, select it.
-            worksheet = workbook["XML_files"]
+        if worksheet_name in workbook.sheetnames:  # if the worksheet metadata already exists, select it.
+            worksheet = workbook[worksheet_name]
         else:
-            # Create the worksheet "XML_files"
-            worksheet = workbook.create_sheet(title="XML_files")
-            worksheet.append(["File Name", "XML", "Size (bytes)", "MD5Hash"])
+            # Create the worksheet
+            worksheet = workbook.create_sheet(title=worksheet_name)
+            worksheet.append(headers)  # Writes the headings to the spreadsheet
 
-        for msword_file, xml_file, file_size, md5hash in xml_files:  # Loop through all the embedded files
-            # Write a row to the spreadsheet for each embedded file.
-            worksheet.append([msword_file, xml_file, file_size, md5hash])
-
-        print(f"List of XML files along with size and hash appended to worksheet 'XML_files'")
-
-        # Summary worksheet of # of RSIDs in a document
-        if "doc_summary" in workbook.sheetnames:  # if the worksheet doc_summary already exits, select it.
-            worksheet = workbook["doc_summary"]
-        else:
-            # Create the worksheet "doc_summary"
-            worksheet = workbook.create_sheet(title="doc_summary")
-            worksheet.append(["File Name", "Unique RSIDs", "RSID Root", "<w:p> tags", "<w:r> tags", "<w:t> tags"])
-
-        worksheet.append([file_name, len(all_rsids), rsid_root, document_summary["paragraphs"],
-                          document_summary["runs"], document_summary["text"]])
-
-        print(f"Document summary appended to worksheet 'doc_summary'")
-
-        # Check if the worksheet "rsids" already exists
-        if "rsids" in workbook.sheetnames:  # if the worksheet rsids already exists, select it.
-            worksheet = workbook["rsids"]
-        else:
-            # Create the worksheet "rsids"
-            worksheet = workbook.create_sheet(title="rsids")
-            worksheet.append(["File Name", "RSID"])
-
-        for rsid in set(all_rsids):
-            worksheet.append([file_name, rsid])
-
-        print(f"Unique RSIDs appended to worksheet 'rsids'")
-
-        # Check if the worksheet "metadata" already exists
-        if "metadata" in workbook.sheetnames:  # if the worksheet metadata already exists, select it.
-            worksheet = workbook["metadata"]
-        else:
-            # Create the worksheet "metadata"
-            worksheet = workbook.create_sheet(title="metadata")
-            headings = list(all_metadata.keys())  # Adds the keys as column headings to a list
-            headings.insert(0, "File Name")  # Adds column heading "File Name" at the start of the list
-            worksheet.append(headings)  # Writes the headings to the spreadsheet
-
-        metadata = list(all_metadata.values())  # Adds values to the list
-        metadata.insert(0, file_name)  # Adds the file name to the start of the list
-        worksheet.append(metadata)  # Writes the metadata to the spreadsheet
-
-        print(f"Metadata appended to worksheet 'metadata'")
-
-        # Remove the default sheet created by openpyxl
-        default_sheet = workbook.active
-        if default_sheet.title == "Sheet":
-            workbook.remove(default_sheet)
-
-        workbook.save(excel_filepath)  # save the file
-
-        print(f"Results written to {excel_filepath}.")
+        for row in rows_of_data:  # write rows to the worksheet.
+            worksheet.append(row)  # write the row
 
     except Exception as function_error:
         print(f"An error occurred while writing to Excel: {function_error}")
+        return False  # Lets the main script calling this function know that it experienced an error writing to Excel.
+
+    # Remove the default sheet created by openpyxl
+    default_sheet = workbook.active
+    if default_sheet.title == "Sheet":
+        workbook.remove(default_sheet)
+
+    workbook.save(excel_filepath)  # save the file
+
+    return True  # Lets the main script know that it was successful in writing to Excel.
