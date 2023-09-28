@@ -17,19 +17,19 @@ class Docx:
         """.docx file to pass to the class"""
         self.msword_file = msword_file
         self.core_xml_file = "docProps/core.xml"
-        self.core_xml_content = self.load_core_xml()
+        self.core_xml_content = self.__load_core_xml()
         self.app_xml_file = "docProps/app.xml"
-        self.app_xml_content = self.load_app_xml()
+        self.app_xml_content = self.__load_app_xml()
         self.document_xml_file = "word/document.xml"
-        self.document_xml_content = self.load_document_xml()
+        self.document_xml_content = self.__load_document_xml()
         self.settings_xml_file = "word/settings.xml"
-        self.settings_xml_content = self.load_settings_xml()
-        self.rsids = self.extract_all_rsids()
+        self.settings_xml_content = self.__load_settings_xml()
+        self.rsidRs = self.__extract_all_rsids()
         self.p_tags = len(re.findall(r'</w:t>', self.document_xml_content))
         self.r_tags = len(re.findall(r'</w:r>', self.document_xml_content))
         self.t_tags = len(re.findall(r'</w:t>', self.document_xml_content))
 
-    def load_core_xml(self):
+    def __load_core_xml(self):
         # load core.xml
         try:
             with zipfile.ZipFile(self.msword_file, 'r') as zipref:
@@ -40,7 +40,7 @@ class Docx:
         except Exception as e:
             print(f"An error occurred: {e}")
 
-    def load_app_xml(self):
+    def __load_app_xml(self):
         # load app.xml
         try:
             with zipfile.ZipFile(self.msword_file, 'r') as zipref:
@@ -51,9 +51,7 @@ class Docx:
         except Exception as e:
             print(f"An error occurred: {e}")
 
-        self.load_document_xml()
-
-    def load_document_xml(self):
+    def __load_document_xml(self):
         # load document.xml
         try:
             with zipfile.ZipFile(self.msword_file, 'r') as zipref:
@@ -64,7 +62,7 @@ class Docx:
         except Exception as e:
             print(f"An error occurred: {e}")
 
-    def load_settings_xml(self):
+    def __load_settings_xml(self):
         try:
             with zipfile.ZipFile(self.msword_file, 'r') as zipref:
                 with zipref.open(self.settings_xml_file) as xmlFile:
@@ -74,7 +72,7 @@ class Docx:
         except Exception as e:
             print(f"An error occurred: {e}")
 
-    def extract_all_rsids(self):
+    def __extract_all_rsids(self):
         """
         function to extract all RSIDs at the beginning of the class. If you were to put this in the method,
         it would have to do this every time you called the method.
@@ -295,7 +293,7 @@ class Docx:
 
     def manager(self):
         """
-        :return: the manager metadatafrom app.xml
+        :return: the manager metadata from app.xml
         """
         doc_manager = re.search(r'<Manager>(.*?)</Manager>', self.app_xml_content)
         return "" if doc_manager is None else doc_manager.group(1)
@@ -332,7 +330,7 @@ class Docx:
         root = re.search(r'<w:rsidRoot w:val="([^"]*)"', self.settings_xml_content).group(1)
         return "" if root is None else root
 
-    def all_rsids(self):
+    def rsidr(self):
         """
         :return: a list containing all the rsidR in settings.xml
         Not all of these will necessarily still be in the document. If all text from a particular revision/save
@@ -342,7 +340,40 @@ class Docx:
         Because there are no duplicate rsidR values in settings.xml (as long as you don't also grab rsidRoot),
         there is no need for the method to deduplicate.
         """
-        return self.rsids
+        return self.rsidRs
+
+    def rsids_in_document_xml(self):
+        """
+        This method will return a 2-dimensional dictionary of the different types of RSIDs in document.xml,
+        their value, and count.
+        e.g. {"rsidR":{a unique rsidR: count of # of instances in document.xml}}
+             {"rsidRPr":{a unique rsidRPr: count of # of instances in document.xml}}
+
+        This can be used in part to populate the Excel worksheets doc_summary.
+        Adding the following columns: Unique rsidRPr, Unique rsidP, rsidRDefault.
+
+        e.g.,
+        For value, it would list the total # of unique rsids of each time. This can be obtained from the dictionary
+        as follows. For rsidRPr, len(["rsidRPr"].keys())
+
+        It can also be used to enrich the rsids worksheet by populating the rsid Type from the key of the outer
+        dictionary, and creating a row for each key of the inner dictionary for that particular rsid.
+
+        You would loop over each key in the outer dictionary, extracting each key from the inner dictionary.
+
+        The assignment for each of the above should be done in __init__ rather than here to avoid having the findall
+        run every time a user calls this method.
+
+        ******
+        It may make more sense to create a method for each rsid type to search in document.xml rather than doing
+        all of them in a single method. So you would call a specific method for info on a specific type of rsid
+        in document.xml.
+        Likewise in the __init__ section, each will be parsed separately by calling an appropriate internal function
+        ********
+
+        :return:
+        """
+        pass
 
     def __str__(self):
         """
