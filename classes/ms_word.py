@@ -24,7 +24,7 @@ class Docx:
         self.document_xml_content = self.__load_document_xml()
         self.settings_xml_file = "word/settings.xml"
         self.settings_xml_content = self.__load_settings_xml()
-        self.rsidRs = self.__extract_all_rsids()
+        self.rsidRs = self.__extract_all_rsidr_from_summary_xml()
         self.p_tags = len(re.findall(r'</w:t>', self.document_xml_content))
         self.r_tags = len(re.findall(r'</w:r>', self.document_xml_content))
         self.t_tags = len(re.findall(r'</w:t>', self.document_xml_content))
@@ -72,7 +72,7 @@ class Docx:
         except Exception as e:
             print(f"An error occurred: {e}")
 
-    def __extract_all_rsids(self):
+    def __extract_all_rsidr_from_summary_xml(self):
         """
         function to extract all RSIDs at the beginning of the class. If you were to put this in the method,
         it would have to do this every time you called the method.
@@ -342,39 +342,33 @@ class Docx:
         """
         return self.rsidRs
 
-    def rsids_in_document_xml(self):
+    def rsidr_in_document_xml(self):
         """
-        This method will return a 2-dimensional dictionary of the different types of RSIDs in document.xml,
-        their value, and count.
-        e.g. {"rsidR":{a unique rsidR: count of # of instances in document.xml}}
-             {"rsidRPr":{a unique rsidRPr: count of # of instances in document.xml}}
-
-        This can be used in part to populate the Excel worksheets doc_summary.
-        Adding the following columns: Unique rsidRPr, Unique rsidP, rsidRDefault.
-
-        e.g.,
-        For value, it would list the total # of unique rsids of each time. This can be obtained from the dictionary
-        as follows. For rsidRPr, len(["rsidRPr"].keys())
-
-        It can also be used to enrich the rsids worksheet by populating the rsid Type from the key of the outer
-        dictionary, and creating a row for each key of the inner dictionary for that particular rsid.
-
-        You would loop over each key in the outer dictionary, extracting each key from the inner dictionary.
-
-        The assignment for each of the above should be done in __init__ rather than here to avoid having the findall
-        run every time a user calls this method.
-
-        ******
-        It may make more sense to create a method for each rsid type to search in document.xml rather than doing
-        all of them in a single method. So you would call a specific method for info on a specific type of rsid
-        in document.xml.
-        Likewise in the __init__ section, each will be parsed separately by calling an appropriate internal function
-        ********
-
+        return dictionary with unique rsidR and count of how many times it is found in document.xml
         :return:
         """
         pass
 
+    def rsidrpr_in_document_xml(self):
+        """
+        return dictionary with unique rsidRPr and count of how many times it is found in document.xml
+        :return:
+        """
+        pass
+
+    def rsidp_in_document_xml(self):
+        """
+        return dictionary with unique rsidP and count of how many times it is found in document.xml
+        :return:
+        """
+        pass
+
+    def rsidrdefault_in_document_xml(self):
+        """
+        return dictionary with unique rsidRDefault and count of how many times it is found in document.xml
+        :return:
+        """
+        pass
     def __str__(self):
         """
         :return: a text string that you can print out to get a summary of the document.
