@@ -17,19 +17,19 @@ class Docx:
         """.docx file to pass to the class"""
         self.msword_file = msword_file
         self.core_xml_file = "docProps/core.xml"
-        self.core_xml_content = self.load_core_xml()
+        self.core_xml_content = self.__load_core_xml()
         self.app_xml_file = "docProps/app.xml"
-        self.app_xml_content = self.load_app_xml()
+        self.app_xml_content = self.__load_app_xml()
         self.document_xml_file = "word/document.xml"
-        self.document_xml_content = self.load_document_xml()
+        self.document_xml_content = self.__load_document_xml()
         self.settings_xml_file = "word/settings.xml"
-        self.settings_xml_content = self.load_settings_xml()
-        self.rsids = self.extract_all_rsids()
+        self.settings_xml_content = self.__load_settings_xml()
+        self.rsidRs = self.__extract_all_rsidr_from_summary_xml()
         self.p_tags = len(re.findall(r'</w:t>', self.document_xml_content))
         self.r_tags = len(re.findall(r'</w:r>', self.document_xml_content))
         self.t_tags = len(re.findall(r'</w:t>', self.document_xml_content))
 
-    def load_core_xml(self):
+    def __load_core_xml(self):
         # load core.xml
         try:
             with zipfile.ZipFile(self.msword_file, 'r') as zipref:
@@ -40,7 +40,7 @@ class Docx:
         except Exception as e:
             print(f"An error occurred: {e}")
 
-    def load_app_xml(self):
+    def __load_app_xml(self):
         # load app.xml
         try:
             with zipfile.ZipFile(self.msword_file, 'r') as zipref:
@@ -51,9 +51,7 @@ class Docx:
         except Exception as e:
             print(f"An error occurred: {e}")
 
-        self.load_document_xml()
-
-    def load_document_xml(self):
+    def __load_document_xml(self):
         # load document.xml
         try:
             with zipfile.ZipFile(self.msword_file, 'r') as zipref:
@@ -64,7 +62,7 @@ class Docx:
         except Exception as e:
             print(f"An error occurred: {e}")
 
-    def load_settings_xml(self):
+    def __load_settings_xml(self):
         try:
             with zipfile.ZipFile(self.msword_file, 'r') as zipref:
                 with zipref.open(self.settings_xml_file) as xmlFile:
@@ -74,7 +72,7 @@ class Docx:
         except Exception as e:
             print(f"An error occurred: {e}")
 
-    def extract_all_rsids(self):
+    def __extract_all_rsidr_from_summary_xml(self):
         """
         function to extract all RSIDs at the beginning of the class. If you were to put this in the method,
         it would have to do this every time you called the method.
@@ -295,7 +293,7 @@ class Docx:
 
     def manager(self):
         """
-        :return: the manager metadatafrom app.xml
+        :return: the manager metadata from app.xml
         """
         doc_manager = re.search(r'<Manager>(.*?)</Manager>', self.app_xml_content)
         return "" if doc_manager is None else doc_manager.group(1)
@@ -332,7 +330,7 @@ class Docx:
         root = re.search(r'<w:rsidRoot w:val="([^"]*)"', self.settings_xml_content).group(1)
         return "" if root is None else root
 
-    def all_rsids(self):
+    def rsidr(self):
         """
         :return: a list containing all the rsidR in settings.xml
         Not all of these will necessarily still be in the document. If all text from a particular revision/save
@@ -342,8 +340,35 @@ class Docx:
         Because there are no duplicate rsidR values in settings.xml (as long as you don't also grab rsidRoot),
         there is no need for the method to deduplicate.
         """
-        return self.rsids
+        return self.rsidRs
 
+    def rsidr_in_document_xml(self):
+        """
+        return dictionary with unique rsidR and count of how many times it is found in document.xml
+        :return:
+        """
+        pass
+
+    def rsidrpr_in_document_xml(self):
+        """
+        return dictionary with unique rsidRPr and count of how many times it is found in document.xml
+        :return:
+        """
+        pass
+
+    def rsidp_in_document_xml(self):
+        """
+        return dictionary with unique rsidP and count of how many times it is found in document.xml
+        :return:
+        """
+        pass
+
+    def rsidrdefault_in_document_xml(self):
+        """
+        return dictionary with unique rsidRDefault and count of how many times it is found in document.xml
+        :return:
+        """
+        pass
     def __str__(self):
         """
         :return: a text string that you can print out to get a summary of the document.
