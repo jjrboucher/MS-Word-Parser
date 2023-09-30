@@ -35,7 +35,6 @@ class Docx:
         self.r_tags = len(re.findall(r'</w:r>', self.document_xml_content))
         self.t_tags = len(re.findall(r'</w:t>', self.document_xml_content))
 
-
     def __load_core_xml(self):
         # load core.xml
         try:
