@@ -25,9 +25,16 @@ class Docx:
         self.settings_xml_file = "word/settings.xml"
         self.settings_xml_content = self.__load_settings_xml()
         self.rsidRs = self.__extract_all_rsidr_from_summary_xml()
+
+        self.rsidR_in_document_xml = self.__rsidr_in_document_xml()
+        self.rsidRPr = self.__other_rsids_in_document_xml("rsidRPr")
+        self.rsidP = self.__other_rsids_in_document_xml("rsidP")
+        self.rsidRDefault = self.__other_rsids_in_document_xml("rsidRDefault")
+
         self.p_tags = len(re.findall(r'</w:t>', self.document_xml_content))
         self.r_tags = len(re.findall(r'</w:r>', self.document_xml_content))
         self.t_tags = len(re.findall(r'</w:t>', self.document_xml_content))
+
 
     def __load_core_xml(self):
         # load core.xml
@@ -88,6 +95,45 @@ class Docx:
             if rsid_match:
                 rsids_list.append(rsid_match.group(1))  # Appends it to the list
         return "" if len(rsids_list) == 0 else rsids_list
+
+    def __rsidr_in_document_xml(self):
+        """
+        This function calculates the count of each rsidR in document.xml
+        :return:
+        """
+        rsidr_count = {}
+        for rsid in self.rsidRs:
+            pattern = rf'w:rsidR="{rsid}"'
+            rsidr_count[rsid] = len(re.findall(pattern, self.document_xml_content))
+        return rsidr_count
+
+    def __other_rsids_in_document_xml(self, rsid):
+        """
+        :param rsid tag name (e.g. "rsidRPr", "rsidP", "rsidDefault")
+        The function accepts an rsid tag name as a parameter (e.g. rsidRPr, rsidP, rsidDefault).
+        It searches document.xml for a pattern to find all instances of that rsid tag.
+        It creates a dictionary that contains each unique rsid value as the key, and the count of how many times
+        that rsid is in document.xml.
+        E.g., {"00123456": 4, "00234567": 0, "00345678":11}
+
+        :return: dictionary where the key is unique RSIDs, and the value is a count of the occurences of that rsid
+        in document.xml
+        """
+        rsids = {}
+        pattern = rf'w:{rsid}="........"'
+        # Find all rsidRPr in document.xml file
+        matches = re.findall(pattern, self.document_xml_content)
+
+        for match in matches:  # loops through all matches
+            # greps for rsid using a group to extract the actual RSID from the string.
+            group_pattern = rf'w:{rsid}="(........)"'
+            rsid_match = re.search(group_pattern, match)
+            if rsid_match:
+                if rsid_match.group(1) in rsids:
+                    rsids[rsid_match.group(1)] += 1  # Appends it to the list
+                else:
+                    rsids[rsid_match.group(1)] = 1
+        return rsids
 
     def filename(self):
         """
@@ -347,28 +393,29 @@ class Docx:
         return dictionary with unique rsidR and count of how many times it is found in document.xml
         :return:
         """
-        pass
+        return self.rsidR_in_document_xml
 
     def rsidrpr_in_document_xml(self):
         """
         return dictionary with unique rsidRPr and count of how many times it is found in document.xml
         :return:
         """
-        pass
+        return self.rsidRPr
 
     def rsidp_in_document_xml(self):
         """
         return dictionary with unique rsidP and count of how many times it is found in document.xml
         :return:
         """
-        pass
+        return self.rsidP
 
     def rsidrdefault_in_document_xml(self):
         """
         return dictionary with unique rsidRDefault and count of how many times it is found in document.xml
         :return:
         """
-        pass
+        return self.rsidRDefault
+
     def __str__(self):
         """
         :return: a text string that you can print out to get a summary of the document.
