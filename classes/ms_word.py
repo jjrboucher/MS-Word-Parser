@@ -31,7 +31,7 @@ class Docx:
         self.rsidP = self.__other_rsids_in_document_xml("rsidP")
         self.rsidRDefault = self.__other_rsids_in_document_xml("rsidRDefault")
 
-        self.p_tags = len(re.findall(r'</w:t>', self.document_xml_content))
+        self.p_tags = len(re.findall(r'</w:p>', self.document_xml_content))
         self.r_tags = len(re.findall(r'</w:r>', self.document_xml_content))
         self.t_tags = len(re.findall(r'</w:t>', self.document_xml_content))
 
@@ -108,7 +108,7 @@ class Docx:
 
     def __other_rsids_in_document_xml(self, rsid):
         """
-        :param rsid tag name (e.g. "rsidRPr", "rsidP", "rsidDefault")
+        :param rsid tag name (e.g. "rsidRPr", "rsidP", "rsidRDefault")
         The function accepts an rsid tag name as a parameter (e.g. rsidRPr, rsidP, rsidDefault).
         It searches document.xml for a pattern to find all instances of that rsid tag.
         It creates a dictionary that contains each unique rsid value as the key, and the count of how many times
@@ -120,7 +120,7 @@ class Docx:
         """
         rsids = {}
         pattern = rf'w:{rsid}="........"'
-        # Find all rsidRPr in document.xml file
+        # Find all rsid types passed to the function (rsidRPr, rsidP, rsidRDefault in document.xml file
         matches = re.findall(pattern, self.document_xml_content)
 
         for match in matches:  # loops through all matches
