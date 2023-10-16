@@ -37,53 +37,41 @@ class Docx:
 
     def __load_core_xml(self):
         # load core.xml
-        try:
+        if self.core_xml_file in self.xml_files():  # if the file exists, read it and return its content
             with zipfile.ZipFile(self.msword_file, 'r') as zipref:
                 with zipref.open(self.core_xml_file) as xmlFile:
                     return xmlFile.read().decode("utf-8")
-        except FileNotFoundError:
-            print(f"File '{self.core_xml_file} not found in the DOCx archive.")
-            return ""
-        except Exception as e:
-            print(f"An error occurred: {e}")
+        else:  # if it doesn't exist, return an empty string.
+            print(f'"{self.core_xml_file}" does not exist in "{self.filename()}"')
             return ""
 
     def __load_app_xml(self):
         # load app.xml
-        try:
+        if self.app_xml_file in self.xml_files():  # if the file exists, read it and return its content
             with zipfile.ZipFile(self.msword_file, 'r') as zipref:
                 with zipref.open(self.app_xml_file) as xmlFile:
                     return xmlFile.read().decode("utf-8")
-        except FileNotFoundError:
-            print(f"File '{self.app_xml_file} not found in the DOCx archive.")
-            return ""
-        except Exception as e:
-            print(f"An error occurred: {e}")
+        else:  # if it doesn't exist, return an empty string.
+            print(f'"{self.app_xml_file}" does not exist in "{self.filename()}"')
             return ""
 
     def __load_document_xml(self):
         # load document.xml
-        try:
+        if self.document_xml_file in self.xml_files():  # if the file exists, read it and return its content
             with zipfile.ZipFile(self.msword_file, 'r') as zipref:
                 with zipref.open(self.document_xml_file) as xmlFile:
                     return xmlFile.read().decode("utf-8")
-        except FileNotFoundError:
-            print(f"File '{self.document_xml_file}' not found in the ZIP archive.")
-            return ""
-        except Exception as e:
-            print(f"An error occurred: {e}")
+        else:  # if it doesn't exist, return an empty string.
+            print(f'"{self.document_xml_file}" does not exist in "{self.filename()}"')
             return ""
 
     def __load_settings_xml(self):
-        try:
+        if self.settings_xml_file in self.xml_files():  # if the file exists, read it and return its content
             with zipfile.ZipFile(self.msword_file, 'r') as zipref:
                 with zipref.open(self.settings_xml_file) as xmlFile:
                     return xmlFile.read().decode("utf-8")
-        except FileNotFoundError:
-            print(f"File '{self.settings_xml_file}' not found in the ZIP archive.")
-            return ""
-        except Exception as e:
-            print(f"An error occurred: {e}")
+        else:
+            print(f'"{self.settings_xml_file}" does not exist in "{self.filename()}"')
             return ""
 
     def __extract_all_rsidr_from_summary_xml(self):
