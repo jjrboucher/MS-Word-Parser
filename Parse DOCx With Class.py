@@ -179,22 +179,23 @@ if __name__ == "__main__":
     root.withdraw()  # Hide the main window
 
     msword_file_path = filedialog.askopenfilenames(title="Select DOCx file(s) to process", initialdir=".",
-                                                   filetypes=[("DOCx Files", "*.docx")])
-    if not msword_file_path:
+                                                   filetypes=[("DOCx Files", "*.docx")])  # ask for file(s) to process
+
+    if not msword_file_path:  # if no docx file name was selected to process
         print(f'{red}No DOCx file selected.{white} Exiting.')
     else:
         excel_file_path = filedialog.asksaveasfilename(title="Select new or existing XLSX file for output.",
                                                        initialdir=".", filetypes=[("Excel Files", "*.xlsx")],
-                                                       confirmoverwrite=False)
+                                                       confirmoverwrite=False)  # ask for output file
 
-        if excel_file_path == "":  # no file selected
+        if not excel_file_path:  # if no output file selected
             print(f'{red}No output file selected.{white} Exiting.')
             exit()
 
-        if not re.search(r'\.xlsx$',excel_file_path):
+        if not re.search(r'\.xlsx$', excel_file_path):  # if .xlsx was not included in file name, add it.
             excel_file_path += ".xlsx"
 
-        for f in msword_file_path:
+        for f in msword_file_path:  # loop over the files selected, processing each.
             print(f'Processing {green}"{f}"{white}')
             process_docx(Docx(f))
             print(f'Finished processing {green}"{f}"{white}. Results are found in '

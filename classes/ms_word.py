@@ -330,7 +330,7 @@ class Docx:
         :return: the total characters including spaces in the document metadatafrom app.xml
         """
         doc_characters_with_spaces = re.search(
-            r'<.{0,2}:?CharactersWithSpaces>(.*?)</.{0,2}:?CharactersWithSpaces>',self.app_xml_content)
+            r'<.{0,2}:?CharactersWithSpaces>(.*?)</.{0,2}:?CharactersWithSpaces>', self.app_xml_content)
         return "" if doc_characters_with_spaces is None else doc_characters_with_spaces.group(1)
 
     def app_version(self):
