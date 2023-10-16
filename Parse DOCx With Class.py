@@ -79,6 +79,94 @@ red = f'\033[91m'
 white = f'\033[00m'
 green = f'\033[92m'
 
+def process_docx(filename):
+
+    print(f'Creating {green}"Doc_Summary"{white} worksheet in {excel_file_path}')
+    # Writing document summary worksheet.
+    headers = ["File Name", "Unique rsidR", "RSID Root", "<w:p> tags", "<w:r> tags", "<w:t> tags"]
+    rows = [[filename.filename(), len(filename.rsidr()), filename.rsid_root(), filename.paragraph_tags(),
+             filename.runs_tags(), filename.text_tags()]]
+    write_worksheet(excel_file_path, "Doc_Summary", headers, rows)  # "Doc_Summary" worksheet
+
+    # The keys will be used as the column heading in the spreadsheet
+    # The order they are in is the order that the columns will be in the spreadsheet
+    # Corresponding values passed, resulting in a dictionary being passed called allMetadata
+    # containing column headings and associated extracted metadata value.
+    allMetadata = {"File Name": filename.filename(),
+                   "Author": filename.creator(),
+                   "Created Date": filename.created(),
+                   "Last Modified By": filename.last_modified_by(),
+                   "Modified Date": filename.modified(),
+                   "Last Printed Date": filename.last_printed(),
+                   "Manager": filename.manager(),
+                   "Company": filename.company(),
+                   "Revision": filename.revision(),
+                   "Total Editing Time": filename.total_editing_time(),
+                   "Pages": filename.pages(),
+                   "Paragraphs": filename.paragraphs(),
+                   "Lines": filename.lines(),
+                   "Words": filename.words(),
+                   "Characters": filename.characters(),
+                   "Characters With Spaces": filename.characters_with_spaces(),
+                   "Title": filename.title(),
+                   "Subject": filename.subject(),
+                   "Keywords": filename.keywords(),
+                   "Description": filename.description(),
+                   "Application": filename.application(),
+                   "App Version": filename.app_version(),
+                   "Template": filename.template(),
+                   "Doc Security": filename.security(),
+                   "Category": filename.category(),
+                   "Content Status": filename.content_status()
+                   }
+
+    print(f'Creating {green}"Metadata"{white} worksheet in "{excel_file_path}"')
+    # Writing metadata "metadata" worksheet
+    headers = (list(allMetadata.keys()))
+    rows = [list(allMetadata.values())]
+    write_worksheet(excel_file_path, "Metadata", headers, rows)  # "metadata" worksheet
+
+    print(f'Creating {green}"XML Files"{white} worksheet in "{excel_file_path}"')
+    # Writing XML files to "XML Files" worksheet
+    headers = ["File Name", "XML File", "Size (bytes)", "MD5Hash"]
+    rows = []  # declare empty list
+
+    for xml, size_hash in filename.xml_files().items():
+        rows.append([filename.filename(), xml, size_hash[0], size_hash[1]])  # add the row to the list "rows"
+    write_worksheet(excel_file_path, "XML Files", headers, rows)  # "XML Files" worksheet
+
+    # Calculating count of rsidR, rsidRPr, rsidP, and rsidRDefault in document.xml and writing to "rsids" worksheet
+    headers = ["File Name", "RSID Type", "RSID Value", "Count in document.xml"]
+    rows = []  # declare empty list
+
+    print(f'Adding {green}rsidR{white} count to "RSIDs" worksheet in "{excel_file_path}"')
+    for k, v in filename.rsidr_in_document_xml().items():
+        rows.append([filename.filename(), "rsidR", k, v])
+    write_worksheet(excel_file_path, "RSIDs", headers, rows)  # "RSIDs" worksheet
+
+    rows = []  # declare empty list
+
+    print(f'Adding {green}rsidP{white} count to "RSIDs" worksheet in {excel_file_path}')
+    for k, v in filename.rsidp_in_document_xml().items():
+        rows.append([filename.filename(), "rsidP", k, v])
+    write_worksheet(excel_file_path, "RSIDs", headers, rows)  # "RSIDs" worksheet
+
+    rows = []  # declare empty list
+
+    print(f'Adding {green}rsidPr{white} count to "RSIDs" worksheet in {excel_file_path}')
+    for k, v in filename.rsidrpr_in_document_xml().items():
+        rows.append([filename.filename(), "rsidRPr", k, v])
+    write_worksheet(excel_file_path, "RSIDs", headers, rows)  # "RSIDs" worksheet
+
+    rows = []  # declare empty list
+
+    print(f'Adding {green}rsidRDefault{white} count to "RSIDs" worksheet in {excel_file_path}')
+    for k, v in filename.rsidrdefault_in_document_xml().items():
+        rows.append([filename.filename(), "rsidRDefault", k, v])
+    write_worksheet(excel_file_path, "RSIDs", headers, rows)  # "RSIDs" worksheet
+
+    return
+
 if __name__ == "__main__":
 
     # Output file - same path as where the script is run. It will create it if it does not exist,
@@ -88,97 +176,13 @@ if __name__ == "__main__":
     root = tk.Tk()
     root.withdraw()  # Hide the main window
 
-    msword_file_path = filedialog.askopenfilename(title="Select DOCx file to process", initialdir=".",
+    msword_file_path = filedialog.askopenfilenames(title="Select DOCx file(s) to process", initialdir=".",
                                                   filetypes=[("DOCx Files", "*.docx")])
     if not msword_file_path:
         print(f'{red}No DOCx file selected.{white} Exiting.')
     else:
-
-        print(f'Processing {green}"{msword_file_path}"{white}')
-        filename = Docx(msword_file_path)
-
-        print(f'Creating {green}"Doc_Summary"{white} worksheet in {excel_file_path}')
-        # Writing document summary worksheet.
-        headers = ["File Name", "Unique rsidR", "RSID Root", "<w:p> tags", "<w:r> tags", "<w:t> tags"]
-        rows = [[filename.filename(), len(filename.rsidr()), filename.rsid_root(), filename.paragraph_tags(),
-                 filename.runs_tags(), filename.text_tags()]]
-        write_worksheet(excel_file_path, "Doc_Summary", headers, rows)  # "Doc_Summary" worksheet
-
-        # The keys will be used as the column heading in the spreadsheet
-        # The order they are in is the order that the columns will be in the spreadsheet
-        # Corresponding values passed, resulting in a dictionary being passed called allMetadata
-        # containing column headings and associated extracted metadata value.
-        allMetadata = {"File Name": filename.filename(),
-                       "Author": filename.creator(),
-                       "Created Date": filename.created(),
-                       "Last Modified By": filename.last_modified_by(),
-                       "Modified Date": filename.modified(),
-                       "Last Printed Date": filename.last_printed(),
-                       "Manager": filename.manager(),
-                       "Company": filename.company(),
-                       "Revision": filename.revision(),
-                       "Total Editing Time": filename.total_editing_time(),
-                       "Pages": filename.pages(),
-                       "Paragraphs": filename.paragraphs(),
-                       "Lines": filename.lines(),
-                       "Words": filename.words(),
-                       "Characters": filename.characters(),
-                       "Characters With Spaces": filename.characters_with_spaces(),
-                       "Title": filename.title(),
-                       "Subject": filename.subject(),
-                       "Keywords": filename.keywords(),
-                       "Description": filename.description(),
-                       "Application": filename.application(),
-                       "App Version": filename.app_version(),
-                       "Template": filename.template(),
-                       "Doc Security": filename.security(),
-                       "Category": filename.category(),
-                       "Content Status": filename.content_status()
-                       }
-
-        print(f'Creating {green}"Metadata"{white} worksheet in "{excel_file_path}"')
-        # Writing metadata "metadata" worksheet
-        headers = (list(allMetadata.keys()))
-        rows = [list(allMetadata.values())]
-        write_worksheet(excel_file_path, "Metadata", headers, rows)  # "metadata" worksheet
-
-        print(f'Creating {green}"XML Files"{white} worksheet in "{excel_file_path}"')
-        # Writing XML files to "XML Files" worksheet
-        headers = ["File Name", "XML File", "Size (bytes)", "MD5Hash"]
-        rows = []  # declare empty list
-
-        for xml, size_hash in filename.xml_files().items():
-            rows.append([filename.filename(), xml, size_hash[0], size_hash[1]])  # add the row to the list "rows"
-        write_worksheet(excel_file_path, "XML Files", headers, rows)  # "XML Files" worksheet
-
-        # Calculating count of rsidR, rsidRPr, rsidP, and rsidRDefault in document.xml and writing to "rsids" worksheet
-        headers = ["File Name", "RSID Type", "RSID Value", "Count in document.xml"]
-        rows = []  # declare empty list
-
-        print(f'Adding {green}rsidR{white} count to "RSIDs" worksheet in "{excel_file_path}"')
-        for k, v in filename.rsidr_in_document_xml().items():
-            rows.append([filename.filename(), "rsidR", k, v])
-        write_worksheet(excel_file_path, "RSIDs", headers, rows)  # "RSIDs" worksheet
-
-        rows = []  # declare empty list
-
-        print(f'Adding {green}rsidP{white} count to "RSIDs" worksheet in {excel_file_path}')
-        for k, v in filename.rsidp_in_document_xml().items():
-            rows.append([filename.filename(), "rsidP", k, v])
-        write_worksheet(excel_file_path, "RSIDs", headers, rows)  # "RSIDs" worksheet
-
-        rows = []  # declare empty list
-
-        print(f'Adding {green}rsidPr{white} count to "RSIDs" worksheet in {excel_file_path}')
-        for k, v in filename.rsidrpr_in_document_xml().items():
-            rows.append([filename.filename(), "rsidRPr", k, v])
-        write_worksheet(excel_file_path, "RSIDs", headers, rows)  # "RSIDs" worksheet
-
-        rows = []  # declare empty list
-
-        print(f'Adding {green}rsidRDefault{white} count to "RSIDs" worksheet in {excel_file_path}')
-        for k, v in filename.rsidrdefault_in_document_xml().items():
-            rows.append([filename.filename(), "rsidRDefault", k, v])
-        write_worksheet(excel_file_path, "RSIDs", headers, rows)  # "RSIDs" worksheet
-
-print(f'Finished processing {green}"{msword_file_path}"{white}. Results are found in {green}"{excel_file_path}"{white}')
+        for f in msword_file_path:
+            print(f'Processing {green}"{f}"{white}')
+            process_docx(Docx(f))
+            print(f'Finished processing {green}"{f}"{white}. Results are found in '
+                  f'{green}"{excel_file_path}"{white}')
