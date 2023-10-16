@@ -372,8 +372,8 @@ class Docx:
         """
         :return: rsidRoot from settings.xml
         """
-        root = re.search(r'<w:rsidRoot w:val="([^"]*)"', self.settings_xml_content).group(1)
-        return "" if root is None else root
+        root = re.search(r'<w:rsidRoot w:val="([^"]*)"', self.settings_xml_content)
+        return "" if root is None else root.group(1)
 
     def rsidr(self):
         """
