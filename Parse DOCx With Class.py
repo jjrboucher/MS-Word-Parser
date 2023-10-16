@@ -69,7 +69,7 @@
 # If any other libraries are missing when trying to execute the script, install those in the same manner.
 #
 ###################################
-
+import re
 import tkinter as tk
 from tkinter import filedialog
 from functions.excel import write_worksheet  # function to write results to an Excel file
@@ -81,6 +81,7 @@ green = f'\033[92m'
 
 
 def process_docx(filename):
+    global excel_file_path
     print(f'Creating {green}"Doc_Summary"{white} worksheet in {excel_file_path}')
     # Writing document summary worksheet.
     headers = ["File Name", "Unique rsidR", "RSID Root", "<w:p> tags", "<w:r> tags", "<w:t> tags"]
@@ -172,7 +173,7 @@ if __name__ == "__main__":
 
     # Output file - same path as where the script is run. It will create it if it does not exist,
     # or append to it if it does.
-    excel_file_path = "docx-artifacts(class).xlsx"  # default file name - will be created in the script folder.
+    # excel_file_path = "docx-artifacts(class).xlsx"  # default file name - will be created in the script folder.
 
     root = tk.Tk()
     root.withdraw()  # Hide the main window
@@ -182,6 +183,17 @@ if __name__ == "__main__":
     if not msword_file_path:
         print(f'{red}No DOCx file selected.{white} Exiting.')
     else:
+        excel_file_path = filedialog.asksaveasfilename(title="Select new or existing XLSX file for output.",
+                                                       initialdir=".", filetypes=[("Excel Files", "*.xlsx")],
+                                                       confirmoverwrite=False)
+
+        if excel_file_path == "":  # no file selected
+            print(f'{red}No output file selected.{white} Exiting.')
+            exit()
+
+        if not re.search(r'\.xlsx$',excel_file_path):
+            excel_file_path += ".xlsx"
+
         for f in msword_file_path:
             print(f'Processing {green}"{f}"{white}')
             process_docx(Docx(f))
