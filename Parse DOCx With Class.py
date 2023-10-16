@@ -79,8 +79,8 @@ red = f'\033[91m'
 white = f'\033[00m'
 green = f'\033[92m'
 
-def process_docx(filename):
 
+def process_docx(filename):
     print(f'Creating {green}"Doc_Summary"{white} worksheet in {excel_file_path}')
     # Writing document summary worksheet.
     headers = ["File Name", "Unique rsidR", "RSID Root", "<w:p> tags", "<w:r> tags", "<w:t> tags"]
@@ -92,7 +92,7 @@ def process_docx(filename):
     # The order they are in is the order that the columns will be in the spreadsheet
     # Corresponding values passed, resulting in a dictionary being passed called allMetadata
     # containing column headings and associated extracted metadata value.
-    allMetadata = {"File Name": filename.filename(),
+    allmetadata = {"File Name": filename.filename(),
                    "Author": filename.creator(),
                    "Created Date": filename.created(),
                    "Last Modified By": filename.last_modified_by(),
@@ -122,8 +122,8 @@ def process_docx(filename):
 
     print(f'Creating {green}"Metadata"{white} worksheet in "{excel_file_path}"')
     # Writing metadata "metadata" worksheet
-    headers = (list(allMetadata.keys()))
-    rows = [list(allMetadata.values())]
+    headers = (list(allmetadata.keys()))
+    rows = [list(allmetadata.values())]
     write_worksheet(excel_file_path, "Metadata", headers, rows)  # "metadata" worksheet
 
     print(f'Creating {green}"XML Files"{white} worksheet in "{excel_file_path}"')
@@ -167,6 +167,7 @@ def process_docx(filename):
 
     return
 
+
 if __name__ == "__main__":
 
     # Output file - same path as where the script is run. It will create it if it does not exist,
@@ -177,7 +178,7 @@ if __name__ == "__main__":
     root.withdraw()  # Hide the main window
 
     msword_file_path = filedialog.askopenfilenames(title="Select DOCx file(s) to process", initialdir=".",
-                                                  filetypes=[("DOCx Files", "*.docx")])
+                                                   filetypes=[("DOCx Files", "*.docx")])
     if not msword_file_path:
         print(f'{red}No DOCx file selected.{white} Exiting.')
     else:
