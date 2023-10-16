@@ -42,7 +42,7 @@ class Docx:
                 with zipref.open(self.core_xml_file) as xmlFile:
                     return xmlFile.read().decode("utf-8")
         else:  # if it doesn't exist, return an empty string.
-            print(f'"{self.core_xml_file}" does not exist in "{self.filename()}"')
+            print(f'"{self.core_xml_file}" does not exist in "{self.filename()}". Returning empty string.')
             return ""
 
     def __load_app_xml(self):
@@ -52,7 +52,7 @@ class Docx:
                 with zipref.open(self.app_xml_file) as xmlFile:
                     return xmlFile.read().decode("utf-8")
         else:  # if it doesn't exist, return an empty string.
-            print(f'"{self.app_xml_file}" does not exist in "{self.filename()}"')
+            print(f'"{self.app_xml_file}" does not exist in "{self.filename()}". Returning empty string.')
             return ""
 
     def __load_document_xml(self):
@@ -62,7 +62,7 @@ class Docx:
                 with zipref.open(self.document_xml_file) as xmlFile:
                     return xmlFile.read().decode("utf-8")
         else:  # if it doesn't exist, return an empty string.
-            print(f'"{self.document_xml_file}" does not exist in "{self.filename()}"')
+            print(f'"{self.document_xml_file}" does not exist in "{self.filename()}". Returning empty string.')
             return ""
 
     def __load_settings_xml(self):
@@ -71,7 +71,7 @@ class Docx:
                 with zipref.open(self.settings_xml_file) as xmlFile:
                     return xmlFile.read().decode("utf-8")
         else:
-            print(f'"{self.settings_xml_file}" does not exist in "{self.filename()}"')
+            print(f'"{self.settings_xml_file}" does not exist in "{self.filename()}". Returning empty string.')
             return ""
 
     def __extract_all_rsidr_from_summary_xml(self):
