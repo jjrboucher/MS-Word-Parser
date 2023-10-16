@@ -75,6 +75,9 @@ from tkinter import filedialog
 from functions.excel import write_worksheet  # function to write results to an Excel file
 from classes.ms_word import Docx
 
+red = f'\033[91m'
+white = f'\033[00m'
+green = f'\033[92m'
 
 if __name__ == "__main__":
 
@@ -88,13 +91,13 @@ if __name__ == "__main__":
     msword_file_path = filedialog.askopenfilename(title="Select DOCx file to process", initialdir=".",
                                                   filetypes=[("DOCx Files", "*.docx")])
     if not msword_file_path:
-        print("No DOCx file selected. Exiting.")
+        print(f'{red}No DOCx file selected.{white} Exiting.')
     else:
 
-        print(f'processing {msword_file_path}')
+        print(f'Processing {green}"{msword_file_path}"{white}')
         filename = Docx(msword_file_path)
 
-        print(f'Creating "Doc_Summary" worksheet in {excel_file_path}')
+        print(f'Creating {green}"Doc_Summary"{white} worksheet in {excel_file_path}')
         # Writing document summary worksheet.
         headers = ["File Name", "Unique rsidR", "RSID Root", "<w:p> tags", "<w:r> tags", "<w:t> tags"]
         rows = [[filename.filename(), len(filename.rsidr()), filename.rsid_root(), filename.paragraph_tags(),
@@ -133,13 +136,13 @@ if __name__ == "__main__":
                        "Content Status": filename.content_status()
                        }
 
-        print(f'Creating "metadata" worksheet in {excel_file_path}')
+        print(f'Creating {green}"Metadata"{white} worksheet in "{excel_file_path}"')
         # Writing metadata "metadata" worksheet
         headers = (list(allMetadata.keys()))
         rows = [list(allMetadata.values())]
-        write_worksheet(excel_file_path, "metadata", headers, rows)  # "metadata" worksheet
+        write_worksheet(excel_file_path, "Metadata", headers, rows)  # "metadata" worksheet
 
-        print(f'Creating "XML Files" worksheet in {excel_file_path}')
+        print(f'Creating {green}"XML Files"{white} worksheet in "{excel_file_path}"')
         # Writing XML files to "XML Files" worksheet
         headers = ["File Name", "XML File", "Size (bytes)", "MD5Hash"]
         rows = []  # declare empty list
@@ -152,30 +155,30 @@ if __name__ == "__main__":
         headers = ["File Name", "RSID Type", "RSID Value", "Count in document.xml"]
         rows = []  # declare empty list
 
-        print(f'Adding rsidR count to "RSIDs" worksheet in {excel_file_path}')
+        print(f'Adding {green}rsidR{white} count to "RSIDs" worksheet in "{excel_file_path}"')
         for k, v in filename.rsidr_in_document_xml().items():
             rows.append([filename.filename(), "rsidR", k, v])
         write_worksheet(excel_file_path, "RSIDs", headers, rows)  # "RSIDs" worksheet
 
         rows = []  # declare empty list
 
-        print(f'Adding rsidP count to "RSIDs" worksheet in {excel_file_path}')
+        print(f'Adding {green}rsidP{white} count to "RSIDs" worksheet in {excel_file_path}')
         for k, v in filename.rsidp_in_document_xml().items():
             rows.append([filename.filename(), "rsidP", k, v])
         write_worksheet(excel_file_path, "RSIDs", headers, rows)  # "RSIDs" worksheet
 
         rows = []  # declare empty list
 
-        print(f'Adding rsidPr count to "RSIDs" worksheet in {excel_file_path}')
+        print(f'Adding {green}rsidPr{white} count to "RSIDs" worksheet in {excel_file_path}')
         for k, v in filename.rsidrpr_in_document_xml().items():
             rows.append([filename.filename(), "rsidRPr", k, v])
         write_worksheet(excel_file_path, "RSIDs", headers, rows)  # "RSIDs" worksheet
 
         rows = []  # declare empty list
 
-        print(f'Adding rsidRDefault count to "RSIDs" worksheet in {excel_file_path}')
+        print(f'Adding {green}rsidRDefault{white} count to "RSIDs" worksheet in {excel_file_path}')
         for k, v in filename.rsidrdefault_in_document_xml().items():
             rows.append([filename.filename(), "rsidRDefault", k, v])
         write_worksheet(excel_file_path, "RSIDs", headers, rows)  # "RSIDs" worksheet
 
-print(f'Finished processing {msword_file_path}. Results are found in {excel_file_path}')
+print(f'Finished processing {green}"{msword_file_path}"{white}. Results are found in {green}"{excel_file_path}"{white}')

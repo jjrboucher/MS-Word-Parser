@@ -15,6 +15,10 @@ class Docx:
 
     def __init__(self, msword_file):
         """.docx file to pass to the class"""
+        self.red = f'\033[91m'
+        self.white = f'\033[00m'
+        self.green = f'\033[92m'
+
         self.msword_file = msword_file
         self.core_xml_file = "docProps/core.xml"
         self.core_xml_content = self.__load_core_xml()
@@ -42,7 +46,8 @@ class Docx:
                 with zipref.open(self.core_xml_file) as xmlFile:
                     return xmlFile.read().decode("utf-8")
         else:  # if it doesn't exist, return an empty string.
-            print(f'"{self.core_xml_file}" does not exist in "{self.filename()}". Returning empty string.')
+            print(f'{self.red}"{self.core_xml_file}" does not exist{self.white} in "{self.filename()}". '
+                  f'Returning empty string.')
             return ""
 
     def __load_app_xml(self):
@@ -52,7 +57,8 @@ class Docx:
                 with zipref.open(self.app_xml_file) as xmlFile:
                     return xmlFile.read().decode("utf-8")
         else:  # if it doesn't exist, return an empty string.
-            print(f'"{self.app_xml_file}" does not exist in "{self.filename()}". Returning empty string.')
+            print(f'{self.red}"{self.app_xml_file}" does not exist{self.white} in "{self.filename()}". '
+                  f'Returning empty string.')
             return ""
 
     def __load_document_xml(self):
@@ -62,7 +68,8 @@ class Docx:
                 with zipref.open(self.document_xml_file) as xmlFile:
                     return xmlFile.read().decode("utf-8")
         else:  # if it doesn't exist, return an empty string.
-            print(f'"{self.document_xml_file}" does not exist in "{self.filename()}". Returning empty string.')
+            print(f'{self.red}"{self.document_xml_file}" does not exist{self.white} in "{self.filename()}". '
+                  f'Returning empty string.')
             return ""
 
     def __load_settings_xml(self):
@@ -71,7 +78,8 @@ class Docx:
                 with zipref.open(self.settings_xml_file) as xmlFile:
                     return xmlFile.read().decode("utf-8")
         else:
-            print(f'"{self.settings_xml_file}" does not exist in "{self.filename()}". Returning empty string.')
+            print(f'{self.red}"{self.settings_xml_file}" does not exist{self.white} in "{self.filename()}". '
+                  f'Returning empty string.')
             return ""
 
     def __extract_all_rsidr_from_summary_xml(self):
