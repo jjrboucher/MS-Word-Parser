@@ -43,8 +43,10 @@ class Docx:
                     return xmlFile.read().decode("utf-8")
         except FileNotFoundError:
             print(f"File '{self.core_xml_file} not found in the DOCx archive.")
+            return ""
         except Exception as e:
             print(f"An error occurred: {e}")
+            return ""
 
     def __load_app_xml(self):
         # load app.xml
@@ -54,8 +56,10 @@ class Docx:
                     return xmlFile.read().decode("utf-8")
         except FileNotFoundError:
             print(f"File '{self.app_xml_file} not found in the DOCx archive.")
+            return ""
         except Exception as e:
             print(f"An error occurred: {e}")
+            return ""
 
     def __load_document_xml(self):
         # load document.xml
@@ -65,8 +69,10 @@ class Docx:
                     return xmlFile.read().decode("utf-8")
         except FileNotFoundError:
             print(f"File '{self.document_xml_file}' not found in the ZIP archive.")
+            return ""
         except Exception as e:
             print(f"An error occurred: {e}")
+            return ""
 
     def __load_settings_xml(self):
         try:
@@ -75,8 +81,10 @@ class Docx:
                     return xmlFile.read().decode("utf-8")
         except FileNotFoundError:
             print(f"File '{self.settings_xml_file}' not found in the ZIP archive.")
+            return ""
         except Exception as e:
             print(f"An error occurred: {e}")
+            return ""
 
     def __extract_all_rsidr_from_summary_xml(self):
         """
