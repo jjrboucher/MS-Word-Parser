@@ -82,7 +82,7 @@ green = f'\033[92m'
 
 def process_docx(filename):
     global excel_file_path
-    print(f'Creating {green}"Doc_Summary"{white} worksheet in {excel_file_path}')
+    print(f'Updating {green}"Doc_Summary"{white} worksheet in {excel_file_path}')
     # Writing document summary worksheet.
     headers = ["File Name", "Unique rsidR", "RSID Root", "<w:p> tags", "<w:r> tags", "<w:t> tags"]
     rows = [[filename.filename(), len(filename.rsidr()), filename.rsid_root(), filename.paragraph_tags(),
@@ -121,20 +121,20 @@ def process_docx(filename):
                    "Content Status": filename.content_status()
                    }
 
-    print(f'Creating {green}"Metadata"{white} worksheet in "{excel_file_path}"')
+    print(f'Updating {green}"Metadata"{white} worksheet in "{excel_file_path}"')
     # Writing metadata "metadata" worksheet
     headers = (list(allmetadata.keys()))
     rows = [list(allmetadata.values())]
     write_worksheet(excel_file_path, "Metadata", headers, rows)  # "metadata" worksheet
 
-    print(f'Creating {green}"XML Files"{white} worksheet in "{excel_file_path}"')
+    print(f'Updating {green}"Archive Files"{white} worksheet in "{excel_file_path}"')
     # Writing XML files to "XML Files" worksheet
-    headers = ["File Name", "XML File", "Size (bytes)", "MD5Hash"]
+    headers = ["File Name", "Archive File", "Size (bytes)", "MD5Hash"]
     rows = []  # declare empty list
 
     for xml, size_hash in filename.xml_files().items():
         rows.append([filename.filename(), xml, size_hash[0], size_hash[1]])  # add the row to the list "rows"
-    write_worksheet(excel_file_path, "XML Files", headers, rows)  # "XML Files" worksheet
+    write_worksheet(excel_file_path, "Archive Files", headers, rows)  # "XML Files" worksheet
 
     # Calculating count of rsidR, rsidRPr, rsidP, and rsidRDefault in document.xml and writing to "rsids" worksheet
     headers = ["File Name", "RSID Type", "RSID Value", "Count in document.xml"]
