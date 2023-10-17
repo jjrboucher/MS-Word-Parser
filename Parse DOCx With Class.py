@@ -81,6 +81,12 @@ green = f'\033[92m'
 
 
 def process_docx(filename):
+    """
+    This function accepts a filename of type Docx and processes it.
+    By placing this in a function, it allows the main part of the script to accept multiple file names and
+    then loop through them, calling this function for each DOCx file.
+    """
+
     global excel_file_path
     print(f'Updating {green}"Doc_Summary"{white} worksheet in {excel_file_path}')
     # Writing document summary worksheet.
