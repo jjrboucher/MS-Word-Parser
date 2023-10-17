@@ -186,6 +186,7 @@ if __name__ == "__main__":
     else:
         excel_file_path = filedialog.asksaveasfilename(title="Select new or existing XLSX file for output.",
                                                        initialdir=".", filetypes=[("Excel Files", "*.xlsx")],
+                                                       defaultextension="*.xlsx",
                                                        confirmoverwrite=False)  # ask for output file
 
         if not excel_file_path:  # if no output file selected
