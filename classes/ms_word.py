@@ -35,9 +35,12 @@ class Docx:
         self.rsidP = self.__other_rsids_in_document_xml("rsidP")
         self.rsidRDefault = self.__other_rsids_in_document_xml("rsidRDefault")
 
-        self.p_tags = len(re.findall(r'</w:p>', self.document_xml_content))
-        self.r_tags = len(re.findall(r'</w:r>', self.document_xml_content))
-        self.t_tags = len(re.findall(r'</w:t>', self.document_xml_content))
+        self.p_tags = re.findall(r'<w:p>|<w:p [^>]*/?>', self.document_xml_content)
+        self.r_tags = re.findall(r'<w:r>|<w:r [^>]*/?>', self.document_xml_content)
+        self.t_tags = re.findall(r'<w:t>|<w:t [^>]*/?>', self.document_xml_content)
+
+        self.para_id = self.__para_id_tags__()
+        self.text_id = self.__text_id_tags__()
 
     def __load_core_xml(self):
         # load core.xml
@@ -90,11 +93,11 @@ class Docx:
         """
         rsids_list = []
         # Find all RSIDs, not rsidRoot. rsidRoot is repeated in rsids
-        matches = re.findall(r'<w:rsid w:val="[^>]*/>', self.settings_xml_content)
+        matches = re.findall(r'<w:rsid w:val="[0-9A-F]{8}"/>', self.settings_xml_content)
 
         for match in matches:  # loops through all matches
             # greps for rsid using a group to extract the actual RSID from the string.
-            rsid_match = re.search(r'<w:rsid w:val="([^"]*)"', match)
+            rsid_match = re.search(r'<w:rsid w:val="([0-9A-F]{8})"', match)
             if rsid_match:
                 rsids_list.append(rsid_match.group(1))  # Appends it to the list
         return "" if len(rsids_list) == 0 else rsids_list
@@ -123,20 +126,56 @@ class Docx:
         in document.xml
         """
         rsids = {}
-        pattern = rf'w:{rsid}="........"'
+        pattern = rf'w:'+rsid+'="[0-9A-F]{8}"'
         # Find all rsid types passed to the function (rsidRPr, rsidP, rsidRDefault in document.xml file
         matches = re.findall(pattern, self.document_xml_content)
 
         for match in matches:  # loops through all matches
             # greps for rsid using a group to extract the actual RSID from the string.
-            group_pattern = rf'w:{rsid}="(........)"'
+            group_pattern = rf'w:'+rsid+'="([0-9A-F]{8})"'
             rsid_match = re.search(group_pattern, match)
             if rsid_match:
                 if rsid_match.group(1) in rsids:
-                    rsids[rsid_match.group(1)] += 1  # Appends it to the list
+                    rsids[rsid_match.group(1)] += 1  # increment count by 1
                 else:
-                    rsids[rsid_match.group(1)] = 1
+                    rsids[rsid_match.group(1)] = 1  # Appends it to the list
         return rsids
+
+    def __para_id_tags__(self):
+        """
+        :return: list of unique paraId tags and count in document.xml
+        """
+        pid_tags = {}  # empty dictionary to start
+
+        for pid_tag in self.p_tags:
+            pidtag = re.search(r'paraId="([0-9A-F]{8})"', pid_tag)
+            if pidtag is None:  # no paraId= tag in this <w:p> paragraph tag.
+                pass
+            else:
+                if pidtag.group(1) in pid_tags:
+                    pid_tags[pidtag.group(1)] += 1  # increment count by 1
+                else:
+                    pid_tags[pidtag.group(1)] = 1  # append to the list
+
+        return pid_tags
+
+    def __text_id_tags__(self):
+        """
+        :return: list of unique paraId tags and count in document.xml
+        """
+        text_tags = {}  # empty dictionary to start
+
+        for text_tag in self.p_tags:
+            texttag = re.search(r'textId="([0-9A-F]{8})"', text_tag)
+            if texttag is None:  # no paraId= tag in this <w:p> paragraph tag.
+                pass
+            else:
+                if texttag.group(1) in text_tags:
+                    text_tags[texttag.group(1)] += 1  # increment count by 1
+                else:
+                    text_tags[texttag.group(1)] = 1  # append to the list
+
+        return text_tags
 
     def filename(self):
         """
@@ -358,19 +397,19 @@ class Docx:
         """
         :return: the total number of paragraph tags in document.xml
         """
-        return self.p_tags
+        return len(self.p_tags)
 
     def runs_tags(self):
         """
         :return: the total number of runs tags in document.xml
         """
-        return self.r_tags
+        return len(self.r_tags)
 
     def text_tags(self):
         """
         :return: the total number of text tags in document.xml
         """
-        return self.t_tags
+        return len(self.t_tags)
 
     def rsid_root(self):
         """
@@ -418,6 +457,12 @@ class Docx:
         :return:
         """
         return self.rsidRDefault
+
+    def paragraph_id_tags(self):
+        return self.para_id
+
+    def text_id_tags(self):
+        return self.text_id
 
     def __str__(self):
         """

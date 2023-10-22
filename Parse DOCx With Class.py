@@ -2,7 +2,7 @@
 # Written by Jacques Boucher
 # jjrboucher@gmail.com
 #
-# Version Date: 15 October 2023
+# Version Date: 21 October 2023
 #
 # Written in Python 3.11
 #
@@ -41,6 +41,8 @@
 #     along with a count of how many times that RSID is in document.xml
 #     It will also search document.xml for all unique rsidRPr, rsidP, and rsidRDefault values and count of how many
 #     are in document.xml.
+#     It also extracts the unique paraId and textId tags from the <w:p> tag and saves the values and count of how
+#     many are in document.xml.
 #     In this worksheet, it will save the following information to rows (one for each unique RSID):
 #     "File Name", "RSID Type", "RSID Value", "Count in document.xml"
 #
@@ -142,35 +144,36 @@ def process_docx(filename):
         rows.append([filename.filename(), xml, size_hash[0], size_hash[1]])  # add the row to the list "rows"
     write_worksheet(excel_file_path, "Archive Files", headers, rows)  # "XML Files" worksheet
 
-    # Calculating count of rsidR, rsidRPr, rsidP, and rsidRDefault in document.xml and writing to "rsids" worksheet
+    # Calculating count of rsidR, rsidRPr, rsidP, rsidRDefault, paraId, and textId in document.xml
+    # and writing to "rsids" worksheet
     headers = ["File Name", "RSID Type", "RSID Value", "Count in document.xml"]
     rows = []  # declare empty list
 
     print(f'Adding {green}rsidR{white} count to "RSIDs" worksheet in "{excel_file_path}"')
     for k, v in filename.rsidr_in_document_xml().items():
         rows.append([filename.filename(), "rsidR", k, v])
-    write_worksheet(excel_file_path, "RSIDs", headers, rows)  # "RSIDs" worksheet
-
-    rows = []  # declare empty list
 
     print(f'Adding {green}rsidP{white} count to "RSIDs" worksheet in {excel_file_path}')
     for k, v in filename.rsidp_in_document_xml().items():
         rows.append([filename.filename(), "rsidP", k, v])
-    write_worksheet(excel_file_path, "RSIDs", headers, rows)  # "RSIDs" worksheet
-
-    rows = []  # declare empty list
 
     print(f'Adding {green}rsidPr{white} count to "RSIDs" worksheet in {excel_file_path}')
     for k, v in filename.rsidrpr_in_document_xml().items():
         rows.append([filename.filename(), "rsidRPr", k, v])
-    write_worksheet(excel_file_path, "RSIDs", headers, rows)  # "RSIDs" worksheet
-
-    rows = []  # declare empty list
 
     print(f'Adding {green}rsidRDefault{white} count to "RSIDs" worksheet in {excel_file_path}')
     for k, v in filename.rsidrdefault_in_document_xml().items():
         rows.append([filename.filename(), "rsidRDefault", k, v])
-    write_worksheet(excel_file_path, "RSIDs", headers, rows)  # "RSIDs" worksheet
+
+    print(f'Adding {green}paraID{white} count to "RSIDs" worksheet in {excel_file_path}')
+    for k, v in filename.paragraph_id_tags().items():
+        rows.append([filename.filename(), "paraID", k, v])
+
+    print(f'Adding {green}textID{white} count to "RSIDs" worksheet in {excel_file_path}')
+    for k, v in filename.text_id_tags().items():
+        rows.append([filename.filename(), "textID", k, v])
+
+    write_worksheet(excel_file_path, "RSIDs", headers, rows)  # "RSIDs worksheet"
 
     return
 
