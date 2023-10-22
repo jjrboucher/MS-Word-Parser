@@ -15,6 +15,10 @@ class Docx:
 
     def __init__(self, msword_file):
         """.docx file to pass to the class"""
+        self.red = f'\033[91m'
+        self.white = f'\033[00m'
+        self.green = f'\033[92m'
+
         self.msword_file = msword_file
         self.core_xml_file = "docProps/core.xml"
         self.core_xml_content = self.__load_core_xml()
@@ -31,53 +35,55 @@ class Docx:
         self.rsidP = self.__other_rsids_in_document_xml("rsidP")
         self.rsidRDefault = self.__other_rsids_in_document_xml("rsidRDefault")
 
-        self.p_tags = len(re.findall(r'</w:t>', self.document_xml_content))
-        self.r_tags = len(re.findall(r'</w:r>', self.document_xml_content))
-        self.t_tags = len(re.findall(r'</w:t>', self.document_xml_content))
+        self.p_tags = re.findall(r'<w:p>|<w:p [^>]*/?>', self.document_xml_content)
+        self.r_tags = re.findall(r'<w:r>|<w:r [^>]*/?>', self.document_xml_content)
+        self.t_tags = re.findall(r'<w:t>|<w:t [^>]*/?>', self.document_xml_content)
 
+        self.para_id = self.__para_id_tags__()
+        self.text_id = self.__text_id_tags__()
 
     def __load_core_xml(self):
         # load core.xml
-        try:
+        if self.core_xml_file in self.xml_files():  # if the file exists, read it and return its content
             with zipfile.ZipFile(self.msword_file, 'r') as zipref:
                 with zipref.open(self.core_xml_file) as xmlFile:
                     return xmlFile.read().decode("utf-8")
-        except FileNotFoundError:
-            print(f"File '{self.core_xml_file} not found in the DOCx archive.")
-        except Exception as e:
-            print(f"An error occurred: {e}")
+        else:  # if it doesn't exist, return an empty string.
+            print(f'{self.red}"{self.core_xml_file}" does not exist{self.white} in "{self.filename()}". '
+                  f'Returning empty string.')
+            return ""
 
     def __load_app_xml(self):
         # load app.xml
-        try:
+        if self.app_xml_file in self.xml_files():  # if the file exists, read it and return its content
             with zipfile.ZipFile(self.msword_file, 'r') as zipref:
                 with zipref.open(self.app_xml_file) as xmlFile:
                     return xmlFile.read().decode("utf-8")
-        except FileNotFoundError:
-            print(f"File '{self.app_xml_file} not found in the DOCx archive.")
-        except Exception as e:
-            print(f"An error occurred: {e}")
+        else:  # if it doesn't exist, return an empty string.
+            print(f'{self.red}"{self.app_xml_file}" does not exist{self.white} in "{self.filename()}". '
+                  f'Returning empty string.')
+            return ""
 
     def __load_document_xml(self):
         # load document.xml
-        try:
+        if self.document_xml_file in self.xml_files():  # if the file exists, read it and return its content
             with zipfile.ZipFile(self.msword_file, 'r') as zipref:
                 with zipref.open(self.document_xml_file) as xmlFile:
                     return xmlFile.read().decode("utf-8")
-        except FileNotFoundError:
-            print(f"File '{self.document_xml_file}' not found in the ZIP archive.")
-        except Exception as e:
-            print(f"An error occurred: {e}")
+        else:  # if it doesn't exist, return an empty string.
+            print(f'{self.red}"{self.document_xml_file}" does not exist{self.white} in "{self.filename()}". '
+                  f'Returning empty string.')
+            return ""
 
     def __load_settings_xml(self):
-        try:
+        if self.settings_xml_file in self.xml_files():  # if the file exists, read it and return its content
             with zipfile.ZipFile(self.msword_file, 'r') as zipref:
                 with zipref.open(self.settings_xml_file) as xmlFile:
                     return xmlFile.read().decode("utf-8")
-        except FileNotFoundError:
-            print(f"File '{self.settings_xml_file}' not found in the ZIP archive.")
-        except Exception as e:
-            print(f"An error occurred: {e}")
+        else:
+            print(f'{self.red}"{self.settings_xml_file}" does not exist{self.white} in "{self.filename()}". '
+                  f'Returning empty string.')
+            return ""
 
     def __extract_all_rsidr_from_summary_xml(self):
         """
@@ -87,11 +93,11 @@ class Docx:
         """
         rsids_list = []
         # Find all RSIDs, not rsidRoot. rsidRoot is repeated in rsids
-        matches = re.findall(r'<w:rsid w:val="[^>]*/>', self.settings_xml_content)
+        matches = re.findall(r'<w:rsid w:val="[0-9A-F]{8}"/>', self.settings_xml_content)
 
         for match in matches:  # loops through all matches
             # greps for rsid using a group to extract the actual RSID from the string.
-            rsid_match = re.search(r'<w:rsid w:val="([^"]*)"', match)
+            rsid_match = re.search(r'<w:rsid w:val="([0-9A-F]{8})"', match)
             if rsid_match:
                 rsids_list.append(rsid_match.group(1))  # Appends it to the list
         return "" if len(rsids_list) == 0 else rsids_list
@@ -109,7 +115,7 @@ class Docx:
 
     def __other_rsids_in_document_xml(self, rsid):
         """
-        :param rsid tag name (e.g. "rsidRPr", "rsidP", "rsidDefault")
+        :param rsid tag name (e.g. "rsidRPr", "rsidP", "rsidRDefault")
         The function accepts an rsid tag name as a parameter (e.g. rsidRPr, rsidP, rsidDefault).
         It searches document.xml for a pattern to find all instances of that rsid tag.
         It creates a dictionary that contains each unique rsid value as the key, and the count of how many times
@@ -120,20 +126,56 @@ class Docx:
         in document.xml
         """
         rsids = {}
-        pattern = rf'w:{rsid}="........"'
-        # Find all rsidRPr in document.xml file
+        pattern = rf'w:'+rsid+'="[0-9A-F]{8}"'
+        # Find all rsid types passed to the function (rsidRPr, rsidP, rsidRDefault in document.xml file
         matches = re.findall(pattern, self.document_xml_content)
 
         for match in matches:  # loops through all matches
             # greps for rsid using a group to extract the actual RSID from the string.
-            group_pattern = rf'w:{rsid}="(........)"'
+            group_pattern = rf'w:'+rsid+'="([0-9A-F]{8})"'
             rsid_match = re.search(group_pattern, match)
             if rsid_match:
                 if rsid_match.group(1) in rsids:
-                    rsids[rsid_match.group(1)] += 1  # Appends it to the list
+                    rsids[rsid_match.group(1)] += 1  # increment count by 1
                 else:
-                    rsids[rsid_match.group(1)] = 1
+                    rsids[rsid_match.group(1)] = 1  # Appends it to the list
         return rsids
+
+    def __para_id_tags__(self):
+        """
+        :return: list of unique paraId tags and count in document.xml
+        """
+        pid_tags = {}  # empty dictionary to start
+
+        for pid_tag in self.p_tags:
+            pidtag = re.search(r'paraId="([0-9A-F]{8})"', pid_tag)
+            if pidtag is None:  # no paraId= tag in this <w:p> paragraph tag.
+                pass
+            else:
+                if pidtag.group(1) in pid_tags:
+                    pid_tags[pidtag.group(1)] += 1  # increment count by 1
+                else:
+                    pid_tags[pidtag.group(1)] = 1  # append to the list
+
+        return pid_tags
+
+    def __text_id_tags__(self):
+        """
+        :return: list of unique paraId tags and count in document.xml
+        """
+        text_tags = {}  # empty dictionary to start
+
+        for text_tag in self.p_tags:
+            texttag = re.search(r'textId="([0-9A-F]{8})"', text_tag)
+            if texttag is None:  # no paraId= tag in this <w:p> paragraph tag.
+                pass
+            else:
+                if texttag.group(1) in text_tags:
+                    text_tags[texttag.group(1)] += 1  # increment count by 1
+                else:
+                    text_tags[texttag.group(1)] = 1  # append to the list
+
+        return text_tags
 
     def filename(self):
         """
@@ -173,42 +215,42 @@ class Docx:
         """
         :return: the title metadata in core.xml
         """
-        doc_title = re.search(r'<dc:title>(.*?)</dc:title>', self.core_xml_content)
+        doc_title = re.search(r'<.{0,2}:?title>(.*?)</.{0,2}:?title>', self.core_xml_content)
         return "" if doc_title is None else doc_title.group(1)
 
     def subject(self):
         """
         :return: the subject metadata from core.xml
         """
-        doc_subject = re.search(r'<dc:subject>(.*?)</dc:subject>', self.core_xml_content)
+        doc_subject = re.search(r'<.{0,2}:?subject>(.*?)</.{0,2}:?subject>', self.core_xml_content)
         return "" if doc_subject is None else doc_subject.group(1)
 
     def creator(self):
         """
         :return: the creator metadata from core.xml
         """
-        doc_creator = re.search(r'<dc:creator>(.*?)</dc:creator>', self.core_xml_content)
+        doc_creator = re.search(r'<.{0,2}:?creator>(.*?)</.{0,2}:?creator>', self.core_xml_content)
         return "" if doc_creator is None else doc_creator.group(1)
 
     def keywords(self):
         """
         :return: the keywords metadata from core.xml
         """
-        doc_keywords = re.search(r'<cp:keywords>(.*?)</cp:keywords>', self.core_xml_content)
+        doc_keywords = re.search(r'<.{0,2}:?keywords>(.*?)</.{0,2}:?keywords>', self.core_xml_content)
         return "" if doc_keywords is None else doc_keywords.group(1)
 
     def description(self):
         """
         :return: the description metadata from core.xml
         """
-        doc_description = re.search(r'<dc:description>(.*?)</dc:description>', self.core_xml_content)
+        doc_description = re.search(r'<.{0,2}:?description>(.*?)</.{0,2}:?description>', self.core_xml_content)
         return "" if doc_description is None else doc_description.group(1)
 
     def revision(self):
         """
         :return: the revision # metadata from core.xml
         """
-        doc_revision = re.search(r'<cp:revision>(.*?)</cp:revision>', self.core_xml_content)
+        doc_revision = re.search(r'<.{0,2}:?revision>(.*?)</.{0,2}:?revision>', self.core_xml_content)
         return "" if doc_revision is None else doc_revision.group(1)
 
     def created(self):
@@ -229,42 +271,42 @@ class Docx:
         """
         :return: the last modified by metadata from core.xml
         """
-        doc_lastmodifiedby = re.search(r'<cp:lastModifiedBy>(.*?)</cp:lastModifiedBy>', self.core_xml_content)
+        doc_lastmodifiedby = re.search(r'<.{0,2}:?lastModifiedBy>(.*?)</.{0,2}:?lastModifiedBy>', self.core_xml_content)
         return "" if doc_lastmodifiedby is None else doc_lastmodifiedby.group(1)
 
     def last_printed(self):
         """
         :return: the last printed date metadata from core.xml
         """
-        doc_lastprinted = re.search(r'<cp:lastPrinted>(.*?)</cp:lastPrinted>', self.core_xml_content)
+        doc_lastprinted = re.search(r'<.{0,2}:?astPrinted>(.*?)</.{0,2}:?lastPrinted>', self.core_xml_content)
         return "" if doc_lastprinted is None else doc_lastprinted.group(1)
 
     def category(self):
         """
         :return: the category metadata from core.xml
         """
-        doc_category = re.search(r'<cp:category>(.*?)</cp:category>', self.core_xml_content)
+        doc_category = re.search(r'<.{0,2}:?category>(.*?)</.{0,2}:?category>', self.core_xml_content)
         return "" if doc_category is None else doc_category.group(1)
 
     def content_status(self):
         """
         :return: the content status metadata from core.xml
         """
-        doc_contentstatus = re.search(r'<cp:contentStatus>(.*?)</cp:contentStatus>', self.core_xml_content)
+        doc_contentstatus = re.search(r'<.{0,2}:?contentStatus>(.*?)</.{0,2}:?contentStatus>', self.core_xml_content)
         return "" if doc_contentstatus is None else doc_contentstatus.group(1)
 
     def template(self):
         """
         :return: the template metadata from app.xml
         """
-        doc_template = re.search(r'<Template>(.*?)</Template>', self.app_xml_content)
+        doc_template = re.search(r'<.{0,2}:?Template>(.*?)</.{0,2}:?Template>', self.app_xml_content)
         return "" if doc_template is None else doc_template.group(1)
 
     def total_editing_time(self):
         """
         :return: the total editing time in minutes metadata from app.xml
         """
-        doc_edit_time = re.search(r'<TotalTime>(.*?)</TotalTime>', self.app_xml_content)
+        doc_edit_time = re.search(r'<.{0,2}:?TotalTime>(.*?)</.{0,2}:?TotalTime>', self.app_xml_content)
         return "" if doc_edit_time is None else doc_edit_time.group(1)
 
     def pages(self):
@@ -274,42 +316,42 @@ class Docx:
         It is not an error in the script. It's an error in the metadata. Opening the document and allowing it to
         fully load and then saving it updates this. But of course, it changes other metadata as well if you do that.
         """
-        doc_pages = re.search(r'<Pages>(.*?)</Pages>', self.app_xml_content)
+        doc_pages = re.search(r'<.{0,2}:?Pages>(.*?)</.{0,2}:?Pages>', self.app_xml_content)
         return "" if doc_pages is None else doc_pages.group(1)
 
     def words(self):
         """
         :return: the number of words in the document metadata from app.xml
         """
-        doc_words = re.search(r'<Words>(.*?)</Words>', self.app_xml_content)
+        doc_words = re.search(r'<.{0,2}:?Words>(.*?)</.{0,2}:?Words>', self.app_xml_content)
         return "" if doc_words is None else doc_words.group(1)
 
     def characters(self):
         """
         :return: the number of characters in the document metadata from app.xml
         """
-        doc_characters = re.search(r'<Characters>(.*?)</Characters>', self.app_xml_content)
+        doc_characters = re.search(r'<.{0,2}:?Characters>(.*?)</.{0,2}:?Characters>', self.app_xml_content)
         return "" if doc_characters is None else doc_characters.group(1)
 
     def application(self):
         """
         :return: the application name that created the document metadata from app.xml
         """
-        doc_application = re.search(r'<Application>(.*?)</Application>', self.app_xml_content)
+        doc_application = re.search(r'<.{0,2}:?Application>(.*?)</.{0,2}:?Application>', self.app_xml_content)
         return "" if doc_application is None else doc_application.group(1)
 
     def security(self):
         """
         :return: the security metadata from app.xml
         """
-        doc_security = re.search(r'<DocSecurity>(.*?)</DocSecurity>', self.app_xml_content)
+        doc_security = re.search(r'<.{0,2}:?DocSecurity>(.*?)</.{0,2}:?DocSecurity>', self.app_xml_content)
         return "" if doc_security is None else doc_security.group(1)
 
     def lines(self):
         """
         :return: the number of lines in the document metadata from app.xml
         """
-        doc_lines = re.search(r'<Lines>(.*?)</Lines>', self.app_xml_content)
+        doc_lines = re.search(r'<.{0,2}:?Lines>(.*?)</.{0,2}:?Lines>', self.app_xml_content)
         return "" if doc_lines is None else doc_lines.group(1)
 
     def paragraphs(self):
@@ -319,62 +361,62 @@ class Docx:
         the metadata for some reason. It's not an error in this program. It's an error with the metadata itself
         in the document.
         """
-        doc_paragraphs = re.search(r'<Paragraphs>(.*?)</Paragraphs>', self.app_xml_content)
+        doc_paragraphs = re.search(r'<.{0,2}:?Paragraphs>(.*?)</.{0,2}:?Paragraphs>', self.app_xml_content)
         return "" if doc_paragraphs is None else doc_paragraphs.group(1)
 
     def characters_with_spaces(self):
         """
         :return: the total characters including spaces in the document metadatafrom app.xml
         """
-        doc_characters_with_spaces = re.search(r'<CharactersWithSpaces>(.*?)</CharactersWithSpaces>',
-                                               self.app_xml_content)
+        doc_characters_with_spaces = re.search(
+            r'<.{0,2}:?CharactersWithSpaces>(.*?)</.{0,2}:?CharactersWithSpaces>', self.app_xml_content)
         return "" if doc_characters_with_spaces is None else doc_characters_with_spaces.group(1)
 
     def app_version(self):
         """
         :return: the version of the app that created the document metadatafrom app.xml
         """
-        doc_app_version = re.search(r'<AppVersion>(.*?)</AppVersion>', self.app_xml_content)
+        doc_app_version = re.search(r'<.{0,2}:?AppVersion>(.*?)</.{0,2}:?AppVersion>', self.app_xml_content)
         return "" if doc_app_version is None else doc_app_version.group(1)
 
     def manager(self):
         """
         :return: the manager metadata from app.xml
         """
-        doc_manager = re.search(r'<Manager>(.*?)</Manager>', self.app_xml_content)
+        doc_manager = re.search(r'<.{0,2}:?Manager>(.*?)</.{0,2}:?Manager>', self.app_xml_content)
         return "" if doc_manager is None else doc_manager.group(1)
 
     def company(self):
         """
         :return: the company metadata from app.xml
         """
-        doc_company = re.search(r'<Company>(.*?)</Company>', self.app_xml_content)
+        doc_company = re.search(r'<.{0,2}:?Company>(.*?)</.{0,2}:?Company>', self.app_xml_content)
         return "" if doc_company is None else doc_company.group(1)
 
     def paragraph_tags(self):
         """
         :return: the total number of paragraph tags in document.xml
         """
-        return self.p_tags
+        return len(self.p_tags)
 
     def runs_tags(self):
         """
         :return: the total number of runs tags in document.xml
         """
-        return self.r_tags
+        return len(self.r_tags)
 
     def text_tags(self):
         """
         :return: the total number of text tags in document.xml
         """
-        return self.t_tags
+        return len(self.t_tags)
 
     def rsid_root(self):
         """
         :return: rsidRoot from settings.xml
         """
-        root = re.search(r'<w:rsidRoot w:val="([^"]*)"', self.settings_xml_content).group(1)
-        return "" if root is None else root
+        root = re.search(r'<w:rsidRoot w:val="([^"]*)"', self.settings_xml_content)
+        return "" if root is None else root.group(1)
 
     def rsidr(self):
         """
@@ -415,6 +457,12 @@ class Docx:
         :return:
         """
         return self.rsidRDefault
+
+    def paragraph_id_tags(self):
+        return self.para_id
+
+    def text_id_tags(self):
+        return self.text_id
 
     def __str__(self):
         """
