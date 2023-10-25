@@ -2,7 +2,7 @@
 # Written by Jacques Boucher
 # jjrboucher@gmail.com
 #
-# Version Date: 23 September 2023
+# Version Date: 25 October 2023
 #
 # Written in Python 3.11
 #
@@ -31,15 +31,20 @@
 # 2 - It will extract all the unique RSIDs from the file word/settings.xml and write it to a worksheet
 #     called doc_summary.
 #     In this worksheet, it will save the following information to a row:
-#     "File Name", "Unique RSIDs", "RSID Root", "<w:p> tags", "<w:r> tags", "<w:t> tags"
-#     Where "Unique RSID" is a numerical count of the # of RSIDs in the file.
+#     "File Name", "Unique rsidR", "RSID Root", "<w:p> tags", "<w:r> tags", "<w:t> tags"
+#     Where "Unique RSID" is a numerical count of the # of RSIDs in the file settings.xml.
 #
 #     What is an RSID (Revision Save ID)?
 #     See https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.rsid?view=openxml-2.8.1
 #
-# 3 - It will extract all the unique RSIDs from the file word/settings.xml and write it to a worksheet called rsids.
+# 3 - It will extract all the unique RSIDs from the file word/settings.xml and write it to a worksheet called RSIDs,
+#     along with a count of how many times that RSID is in document.xml
+#     It will also search document.xml for all unique rsidRPr, rsidP, and rsidRDefault values and count of how many
+#     are in document.xml.
+#     It also extracts the unique paraId and textId tags from the <w:p> tag and saves the values and count of how
+#     many are in document.xml.
 #     In this worksheet, it will save the following information to rows (one for each unique RSID):
-#     "File Name", "RSID"
+#     "File Name", "RSID Type", "RSID Value", "Count in document.xml"
 #
 # 3 - It will extract all known relevant metadata from the files docProps/app.xml and docProps/core.xml
 #     and write it to a worksheet called metadata.
@@ -66,114 +71,148 @@
 # If any other libraries are missing when trying to execute the script, install those in the same manner.
 #
 ###################################
-
-import os
+from classes.ms_word import Docx
+import re
 import tkinter as tk
 from tkinter import filedialog
-from functions.metadata import core_xml, app_xml  # functions to extract metadata from core.xml and app.xml
 from functions.excel import write_worksheet  # function to write results to an Excel file
-from functions.rsids import extract_rsids_from_settings_xml  # function to extract rsids and rsidRoot from settings.xml
-from functions.xml import list_of_xml_files  # function to return list of xml files in a DOCx file.
-from functions.xml import extract_content_of_xml  # function to read an XML file and return as utf-8 text.
-from functions.extracttags import extract_tags_from_document_xml  # extracts count of p, r, and t tags
+
+
+red = f'\033[91m'
+white = f'\033[00m'
+green = f'\033[92m'
+
+
+def process_docx(filename):
+    """
+    This function accepts a filename of type Docx and processes it.
+    By placing this in a function, it allows the main part of the script to accept multiple file names and
+    then loop through them, calling this function for each DOCx file.
+    """
+
+    global excel_file_path
+    print(f'Updating {green}"Doc_Summary"{white} worksheet in {excel_file_path}')
+    # Writing document summary worksheet.
+    headers = ["File Name", "Unique rsidR", "RSID Root", "<w:p> tags", "<w:r> tags", "<w:t> tags"]
+    rows = [[filename.filename(), len(filename.rsidr()), filename.rsid_root(), filename.paragraph_tags(),
+             filename.runs_tags(), filename.text_tags()]]
+    write_worksheet(excel_file_path, "Doc_Summary", headers, rows)  # "Doc_Summary" worksheet
+
+    # The keys will be used as the column heading in the spreadsheet
+    # The order they are in is the order that the columns will be in the spreadsheet
+    # Corresponding values passed, resulting in a dictionary being passed called allMetadata
+    # containing column headings and associated extracted metadata value.
+    allmetadata = {"File Name": filename.filename(),
+                   "Author": filename.creator(),
+                   "Created Date": filename.created(),
+                   "Last Modified By": filename.last_modified_by(),
+                   "Modified Date": filename.modified(),
+                   "Last Printed Date": filename.last_printed(),
+                   "Manager": filename.manager(),
+                   "Company": filename.company(),
+                   "Revision": filename.revision(),
+                   "Total Editing Time": filename.total_editing_time(),
+                   "Pages": filename.pages(),
+                   "Paragraphs": filename.paragraphs(),
+                   "Lines": filename.lines(),
+                   "Words": filename.words(),
+                   "Characters": filename.characters(),
+                   "Characters With Spaces": filename.characters_with_spaces(),
+                   "Title": filename.title(),
+                   "Subject": filename.subject(),
+                   "Keywords": filename.keywords(),
+                   "Description": filename.description(),
+                   "Application": filename.application(),
+                   "App Version": filename.app_version(),
+                   "Template": filename.template(),
+                   "Doc Security": filename.security(),
+                   "Category": filename.category(),
+                   "Content Status": filename.content_status()
+                   }
+
+    print(f'Updating {green}"Metadata"{white} worksheet in "{excel_file_path}"')
+    # Writing metadata "metadata" worksheet
+    headers = (list(allmetadata.keys()))
+    rows = [list(allmetadata.values())]
+    write_worksheet(excel_file_path, "Metadata", headers, rows)  # "metadata" worksheet
+
+    print(f'Updating {green}"Archive Files"{white} worksheet in "{excel_file_path}"')
+    # Writing XML files to "XML Files" worksheet
+    headers = ["File Name", "Archive File", "Modified Time (UTC)", "Size (bytes)", "MD5Hash"]
+    rows = []  # declare empty list
+
+    for xml, xml_info in filename.xml_files().items():
+        rows.append([filename.filename(),
+                     xml,
+                     xml_info[0],
+                     xml_info[1],
+                     xml_info[2]])
+        # add the row to the list "rows"
+    write_worksheet(excel_file_path, "Archive Files", headers, rows)  # "XML Files" worksheet
+
+    # Calculating count of rsidR, rsidRPr, rsidP, rsidRDefault, paraId, and textId in document.xml
+    # and writing to "rsids" worksheet
+    headers = ["File Name", "RSID Type", "RSID Value", "Count in document.xml"]
+    rows = []  # declare empty list
+
+    print(f'Adding {green}rsidR{white} count to "RSIDs" worksheet in "{excel_file_path}"')
+    for k, v in filename.rsidr_in_document_xml().items():
+        rows.append([filename.filename(), "rsidR", k, v])
+
+    print(f'Adding {green}rsidP{white} count to "RSIDs" worksheet in {excel_file_path}')
+    for k, v in filename.rsidp_in_document_xml().items():
+        rows.append([filename.filename(), "rsidP", k, v])
+
+    print(f'Adding {green}rsidPr{white} count to "RSIDs" worksheet in {excel_file_path}')
+    for k, v in filename.rsidrpr_in_document_xml().items():
+        rows.append([filename.filename(), "rsidRPr", k, v])
+
+    print(f'Adding {green}rsidRDefault{white} count to "RSIDs" worksheet in {excel_file_path}')
+    for k, v in filename.rsidrdefault_in_document_xml().items():
+        rows.append([filename.filename(), "rsidRDefault", k, v])
+
+    print(f'Adding {green}paraID{white} count to "RSIDs" worksheet in {excel_file_path}')
+    for k, v in filename.paragraph_id_tags().items():
+        rows.append([filename.filename(), "paraID", k, v])
+
+    print(f'Adding {green}textID{white} count to "RSIDs" worksheet in {excel_file_path}')
+    for k, v in filename.text_id_tags().items():
+        rows.append([filename.filename(), "textID", k, v])
+
+    write_worksheet(excel_file_path, "RSIDs", headers, rows)  # "RSIDs worksheet"
+
+    return
 
 
 if __name__ == "__main__":
 
     # Output file - same path as where the script is run. It will create it if it does not exist,
     # or append to it if it does.
-    excel_file_path = "docx-artifacts.xlsx"  # default file name - will be created in the script folder.
+    # excel_file_path = "docx-artifacts(class).xlsx"  # default file name - will be created in the script folder.
 
     root = tk.Tk()
     root.withdraw()  # Hide the main window
 
-    msword_file_path = filedialog.askopenfilename(title="Select DOCx file to process", initialdir=".",
-                                                  filetypes=[("DOCx Files", "*.docx")])
-    if not msword_file_path:
-        print("No DOCx file selected. Exiting.")
+    msword_file_path = filedialog.askopenfilenames(title="Select DOCx file(s) to process", initialdir=".",
+                                                   filetypes=[("DOCx Files", "*.docx")])  # ask for file(s) to process
+
+    if not msword_file_path:  # if no docx file name was selected to process
+        print(f'{red}No DOCx file selected.{white} Exiting.')
     else:
+        excel_file_path = filedialog.asksaveasfilename(title="Select new or existing XLSX file for output.",
+                                                       initialdir=".", filetypes=[("Excel Files", "*.xlsx")],
+                                                       defaultextension="*.xlsx",
+                                                       confirmoverwrite=False)  # ask for output file
 
-        filename = os.path.basename(msword_file_path)
+        if not excel_file_path:  # if no output file selected
+            print(f'{red}No output file selected.{white} Exiting.')
+            exit()
 
-        # Executes the function to get a list of all XML files in DOCx file
-        XMLFiles = list_of_xml_files(msword_file_path)
+        if not re.search(r'\.xlsx$', excel_file_path):  # if .xlsx was not included in file name, add it.
+            excel_file_path += ".xlsx"
 
-        # parse word/settings.xml artifacts
-        xml_file_path_within_zip = "word/settings.xml"  # Path of the XML file within the ZIP
-        # Executes the function to get rsids and rsidRoot from settings.xml
-        rsids, rsidRoot = extract_rsids_from_settings_xml(extract_content_of_xml(msword_file_path,
-                                                                                 xml_file_path_within_zip))
-
-        # parse docProps/app.xml artifacts
-        xml_file_path_within_zip = "docProps/app.xml"  # Path of the XML file within the ZIP
-        # Executes the function to get metadata from app.xml
-        app_xml_metadata = app_xml(extract_content_of_xml(msword_file_path, xml_file_path_within_zip))
-
-        # parse docProps/core.xml artifacts
-        xml_file_path_within_zip = "docProps/core.xml"  # Path of the XML file within the ZIP
-        # Executes the function to get the metadata from core.xml
-        core_xml_metadata = core_xml(extract_content_of_xml(msword_file_path, xml_file_path_within_zip))
-
-        # parse word/document.xml artifacts
-        xml_file_path_within_zip = "word/document.xml"  # Path of the XML file within the ZIP
-        # Executes the function to get the metadata from document.xml
-        documentXMLTagSummary = extract_tags_from_document_xml(extract_content_of_xml
-                                                               (msword_file_path, xml_file_path_within_zip))
-
-        # The keys will be used as the column heading in the spreadsheet
-        # The order they are in is the order that the columns will be in the spreadsheet
-        # Corresponding values passed, resulting in a dictionary being passed called allMetadata
-        # containing column headings and associated extracted metadata value.
-        allMetadata = {"File Name": filename,
-                       "Author": core_xml_metadata["creator"],
-                       "Created Date": core_xml_metadata["created"],
-                       "Last Modified By": core_xml_metadata["lastModifiedBy"],
-                       "Modified Date": core_xml_metadata["modified"],
-                       "Last Printed Date": core_xml_metadata["lastPrinted"],
-                       "Manager": app_xml_metadata["manager"],
-                       "Company": app_xml_metadata["company"],
-                       "Revision": core_xml_metadata["revision"],
-                       "Total Editing Time": app_xml_metadata["totalTime"],
-                       "Pages": app_xml_metadata["pages"],
-                       "Paragraphs": app_xml_metadata["paragraphs"],
-                       "Lines": app_xml_metadata["lines"],
-                       "Words": app_xml_metadata["words"],
-                       "Characters": app_xml_metadata["characters"],
-                       "Characters With Spaces": app_xml_metadata["charactersWithSpaces"],
-                       "Title": core_xml_metadata["title"],
-                       "Subject": core_xml_metadata["subject"],
-                       "Keywords": core_xml_metadata["keywords"],
-                       "Description": core_xml_metadata["description"],
-                       "Application": app_xml_metadata["application"],
-                       "App Version": app_xml_metadata["appVersion"],
-                       "Template": app_xml_metadata["template"],
-                       "Doc Security": app_xml_metadata["docSecurity"],
-                       "Category": core_xml_metadata["category"],
-                       "Content Status": core_xml_metadata["contentStatus"]
-                       }
-
-        # Writing document summary worksheet.
-        headers = ["File Name", "Unique rsidR", "RSID Root", "<w:p> tags", "<w:r> tags", "<w:t> tags"]
-        rows = [[filename, len(rsids), rsidRoot, documentXMLTagSummary["paragraphs"],
-                 documentXMLTagSummary["runs"], documentXMLTagSummary["text"]]]
-        write_worksheet(excel_file_path, "Doc_Summary", headers, rows)  # "Doc_Summary" worksheet
-
-        # Writing rsids from settings.xml to "rsids" worksheet
-        headers = ["File Name", "rsid Type", "RSID", "Count in document.xml"]
-        rows = []  # declare empty list
-        for rsid in rsids:
-            rows.append([filename, "rsidR", rsid, "pending function"])
-        write_worksheet(excel_file_path, "RSIDs", headers, rows)  # "RSIDs" worksheet
-
-        # Writing XML files to "XML Files" worksheet
-        headers = ["File Name", "XML", "Size (bytes)", "MD5Hash"]
-        rows = []  # declare empty list
-        for xml in XMLFiles:
-            xml.insert(0, filename)
-            rows.append(xml)
-        write_worksheet(excel_file_path, "XML Files", headers, rows)  # "XML Files" worksheet
-
-        # Writing metadata "metadata" worksheet
-        headers = (list(allMetadata.keys()))
-        rows = [list(allMetadata.values())]
-        write_worksheet(excel_file_path, "metadata", headers, rows)  # "metadata" worksheet
+        for f in msword_file_path:  # loop over the files selected, processing each.
+            print(f'Processing {green}"{f}"{white}')
+            process_docx(Docx(f))
+            print(f'Finished processing {green}"{f}"{white}. Results are found in '
+                  f'{green}"{excel_file_path}"{white}')
