@@ -71,11 +71,12 @@
 # If any other libraries are missing when trying to execute the script, install those in the same manner.
 #
 ###################################
+from classes.ms_word import Docx
 import re
 import tkinter as tk
 from tkinter import filedialog
 from functions.excel import write_worksheet  # function to write results to an Excel file
-from classes.ms_word import Docx
+
 
 red = f'\033[91m'
 white = f'\033[00m'
@@ -137,11 +138,16 @@ def process_docx(filename):
 
     print(f'Updating {green}"Archive Files"{white} worksheet in "{excel_file_path}"')
     # Writing XML files to "XML Files" worksheet
-    headers = ["File Name", "Archive File", "Size (bytes)", "MD5Hash"]
+    headers = ["File Name", "Archive File", "Modified Time (UTC)", "Size (bytes)", "MD5Hash"]
     rows = []  # declare empty list
 
-    for xml, size_hash in filename.xml_files().items():
-        rows.append([filename.filename(), xml, size_hash[0], size_hash[1]])  # add the row to the list "rows"
+    for xml, xml_info in filename.xml_files().items():
+        rows.append([filename.filename(),
+                     xml,
+                     xml_info[0],
+                     xml_info[1],
+                     xml_info[2]])
+        # add the row to the list "rows"
     write_worksheet(excel_file_path, "Archive Files", headers, rows)  # "XML Files" worksheet
 
     # Calculating count of rsidR, rsidRPr, rsidP, rsidRDefault, paraId, and textId in document.xml

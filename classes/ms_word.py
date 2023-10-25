@@ -1,6 +1,6 @@
-import zipfile
 import hashlib
 import re
+import zipfile
 
 
 class Docx:
@@ -126,13 +126,13 @@ class Docx:
         in document.xml
         """
         rsids = {}
-        pattern = rf'w:'+rsid+'="[0-9A-F]{8}"'
+        pattern = rf'w:' + rsid + '="[0-9A-F]{8}"'
         # Find all rsid types passed to the function (rsidRPr, rsidP, rsidRDefault in document.xml file
         matches = re.findall(pattern, self.document_xml_content)
 
         for match in matches:  # loops through all matches
             # greps for rsid using a group to extract the actual RSID from the string.
-            group_pattern = rf'w:'+rsid+'="([0-9A-F]{8})"'
+            group_pattern = rf'w:' + rsid + '="([0-9A-F]{8})"'
             rsid_match = re.search(group_pattern, match)
             if rsid_match:
                 if rsid_match.group(1) in rsids:
@@ -187,14 +187,22 @@ class Docx:
         """
         :return: A dictionary in the following format: {XML filename: [file size, file hash]}
         """
-        with zipfile.ZipFile(self.msword_file, 'r') as zip_file:
+        month = {1: "Jan", 2: "Feb", 3: "Mar", 4: "Apr", 5: "May", 6: "Jun",
+                 7: "Jul", 8: "Aug", 9: "Sep", 10: "Oct", 11: "Nov", 12: "Dec"}
+        with (zipfile.ZipFile(self.msword_file, 'r') as zip_file):
             # returns XML files in the DOCx
             xml_files = {}
             for file_info in zip_file.infolist():
                 with zipfile.ZipFile(self.msword_file, 'r') as zip_ref:
                     with zip_ref.open(file_info.filename) as xml_file:
                         md5hash = hashlib.md5(xml_file.read()).hexdigest()
-                xml_files[file_info.filename] = [file_info.file_size, md5hash]
+                m_time = file_info.date_time
+                if m_time == (1980, 1, 1, 0, 0, 0):
+                    modified_time = "nil"
+                else:
+                    modified_time = str(m_time[0]) + "-" + month[m_time[1]] + "-" + str("%02d" % m_time[2]) + " " + str(
+                        "%02d" % m_time[3]) + ":" + str("%02d" % m_time[4]) + ":" + str("%02d" % m_time[5])
+                xml_files[file_info.filename] = [modified_time, file_info.file_size, md5hash]
             return xml_files  # returns dictionary {xml_filename: [file size, file hash]}
 
     def xml_hash(self, xmlfile):
