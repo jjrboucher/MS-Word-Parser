@@ -138,7 +138,7 @@ def process_docx(filename):
 
     print(f'Updating {green}"Archive Files"{white} worksheet in "{excel_file_path}"')
     # Writing XML files to "XML Files" worksheet
-    headers = ["File Name", "Archive File", "Modified Time (UTC)", "Size (bytes)", "MD5Hash"]
+    headers = ["File Name", "Archive File", "Modified Time (local)", "Size (bytes)", "MD5Hash"]
     rows = []  # declare empty list
 
     for xml, xml_info in filename.xml_files().items():
