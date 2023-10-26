@@ -26,7 +26,7 @@ The script will do the following processing:
     In this worksheet, it will save the following information to a row:<br><br>
     "File Name", "XML", "Modified Time (local)", "Size (bytes)", "MD5Hash"<br><br>
     **NOTE:** The modified time of an XML inside of a compound file will be local time to the system that edited it. If you know
-    what system edited it, you can get the time zone from that system. Otherwise, it's not possible to know what time zone that.<br><br>
+    what system edited it, you can get the time zone from that system. Otherwise, it's not possible to know what time zone that date is expressed in.<br><br>
     time is expressed in without any additional information to establish that.<br>
     If the modified time is blank, it will show "nil" for value. Otherwise, it shows the date/time (UTC) that it was modfiied.
     This should always be a nil value. The only time the author has seen an actual date is when the DOCX was renamed to ZIP,
