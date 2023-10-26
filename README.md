@@ -32,7 +32,7 @@ If the modified time is blank, it will show "nil" for value. Otherwise, it shows
     This should always be a nil value. The only time the author has seen an actual date is when the DOCX was renamed to ZIP,
     opened with WinZip and an XML file was edited within the zip and saved (and ZIP resaved). This results in that XML file
     now having a modified date of when the XML file in the ZIP was modified. This is not normal, and should serve as a red
-    flag that someone may have manually edited the content of the ZIP file(s) with a date/time.
+    flag that someone may have manually edited the content of the ZIP file(s) that have a date/time.
     
 4 - It will extract all the unique RSIDs from the file word/settings.xml and write it to a worksheet called rsids.
     In this worksheet, it will save the following information to rows (one for each unique RSID):
