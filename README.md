@@ -10,7 +10,7 @@ The script will do the following processing:
     called doc_summary.
     In this worksheet, it will save the following information to a row:
     "File Name", "Unique RSIDs", "RSID Root", "<w:p> tags", "<w:r> tags", "<w:t> tags"
-    Where "Unique RSID" is a numerical count of the # of RSIDs in the document.xml file.<br>
+    Where "Unique RSID" is a numerical count of the # of RSIDs settings.xml. The count for the <w:?> tags are count of those tags in document.xml file.<br>
     <br>What is an RSID (Revision Save ID)?<br>
     See https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.rsid?view=openxml-2.8.1
 
