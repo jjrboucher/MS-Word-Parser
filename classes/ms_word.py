@@ -30,14 +30,14 @@ class Docx:
         self.settings_xml_content = self.__load_settings_xml()
         self.rsidRs = self.__extract_all_rsidr_from_summary_xml()
 
+        self.p_tags = re.findall(r'<w:p>|<w:p [^>]*/?>', self.document_xml_content)
+        self.r_tags = re.findall(r'<w:r>|<w:r [^>]*/?>', self.document_xml_content)
+        self.t_tags = re.findall(r'<w:t>|<w:t.? [^>]*/?>', self.document_xml_content)
+
         self.rsidR_in_document_xml = self.__rsidr_in_document_xml()
         self.rsidRPr = self.__other_rsids_in_document_xml("rsidRPr")
         self.rsidP = self.__other_rsids_in_document_xml("rsidP")
         self.rsidRDefault = self.__other_rsids_in_document_xml("rsidRDefault")
-
-        self.p_tags = re.findall(r'<w:p>|<w:p [^>]*/?>', self.document_xml_content)
-        self.r_tags = re.findall(r'<w:r>|<w:r [^>]*/?>', self.document_xml_content)
-        self.t_tags = re.findall(r'<w:t>|<w:t [^>]*/?>', self.document_xml_content)
 
         self.para_id = self.__para_id_tags__()
         self.text_id = self.__text_id_tags__()
@@ -105,12 +105,21 @@ class Docx:
     def __rsidr_in_document_xml(self):
         """
         This function calculates the count of each rsidR in document.xml
+        It searches the previously extracted tags rather than the full document.
         :return:
         """
         rsidr_count = {}
         for rsid in self.rsidRs:
-            pattern = rf'w:rsidR="{rsid}"'
-            rsidr_count[rsid] = len(re.findall(pattern, self.document_xml_content))
+            pattern = re.compile(rf'w:rsidR="{rsid}"')
+
+            count_rsids = 0
+
+            count_rsids += len(re.findall(pattern, ",".join(self.p_tags)))
+            count_rsids += len(re.findall(pattern, ",".join(self.r_tags)))
+            count_rsids += len(re.findall(pattern, ",".join(self.t_tags)))
+
+            rsidr_count[rsid] = count_rsids
+
         return rsidr_count
 
     def __other_rsids_in_document_xml(self, rsid):
@@ -122,13 +131,16 @@ class Docx:
         that rsid is in document.xml.
         E.g., {"00123456": 4, "00234567": 0, "00345678":11}
 
-        :return: dictionary where the key is unique RSIDs, and the value is a count of the occurences of that rsid
+        :return: dictionary where the key is unique RSIDs, and the value is a count of the occurrences of that rsid
         in document.xml
         """
         rsids = {}
-        pattern = rf'w:' + rsid + '="[0-9A-F]{8}"'
+        pattern = re.compile('w:' + rsid + '="[0-9A-F]{8}"')
         # Find all rsid types passed to the function (rsidRPr, rsidP, rsidRDefault in document.xml file
-        matches = re.findall(pattern, self.document_xml_content)
+
+        matches = re.findall(pattern, ",".join(self.p_tags))  # searches p_tags
+        matches += re.findall(pattern, ",".join(self.r_tags))  # searches r_tags
+        matches += re.findall(pattern, ",".join(self.t_tags))  # searches t_tags
 
         for match in matches:  # loops through all matches
             # greps for rsid using a group to extract the actual RSID from the string.
@@ -139,6 +151,7 @@ class Docx:
                     rsids[rsid_match.group(1)] += 1  # increment count by 1
                 else:
                     rsids[rsid_match.group(1)] = 1  # Appends it to the list
+
         return rsids
 
     def __para_id_tags__(self):

@@ -224,21 +224,22 @@ if __name__ == "__main__":
     if not msword_file_path:  # if no docx file name was selected to process
         print(f'{red}No DOCx file selected.{white} Exiting.')
     else:
-        outputPath = msword_file_path[0][0:msword_file_path[0].rindex("/")+1]  # extract path of DOCx file(s) to process
+        docxPath = msword_file_path[0][0:msword_file_path[0].rindex("/")+1]  # extract path of DOCx file(s) to process
         # to use as initial directory for Excel output file.
 
-        logFile = outputPath + "DOCx_Parser_Log_" + time.strftime("%Y%m%d_%H%M%S") + ".log"
-
-        writelog("Script executed: " + time.strftime("%Y-%m-%d_%H:%M:%S") + '\n')
-
         excel_file_path = filedialog.asksaveasfilename(title="Select new or existing XLSX file for output.",
-                                                       initialdir=outputPath, filetypes=[("Excel Files", "*.xlsx")],
+                                                       initialdir=docxPath, filetypes=[("Excel Files", "*.xlsx")],
                                                        defaultextension="*.xlsx",
                                                        confirmoverwrite=False)  # ask for output file
 
         if not excel_file_path:  # if no output file selected
             print(f'{red}No output file selected.{white} Exiting.')
             exit()
+
+        logFile = (excel_file_path[0:excel_file_path.rindex("/")+1] + "DOCx_Parser_Log_" + time.strftime("%Y%m%d_%H%M%S")
+                   + ".log")
+
+        writelog("Script executed: " + time.strftime("%Y-%m-%d_%H:%M:%S") + '\n')
 
         writelog(f'Excel output file: {excel_file_path}\n')
         writelog(f'\nSummary of files parsed:\n------------------------\n')
@@ -254,3 +255,5 @@ if __name__ == "__main__":
         print(f'\n==============================================\n'
               f'Excel output: {green}"{excel_file_path}"{white}\n'
               f'Log file: {green}"{logFile}"{white}')
+
+        writelog("Script finished execution: " + time.strftime("%Y-%m-%d_%H:%M:%S") + '\n')
