@@ -93,6 +93,12 @@ def process_docx(filename):
     global excel_file_path
 
     writelog(f'{filename.__str__()}\n')
+
+    for checkFile in ("word/settings.xml", "docProps/core.xml", "docProps/app.xml"):  # checks if xml files being parsed
+        # are present and notes same in the log file.
+        xml_exists = checkFile in filename.xml_files().keys()
+        writelog(f'**{checkFile} exists? {xml_exists}\n')
+
     print(f'Updating {green}"Doc_Summary"{white} worksheet in {excel_file_path}')
     # Writing document summary worksheet.
     headers = ["File Name", "Unique rsidR", "RSID Root", "<w:p> tags", "<w:r> tags", "<w:t> tags"]
