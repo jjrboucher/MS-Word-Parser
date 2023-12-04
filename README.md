@@ -63,3 +63,8 @@ In particular, you may need to install openpyxl and hashlib.
     pip3 install -r requirements.txt
 <hr>
 If any other libraries are missing when trying to execute the script, install those in the same manner.</h6>
+
+<h2>Executable Version</h2>
+If you'd rather run the executable rather than needing Python, grab the .exe file.<br>
+<br>
+You will get the best experience if you run the executable by opening a command/terminal window in Windows, and executing it from there. If you simply double click on the .exe from Windows File Explorer, it will work fine. But the command window closes as soon as the script ends so you don't get a chance to see the information that the script outputs to the screen, and the coloured text will not work so you'll see ANSI escape sequences. If you run it in the command/terminal window, you can scroll through the output, including seeing the filename and path for the Excel file and log file.
