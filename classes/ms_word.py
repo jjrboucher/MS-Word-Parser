@@ -215,7 +215,15 @@ class Docx:
                 else:
                     modified_time = str(m_time[0]) + "-" + month[m_time[1]] + "-" + str("%02d" % m_time[2]) + " " + str(
                         "%02d" % m_time[3]) + ":" + str("%02d" % m_time[4]) + ":" + str("%02d" % m_time[5])
-                xml_files[file_info.filename] = [modified_time, file_info.file_size, md5hash]
+
+                xml_files[file_info.filename] = [modified_time,
+                                                 file_info.file_size,
+                                                 file_info.compress_type,
+                                                 file_info.create_system,
+                                                 file_info.create_version,
+                                                 file_info.extract_version,
+                                                 f"{file_info.flag_bits:#0{6}x}",
+                                                 md5hash]
             return xml_files  # returns dictionary {xml_filename: [file size, file hash]}
 
     def xml_hash(self, xmlfile):

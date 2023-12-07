@@ -148,7 +148,16 @@ def process_docx(filename):
 
     print(f'Updating {green}"Archive Files"{white} worksheet in "{excel_file_path}"')
     # Writing XML files to "Archive Files" worksheet
-    headers = ["File Name", "Archive File", "Modified Time (local)", "Size (bytes)", "MD5Hash"]
+    headers = ["File Name",
+               "Archive File",
+               "Modified Time (local)",
+               "Size (bytes)",
+               "Compression Type",
+               "Create System",
+               "Created Version",
+               "Extract Version",
+               "Flag Bits (hex)",
+               "MD5Hash"]
     rows = []  # declare empty list
 
     for xml, xml_info in filename.xml_files().items():
@@ -156,7 +165,12 @@ def process_docx(filename):
                      xml,
                      xml_info[0],
                      xml_info[1],
-                     xml_info[2]])
+                     xml_info[2],
+                     xml_info[3],
+                     xml_info[4],
+                     xml_info[5],
+                     xml_info[6],
+                     xml_info[7]])
         # add the row to the list "rows"
     write_worksheet(excel_file_path, "Archive Files", headers, rows)  # "XML Files" worksheet
     writelog(f'"Archive Files" worksheet written to Excel.\n')
