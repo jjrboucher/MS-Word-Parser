@@ -42,6 +42,29 @@ class Docx:
         self.para_id = self.__para_id_tags__()
         self.text_id = self.__text_id_tags__()
 
+        self.header_offsets, self.binary_content = self.__find_binary_string()
+
+    def __find_binary_string(self):
+
+        pkzip_header = "504B0304"  # hex values for signature of a zip file in the archive.
+
+        with open(self.msword_file, 'rb') as msword_binary:  # read the file as binary
+            content = msword_binary.read()
+
+        target_bytes = bytes.fromhex(pkzip_header)  # convert from hex to bytes
+
+        matches = []  # list of offsets where header is found
+        index = 0
+
+        while index < len(content):  # iterate over the list
+            index = content.find(target_bytes, index)  # search for
+            if index == -1:  # no more items in the list.
+                break
+            matches.append(index)
+            index += 1
+
+        return matches, content  # returns the list of offsets of each header, and the binary file.
+
     def __load_core_xml(self):
         # load core.xml
         if self.core_xml_file in self.xml_files():  # if the file exists, read it and return its content

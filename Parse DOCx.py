@@ -250,8 +250,8 @@ if __name__ == "__main__":
             print(f'{red}No output file selected.{white} Exiting.')
             exit()
 
-        logFile = (excel_file_path[0:excel_file_path.rindex("/")+1] + "DOCx_Parser_Log_" + time.strftime("%Y%m%d_%H%M%S")
-                   + ".log")
+        logFile = (excel_file_path[0:excel_file_path.rindex("/")+1] + "DOCx_Parser_Log_"
+                   + time.strftime("%Y%m%d_%H%M%S") + ".log")
 
         writelog("Script executed: " + time.strftime("%Y-%m-%d_%H:%M:%S") + '\n')
 
