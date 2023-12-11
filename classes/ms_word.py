@@ -18,8 +18,9 @@ class Docx:
         self.red = f'\033[91m'
         self.white = f'\033[00m'
         self.green = f'\033[92m'
-
         self.msword_file = msword_file
+        self.header_offsets, self.binary_content = self.__find_binary_string()
+        self.extra_fields = self.__xml_extra_bytes()
         self.core_xml_file = "docProps/core.xml"
         self.core_xml_content = self.__load_core_xml()
         self.app_xml_file = "docProps/app.xml"
@@ -42,8 +43,6 @@ class Docx:
         self.para_id = self.__para_id_tags__()
         self.text_id = self.__text_id_tags__()
 
-        self.header_offsets, self.binary_content = self.__find_binary_string()
-
     def __find_binary_string(self):
 
         pkzip_header = "504B0304"  # hex values for signature of a zip file in the archive.
@@ -64,6 +63,65 @@ class Docx:
             index += 1
 
         return matches, content  # returns the list of offsets of each header, and the binary file.
+
+    def __xml_extra_bytes(self):
+        """
+        ref: https://en.wikipedia.org/wiki/ZIP_(file_format)#Local_file_header
+
+        return: list [xml file name, # of bytes in extra field, truncated bytes]
+        """
+        zip_header = {"signature": [0, 4],  # byte 0 for 4 bytes
+                      "extract version": [4, 2],  # byte 4 for 2 bytes
+                      "bitflag": [6, 2],  # byte 6 for 2 bytes
+                      "compression": [8, 2],  # byte 8 for 2 bytes
+                      "modification time": [10, 2],  # byte 10 for 2 bytes
+                      "modification date": [12, 2],  # byte 12 for 2 bytes
+                      "CRC-32": [14, 4],  # byte 14 for 4 bytes
+                      "compressed size": [18, 4],  # byte 18 for 4 bytes
+                      "uncompressed size": [22, 4],  # byte 22 for 4 bytes
+                      "filename length": [26, 2],  # byte 26 for 2 bytes
+                      "extra field length": [28, 2]  # byte 28 for 2 bytes
+                      }
+        # filename is at offset 30 for n where n is "filename length". Extra field is at offset 30
+        # + filename length for z bytes where z is "extra field length
+
+        extras = {}  # empty dictionary where values will be stored.
+
+        truncate_extra_field = 20  # extra field can be several hundred bytes, mostly 0x00. Grab display first 10
+
+        for offset in self.header_offsets:
+
+            filename_len = int.from_bytes(self.binary_content[
+                                          zip_header["filename length"][0] + offset:
+                                          zip_header["filename length"][1] + offset +
+                                          zip_header["filename length"][0]],
+                                          "little")
+
+            filename_start = offset + 30
+            filename_end = offset + 30 + filename_len
+
+            filename = self.binary_content[filename_start:filename_end].decode('ascii')
+
+            extrafield_len = int.from_bytes(self.binary_content[
+                                            zip_header["extra field length"][0] + offset:
+                                            zip_header["extra field length"][1] + offset +
+                                            zip_header["extra field length"][0]],
+                                            "little")  # getting binary value, little endien
+
+            extrafield_start = filename_end
+            extrafield_end = extrafield_start + extrafield_len
+
+            extrafield = self.binary_content[extrafield_start:extrafield_end]
+
+            if extrafield_len == 0:  # many are 0 bytes, so skipping those.
+                extras[filename] = [extrafield_len, "nil"]
+            else:
+                if extrafield_len <= truncate_extra_field:  # field size larger than truncate value
+                    extras[filename] = [extrafield_len, extrafield]
+                else:
+                    extras[filename] = [extrafield_len, extrafield[0:truncate_extra_field]]
+
+        return extras
 
     def __load_core_xml(self):
         # load core.xml
@@ -219,9 +277,26 @@ class Docx:
         """
         return self.msword_file
 
+    def hash(self):
+        """
+        Function that will return the hash of the file itself
+        """
+        filehash = hashlib.md5()
+        filehash.update(self.binary_content)
+        return filehash.hexdigest()
+
     def xml_files(self):
         """
-        :return: A dictionary in the following format: {XML filename: [modified date, file size, file hash]}
+        :return: A dictionary in the following format:
+        {XML filename: [file hash,
+                        modified date,
+                        file size,
+                        ZIP compression type,
+                        ZIP Create System,
+                        ZIP Created Version,
+                        ZIP Extract Version,
+                        ZIP Flag Bits (hex)
+        }
         """
         month = {1: "Jan", 2: "Feb", 3: "Mar", 4: "Apr", 5: "May", 6: "Jun",
                  7: "Jul", 8: "Aug", 9: "Sep", 10: "Oct", 11: "Nov", 12: "Dec"}
@@ -239,14 +314,17 @@ class Docx:
                     modified_time = str(m_time[0]) + "-" + month[m_time[1]] + "-" + str("%02d" % m_time[2]) + " " + str(
                         "%02d" % m_time[3]) + ":" + str("%02d" % m_time[4]) + ":" + str("%02d" % m_time[5])
 
-                xml_files[file_info.filename] = [modified_time,
+                xml_files[file_info.filename] = [md5hash,
+                                                 modified_time,
                                                  file_info.file_size,
                                                  file_info.compress_type,
                                                  file_info.create_system,
                                                  file_info.create_version,
                                                  file_info.extract_version,
                                                  f"{file_info.flag_bits:#0{6}x}",
-                                                 md5hash]
+                                                 self.extra_fields[file_info.filename][0],
+                                                 self.extra_fields[file_info.filename][1]
+                                                 ]
             return xml_files  # returns dictionary {xml_filename: [file size, file hash]}
 
     def xml_hash(self, xmlfile):

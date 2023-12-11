@@ -101,9 +101,9 @@ def process_docx(filename):
 
     print(f'Updating {green}"Doc_Summary"{white} worksheet in {excel_file_path}')
     # Writing document summary worksheet.
-    headers = ["File Name", "Unique rsidR", "RSID Root", "<w:p> tags", "<w:r> tags", "<w:t> tags"]
-    rows = [[filename.filename(), len(filename.rsidr()), filename.rsid_root(), filename.paragraph_tags(),
-             filename.runs_tags(), filename.text_tags()]]
+    headers = ["File Name", "MD5 Hash", "Unique rsidR", "RSID Root", "<w:p> tags", "<w:r> tags", "<w:t> tags"]
+    rows = [[filename.filename(), filename.hash(), len(filename.rsidr()), filename.rsid_root(),
+             filename.paragraph_tags(), filename.runs_tags(), filename.text_tags()]]
     write_worksheet(excel_file_path, "Doc_Summary", headers, rows)  # "Doc_Summary" worksheet
     writelog(f'"Doc_Summary" worksheet written to Excel file.\n')
 
@@ -150,14 +150,16 @@ def process_docx(filename):
     # Writing XML files to "Archive Files" worksheet
     headers = ["File Name",
                "Archive File",
+               "MD5Hash",
                "Modified Time (local)",
                "Size (bytes)",
-               "Compression Type",
-               "Create System",
-               "Created Version",
-               "Extract Version",
-               "Flag Bits (hex)",
-               "MD5Hash"]
+               "ZIP Compression Type",
+               "ZIP Create System",
+               "ZIP Created Version",
+               "ZIP Extract Version",
+               "ZIP Flag Bits (hex)",
+               "ZIP Extra Flag (len)"
+               ]
     rows = []  # declare empty list
 
     for xml, xml_info in filename.xml_files().items():
@@ -170,7 +172,13 @@ def process_docx(filename):
                      xml_info[4],
                      xml_info[5],
                      xml_info[6],
-                     xml_info[7]])
+                     xml_info[7],
+                     xml_info[8]
+                     ])
+
+        writelog(f'EXTRA VALUES NOT YET VALIDATED!!!\nFile: '
+                 f'{xml}: Extra Data Length: {xml_info[8]} \n Extra Data: {xml_info[9]}\n')
+
         # add the row to the list "rows"
     write_worksheet(excel_file_path, "Archive Files", headers, rows)  # "XML Files" worksheet
     writelog(f'"Archive Files" worksheet written to Excel.\n')
