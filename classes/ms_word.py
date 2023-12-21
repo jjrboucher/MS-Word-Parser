@@ -100,7 +100,7 @@ class Docx:
             filename_start = offset + 30
             filename_end = offset + 30 + filename_len
 
-            filename = self.binary_content[filename_start:filename_end].decode('ascii')
+            filename = self.binary_content[filename_start:filename_end].decode('ascii')  # decode filename as ASCII
 
             extrafield_len = int.from_bytes(self.binary_content[
                                             zip_header["extra field length"][0] + offset:
@@ -113,13 +113,22 @@ class Docx:
 
             extrafield = self.binary_content[extrafield_start:extrafield_end]
 
+            extrafield_hex_as_text = []  # List that will contain the extra characters represented as text.
+
+            for h in extrafield:
+                extrafield_hex_as_text.append(str(hex(h)))
+
             if extrafield_len == 0:  # many are 0 bytes, so skipping those.
                 extras[filename] = [extrafield_len, "nil"]
             else:
                 if extrafield_len <= truncate_extra_field:  # field size larger than truncate value
-                    extras[filename] = [extrafield_len, extrafield]
+                    extras[filename] = [extrafield_len, extrafield_hex_as_text]
                 else:
-                    extras[filename] = [extrafield_len, extrafield[0:truncate_extra_field]]
+                    extras[filename] = [extrafield_len, extrafield_hex_as_text[0:truncate_extra_field]]  # adds only
+                    # the select # of characters as specified in the variable truncate_extra_field. This is so that
+                    # we don't end up with hundreds of characters in a cell in Excel, as some extra fields can be
+                    # several hundred values long. But so far, most are 0x00, with only the first few being values other
+                    # than hex 0x00.
 
         return extras
 
@@ -295,7 +304,8 @@ class Docx:
                         ZIP Create System,
                         ZIP Created Version,
                         ZIP Extract Version,
-                        ZIP Flag Bits (hex)
+                        ZIP Flag Bits (hex),
+                        ZIP extra values (hex as text)
         }
         """
         month = {1: "Jan", 2: "Feb", 3: "Mar", 4: "Apr", 5: "May", 6: "Jun",

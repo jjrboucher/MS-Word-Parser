@@ -158,11 +158,16 @@ def process_docx(filename):
                "ZIP Created Version",
                "ZIP Extract Version",
                "ZIP Flag Bits (hex)",
-               "ZIP Extra Flag (len)"
+               "ZIP Extra Flag (len)",
+               "ZIP Extra Characters (truncated)"
                ]
     rows = []  # declare empty list
 
     for xml, xml_info in filename.xml_files().items():
+        print(xml_info[9])
+        extra_characters = xml_info[9] if xml_info[8] == 0 else ",".join(xml_info[9])  # If no extra characters, leave
+        # assigned value as "nil". Otherwise, join
+
         rows.append([filename.filename(),
                      xml,
                      xml_info[0],
@@ -173,11 +178,9 @@ def process_docx(filename):
                      xml_info[5],
                      xml_info[6],
                      xml_info[7],
-                     xml_info[8]
+                     xml_info[8],
+                     extra_characters
                      ])
-
-        writelog(f'EXTRA VALUES NOT YET VALIDATED!!!\nFile: '
-                 f'{xml}: Extra Data Length: {xml_info[8]} \n Extra Data: {xml_info[9]}\n')
 
         # add the row to the list "rows"
     write_worksheet(excel_file_path, "Archive Files", headers, rows)  # "XML Files" worksheet
