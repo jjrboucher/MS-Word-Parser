@@ -164,7 +164,6 @@ def process_docx(filename):
     rows = []  # declare empty list
 
     for xml, xml_info in filename.xml_files().items():
-        print(xml_info[9])
         extra_characters = xml_info[9] if xml_info[8] == 0 else ",".join(xml_info[9])  # If no extra characters, leave
         # assigned value as "nil". Otherwise, join
 
