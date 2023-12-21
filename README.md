@@ -9,7 +9,7 @@ The script will do the following processing:
 1 - It will extract all the unique RSIDs from the file word/settings.xml and write it to a worksheet
     called doc_summary.
     In this worksheet, it will save the following information to a row:
-    "File Name", "Unique RSIDs", "RSID Root", "<w:p> tags", "<w:r> tags", "<w:t> tags"
+    "File Name", "MD5 Hash", "Unique RSIDs", "RSID Root", "<w:p> tags", "<w:r> tags", "<w:t> tags"
     Where "Unique RSID" is a numerical count of the # of RSIDs settings.xml. The count for the <w:?> tags are count of those tags in document.xml file.<br>
     <br>What is an RSID (Revision Save ID)?<br>
     See https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.rsid?view=openxml-2.8.1
@@ -24,15 +24,17 @@ The script will do the following processing:
     
 3 - It will extract a list of all the files within the zip file and save it to a worksheet called XML_files.
     In this worksheet, it will save the following information to a row:<br><br>
-    "File Name", "XML", "Modified Time (local)", "Size (bytes)", "MD5Hash"<br><br>
-    **NOTE:** The modified time of an XML inside of a compound file will be local time to the system that edited it. If you know
+    "File Name", "Archive File", "MD5 Hash", "Modified Time (local)", "Size (bytes)", "ZIP Compression Type", "ZIP Create System", "ZIP Created Version", "ZIP Extract Version", "ZIP Flag Bits (hex)", "ZIP Extra Flag (len)", "ZIP Extra Characters"<br><br>
+    **NOTE:** The modified time of a file inside of a compound file will be local time to the system that edited it. If you know
     what system edited it, you can get the time zone from that system. Otherwise, it's not possible to know what time zone that date/time is expressed in.<br>
+
+The columns with information about the files in the ZIP is based on the fact that each file in a ZIP has it's own header (https://en.wikipedia.org/wiki/ZIP_(file_format)#Local_file_header). Most of these values are decoded by the library "zipfile". But the "ZIP Extra Characters" is not extracted by the library. The script manually parses the header to extract this info, and displays the content truncated to 20 values. The column "ZIP Extra Flag (len)" lets you know how many characters are actually in that extra field. Observations to date is that only the first 10 or so characters have a value. The rest has been observed to be 0x00.
 
 If the modified time is blank, it will show "nil" for value. Otherwise, it shows the date/time that it was modfiied.
     This should always be a nil value. The only time the author has seen an actual date is when the DOCX was renamed to ZIP,
     opened with WinZip and an XML file was edited within the zip and saved (and ZIP resaved). This results in that XML file
     now having a modified date of when the XML file in the ZIP was modified. This is not normal, and should serve as a red
-    flag that someone may have manually edited the content of the ZIP file(s) that have a date/time.
+    flag that someone may have manually edited the content of the ZIP file(s) that have a date/time. A caveat is that some applications other than MS Word (e.g., export from Pages to Docx) will result in each embedded file bearing the date of the export.
     
 4 - It will extract all the unique RSIDs from the file word/settings.xml and write it to a worksheet called rsids.
     In this worksheet, it will save the following information to rows (one for each unique RSID):
