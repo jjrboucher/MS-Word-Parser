@@ -24,7 +24,7 @@ The script will do the following processing:
     
 3 - It will extract a list of all the files within the zip file and save it to a worksheet called XML_files.
     In this worksheet, it will save the following information to a row:<br><br>
-    "File Name", "Archive File", "MD5 Hash", "Modified Time (local)", "Size (bytes)", "ZIP Compression Type", "ZIP Create System", "ZIP Created Version", "ZIP Extract Version", "ZIP Flag Bits (hex)", "ZIP Extra Flag (len)", "ZIP Extra Characters"<br><br>
+    "File Name", "Archive File", "MD5 Hash", "Modified Time (local/UTC/Redmond, Washington)", "Size (bytes)", "ZIP Compression Type", "ZIP Create System", "ZIP Created Version", "ZIP Extract Version", "ZIP Flag Bits (hex)", "ZIP Extra Flag (len)", "ZIP Extra Characters"<br><br>
     **NOTE:** The modified time of a file inside of a compound file will be local time to the system that edited it. If you know
     what system edited it, you can get the time zone from that system. Otherwise, it's not possible to know what time zone that date/time is expressed in.<br>
 
