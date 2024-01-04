@@ -151,7 +151,7 @@ def process_docx(filename):
     headers = ["File Name",
                "Archive File",
                "MD5Hash",
-               "Modified Time (local)",
+               "Modified Time (local? UTC-0800?)",
                "Size (bytes)",
                "ZIP Compression Type",
                "ZIP Create System",
