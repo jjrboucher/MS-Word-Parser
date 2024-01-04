@@ -151,7 +151,8 @@ def process_docx(filename):
     headers = ["File Name",
                "Archive File",
                "MD5Hash",
-               "Modified Time (local? UTC-0800?)",
+               "Modified Time (local? UTC-0800?)",  # expressed local time if Mac/iOS Pages exported to MS Word.
+                                                    # but UTC -0800 when edited with MS Word online.
                "Size (bytes)",
                "ZIP Compression Type",
                "ZIP Create System",
