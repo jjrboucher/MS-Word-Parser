@@ -1,7 +1,6 @@
 ####################################
 # Written by Jacques Boucher
 # jjrboucher@gmail.com
-#
 # Version Date: 25 October 2023
 #
 # Written in Python 3.11
@@ -73,6 +72,7 @@
 ###################################
 from classes.ms_word import Docx
 import re
+import time
 import tkinter as tk
 from tkinter import filedialog
 from functions.excel import write_worksheet  # function to write results to an Excel file
@@ -91,12 +91,21 @@ def process_docx(filename):
     """
 
     global excel_file_path
+
+    writelog(f'{filename.__str__()}\n')
+
+    for checkFile in ("word/settings.xml", "docProps/core.xml", "docProps/app.xml"):  # checks if xml files being parsed
+        # are present and notes same in the log file.
+        xml_exists = checkFile in filename.xml_files().keys()
+        writelog(f'**{checkFile} exists? {xml_exists}\n')
+
     print(f'Updating {green}"Doc_Summary"{white} worksheet in {excel_file_path}')
     # Writing document summary worksheet.
-    headers = ["File Name", "Unique rsidR", "RSID Root", "<w:p> tags", "<w:r> tags", "<w:t> tags"]
-    rows = [[filename.filename(), len(filename.rsidr()), filename.rsid_root(), filename.paragraph_tags(),
-             filename.runs_tags(), filename.text_tags()]]
+    headers = ["File Name", "MD5 Hash", "Unique rsidR", "RSID Root", "<w:p> tags", "<w:r> tags", "<w:t> tags"]
+    rows = [[filename.filename(), filename.hash(), len(filename.rsidr()), filename.rsid_root(),
+             filename.paragraph_tags(), filename.runs_tags(), filename.text_tags()]]
     write_worksheet(excel_file_path, "Doc_Summary", headers, rows)  # "Doc_Summary" worksheet
+    writelog(f'"Doc_Summary" worksheet written to Excel file.\n')
 
     # The keys will be used as the column heading in the spreadsheet
     # The order they are in is the order that the columns will be in the spreadsheet
@@ -135,20 +144,49 @@ def process_docx(filename):
     headers = (list(allmetadata.keys()))
     rows = [list(allmetadata.values())]
     write_worksheet(excel_file_path, "Metadata", headers, rows)  # "metadata" worksheet
+    writelog(f'"Metadata" worksheet written to Excel.\n')
 
     print(f'Updating {green}"Archive Files"{white} worksheet in "{excel_file_path}"')
-    # Writing XML files to "XML Files" worksheet
-    headers = ["File Name", "Archive File", "Modified Time (UTC)", "Size (bytes)", "MD5Hash"]
+    # Writing XML files to "Archive Files" worksheet
+    headers = ["File Name",
+               "Archive File",
+               "MD5Hash",
+               "Modified Time (local/UTC/Redmond, Washington)",
+               # expressed local time if Mac/iOS Pages exported to MS Word
+               # expressed in UTC if created by LibreOffice on Windows exportinug to MS Word.
+               # expressed Redmond, Washington time zone when edited with MS Word online.
+               "Size (bytes)",
+               "ZIP Compression Type",
+               "ZIP Create System",
+               "ZIP Created Version",
+               "ZIP Extract Version",
+               "ZIP Flag Bits (hex)",
+               "ZIP Extra Flag (len)",
+               "ZIP Extra Characters (truncated)"
+               ]
     rows = []  # declare empty list
 
     for xml, xml_info in filename.xml_files().items():
+        extra_characters = xml_info[9] if xml_info[8] == 0 else ",".join(xml_info[9])  # If no extra characters, leave
+        # assigned value as "nil". Otherwise, join
+
         rows.append([filename.filename(),
                      xml,
                      xml_info[0],
                      xml_info[1],
-                     xml_info[2]])
+                     xml_info[2],
+                     xml_info[3],
+                     xml_info[4],
+                     xml_info[5],
+                     xml_info[6],
+                     xml_info[7],
+                     xml_info[8],
+                     extra_characters
+                     ])
+
         # add the row to the list "rows"
     write_worksheet(excel_file_path, "Archive Files", headers, rows)  # "XML Files" worksheet
+    writelog(f'"Archive Files" worksheet written to Excel.\n')
 
     # Calculating count of rsidR, rsidRPr, rsidP, rsidRDefault, paraId, and textId in document.xml
     # and writing to "rsids" worksheet
@@ -180,8 +218,22 @@ def process_docx(filename):
         rows.append([filename.filename(), "textID", k, v])
 
     write_worksheet(excel_file_path, "RSIDs", headers, rows)  # "RSIDs worksheet"
+    writelog(f'"RSIDs" worksheet written to Excel.\n\n')
 
     return
+
+
+def writelog(text):
+    """
+    Write to log file
+    """
+    global logFile
+    #  Open file to write
+    lf = open(logFile, "a")
+    #  Write text to it
+    lf.write(text)
+    #  Close file.
+    lf.close()
 
 
 if __name__ == "__main__":
@@ -199,8 +251,11 @@ if __name__ == "__main__":
     if not msword_file_path:  # if no docx file name was selected to process
         print(f'{red}No DOCx file selected.{white} Exiting.')
     else:
+        docxPath = msword_file_path[0][0:msword_file_path[0].rindex("/")+1]  # extract path of DOCx file(s) to process
+        # to use as initial directory for Excel output file.
+
         excel_file_path = filedialog.asksaveasfilename(title="Select new or existing XLSX file for output.",
-                                                       initialdir=".", filetypes=[("Excel Files", "*.xlsx")],
+                                                       initialdir=docxPath, filetypes=[("Excel Files", "*.xlsx")],
                                                        defaultextension="*.xlsx",
                                                        confirmoverwrite=False)  # ask for output file
 
@@ -208,11 +263,24 @@ if __name__ == "__main__":
             print(f'{red}No output file selected.{white} Exiting.')
             exit()
 
+        logFile = (excel_file_path[0:excel_file_path.rindex("/")+1] + "DOCx_Parser_Log_"
+                   + time.strftime("%Y%m%d_%H%M%S") + ".log")
+
+        writelog("Script executed: " + time.strftime("%Y-%m-%d_%H:%M:%S") + '\n')
+
+        writelog(f'Excel output file: {excel_file_path}\n')
+        writelog(f'\nSummary of files parsed:\n------------------------\n')
+
         if not re.search(r'\.xlsx$', excel_file_path):  # if .xlsx was not included in file name, add it.
             excel_file_path += ".xlsx"
 
         for f in msword_file_path:  # loop over the files selected, processing each.
-            print(f'Processing {green}"{f}"{white}')
+            print(f'\nProcessing {green}"{f}"{white}')
             process_docx(Docx(f))
-            print(f'Finished processing {green}"{f}"{white}. Results are found in '
-                  f'{green}"{excel_file_path}"{white}')
+            print(f'Finished processing {green}"{f}"{white}. ')
+
+        print(f'\n==============================================\n'
+              f'Excel output: {green}"{excel_file_path}"{white}\n'
+              f'Log file: {green}"{logFile}"{white}')
+
+        writelog("Script finished execution: " + time.strftime("%Y-%m-%d_%H:%M:%S") + '\n')

@@ -18,8 +18,9 @@ class Docx:
         self.red = f'\033[91m'
         self.white = f'\033[00m'
         self.green = f'\033[92m'
-
         self.msword_file = msword_file
+        self.header_offsets, self.binary_content = self.__find_binary_string()
+        self.extra_fields = self.__xml_extra_bytes()
         self.core_xml_file = "docProps/core.xml"
         self.core_xml_content = self.__load_core_xml()
         self.app_xml_file = "docProps/app.xml"
@@ -30,17 +31,106 @@ class Docx:
         self.settings_xml_content = self.__load_settings_xml()
         self.rsidRs = self.__extract_all_rsidr_from_summary_xml()
 
+        self.p_tags = re.findall(r'<w:p>|<w:p [^>]*/?>', self.document_xml_content)
+        self.r_tags = re.findall(r'<w:r>|<w:r [^>]*/?>', self.document_xml_content)
+        self.t_tags = re.findall(r'<w:t>|<w:t.? [^>]*/?>', self.document_xml_content)
+
         self.rsidR_in_document_xml = self.__rsidr_in_document_xml()
         self.rsidRPr = self.__other_rsids_in_document_xml("rsidRPr")
         self.rsidP = self.__other_rsids_in_document_xml("rsidP")
         self.rsidRDefault = self.__other_rsids_in_document_xml("rsidRDefault")
 
-        self.p_tags = re.findall(r'<w:p>|<w:p [^>]*/?>', self.document_xml_content)
-        self.r_tags = re.findall(r'<w:r>|<w:r [^>]*/?>', self.document_xml_content)
-        self.t_tags = re.findall(r'<w:t>|<w:t [^>]*/?>', self.document_xml_content)
-
         self.para_id = self.__para_id_tags__()
         self.text_id = self.__text_id_tags__()
+
+    def __find_binary_string(self):
+
+        pkzip_header = "504B0304"  # hex values for signature of a zip file in the archive.
+
+        with open(self.msword_file, 'rb') as msword_binary:  # read the file as binary
+            content = msword_binary.read()
+
+        target_bytes = bytes.fromhex(pkzip_header)  # convert from hex to bytes
+
+        matches = []  # list of offsets where header is found
+        index = 0
+
+        while index < len(content):  # iterate over the list
+            index = content.find(target_bytes, index)  # search for
+            if index == -1:  # no more items in the list.
+                break
+            matches.append(index)
+            index += 1
+
+        return matches, content  # returns the list of offsets of each header, and the binary file.
+
+    def __xml_extra_bytes(self):
+        """
+        ref: https://en.wikipedia.org/wiki/ZIP_(file_format)#Local_file_header
+
+        return: list [xml file name, # of bytes in extra field, truncated bytes]
+        """
+        zip_header = {"signature": [0, 4],  # byte 0 for 4 bytes
+                      "extract version": [4, 2],  # byte 4 for 2 bytes
+                      "bitflag": [6, 2],  # byte 6 for 2 bytes
+                      "compression": [8, 2],  # byte 8 for 2 bytes
+                      "modification time": [10, 2],  # byte 10 for 2 bytes
+                      "modification date": [12, 2],  # byte 12 for 2 bytes
+                      "CRC-32": [14, 4],  # byte 14 for 4 bytes
+                      "compressed size": [18, 4],  # byte 18 for 4 bytes
+                      "uncompressed size": [22, 4],  # byte 22 for 4 bytes
+                      "filename length": [26, 2],  # byte 26 for 2 bytes
+                      "extra field length": [28, 2]  # byte 28 for 2 bytes
+                      }
+        # filename is at offset 30 for n where n is "filename length". Extra field is at offset 30
+        # + filename length for z bytes where z is "extra field length
+
+        extras = {}  # empty dictionary where values will be stored.
+
+        truncate_extra_field = 20  # extra field can be several hundred bytes, mostly 0x00. Grab display first 10
+
+        for offset in self.header_offsets:
+
+            filename_len = int.from_bytes(self.binary_content[
+                                          zip_header["filename length"][0] + offset:
+                                          zip_header["filename length"][1] + offset +
+                                          zip_header["filename length"][0]],
+                                          "little")
+
+            filename_start = offset + 30
+            filename_end = offset + 30 + filename_len
+
+            filename = self.binary_content[filename_start:filename_end].decode('ascii')  # decode filename as ASCII
+
+            extrafield_len = int.from_bytes(self.binary_content[
+                                            zip_header["extra field length"][0] + offset:
+                                            zip_header["extra field length"][1] + offset +
+                                            zip_header["extra field length"][0]],
+                                            "little")  # getting binary value, little endien
+
+            extrafield_start = filename_end
+            extrafield_end = extrafield_start + extrafield_len
+
+            extrafield = self.binary_content[extrafield_start:extrafield_end]
+
+            extrafield_hex_as_text = []  # List that will contain the extra characters represented as text.
+
+            for h in extrafield:
+                extrafield_hex_as_text.append(str(hex(h)))
+
+            if extrafield_len == 0:  # many are 0 bytes, so skipping those.
+                extras[filename] = [extrafield_len, "nil"]
+            else:
+                if extrafield_len <= truncate_extra_field:  # field size larger than truncate value
+                    extras[filename] = [extrafield_len, extrafield_hex_as_text]
+                else:
+                    extras[filename] = [extrafield_len, extrafield_hex_as_text[0:truncate_extra_field]]  # adds only
+                    # the select # of characters as specified in the variable truncate_extra_field. This is so that
+                    # we don't end up with hundreds of characters in a cell in Excel, as some extra fields can be
+                    # several hundred values long. But so far, most are 0x00, with only the first few being values other
+                    # than hex 0x00.
+
+        return extras
 
     def __load_core_xml(self):
         # load core.xml
@@ -105,12 +195,21 @@ class Docx:
     def __rsidr_in_document_xml(self):
         """
         This function calculates the count of each rsidR in document.xml
+        It searches the previously extracted tags rather than the full document.
         :return:
         """
         rsidr_count = {}
         for rsid in self.rsidRs:
-            pattern = rf'w:rsidR="{rsid}"'
-            rsidr_count[rsid] = len(re.findall(pattern, self.document_xml_content))
+            pattern = re.compile(rf'w:rsidR="{rsid}"')
+
+            count_rsids = 0
+
+            count_rsids += len(re.findall(pattern, ",".join(self.p_tags)))
+            count_rsids += len(re.findall(pattern, ",".join(self.r_tags)))
+            count_rsids += len(re.findall(pattern, ",".join(self.t_tags)))
+
+            rsidr_count[rsid] = count_rsids
+
         return rsidr_count
 
     def __other_rsids_in_document_xml(self, rsid):
@@ -122,13 +221,16 @@ class Docx:
         that rsid is in document.xml.
         E.g., {"00123456": 4, "00234567": 0, "00345678":11}
 
-        :return: dictionary where the key is unique RSIDs, and the value is a count of the occurences of that rsid
+        :return: dictionary where the key is unique RSIDs, and the value is a count of the occurrences of that rsid
         in document.xml
         """
         rsids = {}
-        pattern = rf'w:' + rsid + '="[0-9A-F]{8}"'
+        pattern = re.compile('w:' + rsid + '="[0-9A-F]{8}"')
         # Find all rsid types passed to the function (rsidRPr, rsidP, rsidRDefault in document.xml file
-        matches = re.findall(pattern, self.document_xml_content)
+
+        matches = re.findall(pattern, ",".join(self.p_tags))  # searches p_tags
+        matches += re.findall(pattern, ",".join(self.r_tags))  # searches r_tags
+        matches += re.findall(pattern, ",".join(self.t_tags))  # searches t_tags
 
         for match in matches:  # loops through all matches
             # greps for rsid using a group to extract the actual RSID from the string.
@@ -139,6 +241,7 @@ class Docx:
                     rsids[rsid_match.group(1)] += 1  # increment count by 1
                 else:
                     rsids[rsid_match.group(1)] = 1  # Appends it to the list
+
         return rsids
 
     def __para_id_tags__(self):
@@ -183,13 +286,31 @@ class Docx:
         """
         return self.msword_file
 
+    def hash(self):
+        """
+        Function that will return the hash of the file itself
+        """
+        filehash = hashlib.md5()
+        filehash.update(self.binary_content)
+        return filehash.hexdigest()
+
     def xml_files(self):
         """
-        :return: A dictionary in the following format: {XML filename: [modified date, file size, file hash]}
+        :return: A dictionary in the following format:
+        {XML filename: [file hash,
+                        modified date,
+                        file size,
+                        ZIP compression type,
+                        ZIP Create System,
+                        ZIP Created Version,
+                        ZIP Extract Version,
+                        ZIP Flag Bits (hex),
+                        ZIP extra values (hex as text)
+        }
         """
         month = {1: "Jan", 2: "Feb", 3: "Mar", 4: "Apr", 5: "May", 6: "Jun",
                  7: "Jul", 8: "Aug", 9: "Sep", 10: "Oct", 11: "Nov", 12: "Dec"}
-        with (zipfile.ZipFile(self.msword_file, 'r') as zip_file):
+        with zipfile.ZipFile(self.msword_file, 'r') as zip_file:
             # returns XML files in the DOCx
             xml_files = {}
             for file_info in zip_file.infolist():
@@ -202,7 +323,18 @@ class Docx:
                 else:
                     modified_time = str(m_time[0]) + "-" + month[m_time[1]] + "-" + str("%02d" % m_time[2]) + " " + str(
                         "%02d" % m_time[3]) + ":" + str("%02d" % m_time[4]) + ":" + str("%02d" % m_time[5])
-                xml_files[file_info.filename] = [modified_time, file_info.file_size, md5hash]
+
+                xml_files[file_info.filename] = [md5hash,
+                                                 modified_time,
+                                                 file_info.file_size,
+                                                 file_info.compress_type,
+                                                 file_info.create_system,
+                                                 file_info.create_version,
+                                                 file_info.extract_version,
+                                                 f"{file_info.flag_bits:#0{6}x}",
+                                                 self.extra_fields[file_info.filename][0],
+                                                 self.extra_fields[file_info.filename][1]
+                                                 ]
             return xml_files  # returns dictionary {xml_filename: [file size, file hash]}
 
     def xml_hash(self, xmlfile):
