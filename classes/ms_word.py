@@ -182,7 +182,7 @@ class Docx:
         :return:
         """
         rsids_list = []
-        # Find all RSIDs, not rsidRoot. rsidRoot is repeated in rsids
+        # Find all RSIDs, not rsidRoot. rsidRoot is repeated in rsids. Updated to work with MS Word Online.
         matches = re.findall(r'<w:rsid w:val="[0-9A-F]{8}" ?/>', self.settings_xml_content)
 
         for match in matches:  # loops through all matches
