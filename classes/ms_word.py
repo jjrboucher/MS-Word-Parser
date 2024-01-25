@@ -182,8 +182,8 @@ class Docx:
         :return:
         """
         rsids_list = []
-        # Find all RSIDs, not rsidRoot. rsidRoot is repeated in rsids
-        matches = re.findall(r'<w:rsid w:val="[0-9A-F]{8}"/>', self.settings_xml_content)
+        # Find all RSIDs, not rsidRoot. rsidRoot is repeated in rsids.
+        matches = re.findall(r'<w:rsid w:val="[0-9A-F]{8}" ?/>', self.settings_xml_content)
 
         for match in matches:  # loops through all matches
             # greps for rsid using a group to extract the actual RSID from the string.
