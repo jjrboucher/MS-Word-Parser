@@ -1,7 +1,7 @@
 ####################################
 # Written by Jacques Boucher
 # jjrboucher@gmail.com
-# Version Date: 25 October 2023
+# Version Date: 6 February 2024
 #
 # Written in Python 3.11
 #
@@ -90,7 +90,7 @@ def process_docx(filename):
     then loop through them, calling this function for each DOCx file.
     """
 
-    global excel_file_path
+    global excel_file_path, triage
 
     writelog(f'{filename.__str__()}\n')
 
@@ -146,79 +146,80 @@ def process_docx(filename):
     write_worksheet(excel_file_path, "Metadata", headers, rows)  # "metadata" worksheet
     writelog(f'"Metadata" worksheet written to Excel.\n')
 
-    print(f'Updating {green}"Archive Files"{white} worksheet in "{excel_file_path}"')
-    # Writing XML files to "Archive Files" worksheet
-    headers = ["File Name",
-               "Archive File",
-               "MD5Hash",
-               "Modified Time (local/UTC/Redmond, Washington)",
-               # expressed local time if Mac/iOS Pages exported to MS Word
-               # expressed in UTC if created by LibreOffice on Windows exportinug to MS Word.
-               # expressed Redmond, Washington time zone when edited with MS Word online.
-               "Size (bytes)",
-               "ZIP Compression Type",
-               "ZIP Create System",
-               "ZIP Created Version",
-               "ZIP Extract Version",
-               "ZIP Flag Bits (hex)",
-               "ZIP Extra Flag (len)",
-               "ZIP Extra Characters (truncated)"
-               ]
-    rows = []  # declare empty list
+    if not triage:  # will generate these spreadsheet if not triage
+        print(f'Updating {green}"Archive Files"{white} worksheet in "{excel_file_path}"')
+        # Writing XML files to "Archive Files" worksheet
+        headers = ["File Name",
+                   "Archive File",
+                   "MD5Hash",
+                   "Modified Time (local/UTC/Redmond, Washington)",
+                   # expressed local time if Mac/iOS Pages exported to MS Word
+                   # expressed in UTC if created by LibreOffice on Windows exportinug to MS Word.
+                   # expressed Redmond, Washington time zone when edited with MS Word online.
+                   "Size (bytes)",
+                   "ZIP Compression Type",
+                   "ZIP Create System",
+                   "ZIP Created Version",
+                   "ZIP Extract Version",
+                   "ZIP Flag Bits (hex)",
+                   "ZIP Extra Flag (len)",
+                   "ZIP Extra Characters (truncated)"
+                   ]
+        rows = []  # declare empty list
 
-    for xml, xml_info in filename.xml_files().items():
-        extra_characters = xml_info[9] if xml_info[8] == 0 else ",".join(xml_info[9])  # If no extra characters, leave
-        # assigned value as "nil". Otherwise, join
+        for xml, xml_info in filename.xml_files().items():
+            extra_characters = xml_info[9] if xml_info[8] == 0 else ",".join(xml_info[9])  # If no extra characters,
+            # leave assigned value as "nil". Otherwise, join.
 
-        rows.append([filename.filename(),
-                     xml,
-                     xml_info[0],
-                     xml_info[1],
-                     xml_info[2],
-                     xml_info[3],
-                     xml_info[4],
-                     xml_info[5],
-                     xml_info[6],
-                     xml_info[7],
-                     xml_info[8],
-                     extra_characters
-                     ])
+            rows.append([filename.filename(),
+                         xml,
+                         xml_info[0],
+                         xml_info[1],
+                         xml_info[2],
+                         xml_info[3],
+                         xml_info[4],
+                         xml_info[5],
+                         xml_info[6],
+                         xml_info[7],
+                         xml_info[8],
+                         extra_characters
+                         ])
 
-        # add the row to the list "rows"
-    write_worksheet(excel_file_path, "Archive Files", headers, rows)  # "XML Files" worksheet
-    writelog(f'"Archive Files" worksheet written to Excel.\n')
+            # add the row to the list "rows"
+        write_worksheet(excel_file_path, "Archive Files", headers, rows)  # "XML Files" worksheet
+        writelog(f'"Archive Files" worksheet written to Excel.\n')
 
-    # Calculating count of rsidR, rsidRPr, rsidP, rsidRDefault, paraId, and textId in document.xml
-    # and writing to "rsids" worksheet
-    headers = ["File Name", "RSID Type", "RSID Value", "Count in document.xml"]
-    rows = []  # declare empty list
+        # Calculating count of rsidR, rsidRPr, rsidP, rsidRDefault, paraId, and textId in document.xml
+        # and writing to "rsids" worksheet
+        headers = ["File Name", "RSID Type", "RSID Value", "Count in document.xml"]
+        rows = []  # declare empty list
 
-    print(f'Adding {green}rsidR{white} count to "RSIDs" worksheet in "{excel_file_path}"')
-    for k, v in filename.rsidr_in_document_xml().items():
-        rows.append([filename.filename(), "rsidR", k, v])
+        print(f'Adding {green}rsidR{white} count to "RSIDs" worksheet in "{excel_file_path}"')
+        for k, v in filename.rsidr_in_document_xml().items():
+            rows.append([filename.filename(), "rsidR", k, v])
 
-    print(f'Adding {green}rsidP{white} count to "RSIDs" worksheet in {excel_file_path}')
-    for k, v in filename.rsidp_in_document_xml().items():
-        rows.append([filename.filename(), "rsidP", k, v])
+        print(f'Adding {green}rsidP{white} count to "RSIDs" worksheet in {excel_file_path}')
+        for k, v in filename.rsidp_in_document_xml().items():
+            rows.append([filename.filename(), "rsidP", k, v])
 
-    print(f'Adding {green}rsidPr{white} count to "RSIDs" worksheet in {excel_file_path}')
-    for k, v in filename.rsidrpr_in_document_xml().items():
-        rows.append([filename.filename(), "rsidRPr", k, v])
+        print(f'Adding {green}rsidPr{white} count to "RSIDs" worksheet in {excel_file_path}')
+        for k, v in filename.rsidrpr_in_document_xml().items():
+            rows.append([filename.filename(), "rsidRPr", k, v])
 
-    print(f'Adding {green}rsidRDefault{white} count to "RSIDs" worksheet in {excel_file_path}')
-    for k, v in filename.rsidrdefault_in_document_xml().items():
-        rows.append([filename.filename(), "rsidRDefault", k, v])
+        print(f'Adding {green}rsidRDefault{white} count to "RSIDs" worksheet in {excel_file_path}')
+        for k, v in filename.rsidrdefault_in_document_xml().items():
+            rows.append([filename.filename(), "rsidRDefault", k, v])
 
-    print(f'Adding {green}paraID{white} count to "RSIDs" worksheet in {excel_file_path}')
-    for k, v in filename.paragraph_id_tags().items():
-        rows.append([filename.filename(), "paraID", k, v])
+        print(f'Adding {green}paraID{white} count to "RSIDs" worksheet in {excel_file_path}')
+        for k, v in filename.paragraph_id_tags().items():
+            rows.append([filename.filename(), "paraID", k, v])
 
-    print(f'Adding {green}textID{white} count to "RSIDs" worksheet in {excel_file_path}')
-    for k, v in filename.text_id_tags().items():
-        rows.append([filename.filename(), "textID", k, v])
+        print(f'Adding {green}textID{white} count to "RSIDs" worksheet in {excel_file_path}')
+        for k, v in filename.text_id_tags().items():
+            rows.append([filename.filename(), "textID", k, v])
 
-    write_worksheet(excel_file_path, "RSIDs", headers, rows)  # "RSIDs worksheet"
-    writelog(f'"RSIDs" worksheet written to Excel.\n\n')
+        write_worksheet(excel_file_path, "RSIDs", headers, rows)  # "RSIDs worksheet"
+        writelog(f'"RSIDs" worksheet written to Excel.\n\n')
 
     return
 
@@ -241,6 +242,16 @@ if __name__ == "__main__":
     # Output file - same path as where the script is run. It will create it if it does not exist,
     # or append to it if it does.
     # excel_file_path = "docx-artifacts(class).xlsx"  # default file name - will be created in the script folder.
+
+    choice = input("Run in triage mode (t) or full (f) parsing?")
+    while choice not in "ft":
+        print("Invalid answer. Please answer with either t or f.")
+        choice = input("Run in triage mode (t) or full (f) parsing?")
+
+    if choice == "t" or choice == "T":
+        triage = True
+    else:  # defaults to false if person enters anything but t or T.
+        triage = False
 
     root = tk.Tk()
     root.withdraw()  # Hide the main window
@@ -276,7 +287,7 @@ if __name__ == "__main__":
 
         for f in msword_file_path:  # loop over the files selected, processing each.
             print(f'\nProcessing {green}"{f}"{white}')
-            process_docx(Docx(f))
+            process_docx(Docx(f, triage))
             print(f'Finished processing {green}"{f}"{white}. ')
 
         print(f'\n==============================================\n'
