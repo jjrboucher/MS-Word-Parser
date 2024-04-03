@@ -243,10 +243,10 @@ if __name__ == "__main__":
     # or append to it if it does.
     # excel_file_path = "docx-artifacts(class).xlsx"  # default file name - will be created in the script folder.
 
-    choice = input("Run in triage mode (t) or full (f) parsing?")
+    choice = input("Run in triage mode (t) or full (f) parsing? ")
     while choice not in "ft":
         print("Invalid answer. Please answer with either t or f.")
-        choice = input("Run in triage mode (t) or full (f) parsing?")
+        choice = input("Run in triage mode (t) or full (f) parsing? ")
 
     if choice == "t" or choice == "T":
         triage = True
