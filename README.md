@@ -58,7 +58,7 @@ command on a Debian (e.g. Ubuntu) system from the terminal window:<br>
 Whether running on Linux, Mac, or Windows, you may need to install some of the libraries if they are not included in
 your installation of Python 3.
 <br>
-In particular, you may need to install openpyxl and hashlib.  
+In particular, you may need to install openpyxl, colorama and hashlib.  
     
 <br>You can do so as follows from a terminal window while in the folder with the script and requirements.txt file:
 
