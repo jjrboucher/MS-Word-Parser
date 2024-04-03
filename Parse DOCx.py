@@ -81,6 +81,7 @@ from functions.excel import write_worksheet  # function to write results to an E
 red = f'\033[91m'
 white = f'\033[00m'
 green = f'\033[92m'
+triage = "no selection"
 
 
 def process_docx(filename):
@@ -236,25 +237,53 @@ def writelog(text):
     #  Close file.
     lf.close()
 
+def triage_only():
+    global triage
+    root.destroy()
+    triage = True
+
+def full_parse():
+    global triage
+    root.destroy()
+    triage = False
 
 if __name__ == "__main__":
 
     # Output file - same path as where the script is run. It will create it if it does not exist,
     # or append to it if it does.
     # excel_file_path = "docx-artifacts(class).xlsx"  # default file name - will be created in the script folder.
+    # Create main window
+    root = tk.Tk()
+    root.iconbitmap("icons/logo.ico")
+    root.title("Parsing Option")
 
-    choice = input("Run in triage mode (t) or full (f) parsing? ")
-    while choice not in "ft":
-        print("Invalid answer. Please answer with either t or f.")
-        choice = input("Run in triage mode (t) or full (f) parsing? ")
+    # Create a variable to hold the selected choice
+    var = tk.IntVar()
 
-    if choice == "t" or choice == "T":
-        triage = True
-    else:  # defaults to false if person enters anything but t or T.
-        triage = False
+    # Create radio buttons
+    #option1 = tk.Radiobutton(root, text="Triage Only", variable=var, value=1)
+    #option2 = tk.Radiobutton(root, text="Full Parsing", variable=var, value=2)
+
+    # Create a button to show the selected choice
+    triage_button = tk.Button(root, text="Triage", width=32, bg='yellow', command=triage_only)
+    full_button = tk.Button(root, text="Full Parsing", width=32, bg='green', command=full_parse)
+
+    # Arrange widgets in a grid
+    #option1.grid(row=0, column=0, padx=5, pady=5)
+    #option2.grid(row=0, column=1, padx=5, pady=5)
+    triage_button.grid(row=1, column=0, padx=10, pady=5)
+    full_button.grid(row=2, column=0, padx=10, pady=5)
+
+    # Start the main event loop
+    root.mainloop()
+
+    if triage == "no selection":
+        print("No choice made - exiting...")
+        exit()
 
     root = tk.Tk()
     root.withdraw()  # Hide the main window
+    root.iconbitmap("icons/logo.ico")
 
     msword_file_path = filedialog.askopenfilenames(title="Select DOCx file(s) to process", initialdir=".",
                                                    filetypes=[("DOCx Files", "*.docx")])  # ask for file(s) to process
