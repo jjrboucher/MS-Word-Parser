@@ -13,8 +13,16 @@ class Docx:
     xml_files, xml_hash, xml_size
     """
 
-    def __init__(self, msword_file):
-        """.docx file to pass to the class"""
+    def __init__(self, msword_file, triage=False):
+        """
+        .docx file to pass to the class
+        Triage value can be True or False. If True, will parse less info to execute faster.
+        When set to False, it does not try to parse RSID values from document.xml.
+        If triage value not passed, it defaults to False and does full parsing.
+        The script using this class still ultimately decides what methods it wants to use.
+        But if in triage mode, some of the variables will not get assigned any value, thus
+        will affect any methods that rely on those variables having a value assigned to them.
+        """
         self.red = f'\033[91m'
         self.white = f'\033[00m'
         self.green = f'\033[92m'
@@ -35,13 +43,15 @@ class Docx:
         self.r_tags = re.findall(r'<w:r>|<w:r [^>]*/?>', self.document_xml_content)
         self.t_tags = re.findall(r'<w:t>|<w:t.? [^>]*/?>', self.document_xml_content)
 
-        self.rsidR_in_document_xml = self.__rsidr_in_document_xml()
-        self.rsidRPr = self.__other_rsids_in_document_xml("rsidRPr")
-        self.rsidP = self.__other_rsids_in_document_xml("rsidP")
-        self.rsidRDefault = self.__other_rsids_in_document_xml("rsidRDefault")
+        if not triage:  # if not run in triage mode, do full parsing
 
-        self.para_id = self.__para_id_tags__()
-        self.text_id = self.__text_id_tags__()
+            self.rsidR_in_document_xml = self.__rsidr_in_document_xml()
+            self.rsidRPr = self.__other_rsids_in_document_xml("rsidRPr")
+            self.rsidP = self.__other_rsids_in_document_xml("rsidP")
+            self.rsidRDefault = self.__other_rsids_in_document_xml("rsidRDefault")
+
+            self.para_id = self.__para_id_tags__()
+            self.text_id = self.__text_id_tags__()
 
     def __find_binary_string(self):
 
