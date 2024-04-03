@@ -71,17 +71,19 @@
 #
 ###################################
 from classes.ms_word import Docx
+from colorama import just_fix_windows_console
 import re
+from sys import exit
 import time
 import tkinter as tk
 from tkinter import filedialog
 from functions.excel import write_worksheet  # function to write results to an Excel file
 
-
 red = f'\033[91m'
 white = f'\033[00m'
 green = f'\033[92m'
 triage = "no selection"
+just_fix_windows_console
 
 
 def process_docx(filename):
@@ -237,15 +239,18 @@ def writelog(text):
     #  Close file.
     lf.close()
 
+
 def triage_only():
     global triage
     root.destroy()
     triage = True
 
+
 def full_parse():
     global triage
     root.destroy()
     triage = False
+
 
 if __name__ == "__main__":
 
@@ -254,23 +259,22 @@ if __name__ == "__main__":
     # excel_file_path = "docx-artifacts(class).xlsx"  # default file name - will be created in the script folder.
     # Create main window
     root = tk.Tk()
-    root.iconbitmap("icons/logo.ico")
     root.title("Parsing Option")
 
     # Create a variable to hold the selected choice
     var = tk.IntVar()
 
     # Create radio buttons
-    #option1 = tk.Radiobutton(root, text="Triage Only", variable=var, value=1)
-    #option2 = tk.Radiobutton(root, text="Full Parsing", variable=var, value=2)
+    # option1 = tk.Radiobutton(root, text="Triage Only", variable=var, value=1)
+    # option2 = tk.Radiobutton(root, text="Full Parsing", variable=var, value=2)
 
     # Create a button to show the selected choice
     triage_button = tk.Button(root, text="Triage", width=32, bg='yellow', command=triage_only)
     full_button = tk.Button(root, text="Full Parsing", width=32, bg='green', command=full_parse)
 
     # Arrange widgets in a grid
-    #option1.grid(row=0, column=0, padx=5, pady=5)
-    #option2.grid(row=0, column=1, padx=5, pady=5)
+    # option1.grid(row=0, column=0, padx=5, pady=5)
+    # option2.grid(row=0, column=1, padx=5, pady=5)
     triage_button.grid(row=1, column=0, padx=10, pady=5)
     full_button.grid(row=2, column=0, padx=10, pady=5)
 
@@ -278,20 +282,21 @@ if __name__ == "__main__":
     root.mainloop()
 
     if triage == "no selection":
-        print("No choice made - exiting...")
+        print(f"{red}No choice made - exiting.{white}")
+        wait = input(f"Press {green}ENTER{white} to exit application...")
         exit()
 
     root = tk.Tk()
     root.withdraw()  # Hide the main window
-    root.iconbitmap("icons/logo.ico")
 
     msword_file_path = filedialog.askopenfilenames(title="Select DOCx file(s) to process", initialdir=".",
                                                    filetypes=[("DOCx Files", "*.docx")])  # ask for file(s) to process
 
     if not msword_file_path:  # if no docx file name was selected to process
-        print(f'{red}No DOCx file selected.{white} Exiting.')
+        print(f'{red}No DOCx file selected.{white}')
+        wait = input(f"Press {green}ENTER{white} to exit application...")
     else:
-        docxPath = msword_file_path[0][0:msword_file_path[0].rindex("/")+1]  # extract path of DOCx file(s) to process
+        docxPath = msword_file_path[0][0:msword_file_path[0].rindex("/") + 1]  # extract path of DOCx file(s) to process
         # to use as initial directory for Excel output file.
 
         excel_file_path = filedialog.asksaveasfilename(title="Select new or existing XLSX file for output.",
@@ -303,7 +308,7 @@ if __name__ == "__main__":
             print(f'{red}No output file selected.{white} Exiting.')
             exit()
 
-        logFile = (excel_file_path[0:excel_file_path.rindex("/")+1] + "DOCx_Parser_Log_"
+        logFile = (excel_file_path[0:excel_file_path.rindex("/") + 1] + "DOCx_Parser_Log_"
                    + time.strftime("%Y%m%d_%H%M%S") + ".log")
 
         writelog("Script executed: " + time.strftime("%Y-%m-%d_%H:%M:%S") + '\n')
