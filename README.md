@@ -1,9 +1,18 @@
 <h1>MS-Word-Parser</h1>
 <h6>
-This script will prompt you for a DOCx file (or several DOCx files if you wish) and parse data from it and dump it to an Excel file.
+This script will prompt you for a DOCx file (or several DOCx files if you wish) and parse data from it and dump it to an Excel file. You can either give it a new file name so it creates a new Excel file, or point to an existing Excel file to have the script add to that Excel file. The one caveate is if running the Python version on a Mac, the author has observed that it won't append to an existing Excel file, rather it will overwrite it. But in Windows, it properly appends to an existing Excel file. This allows you to re-run this script against new documents, and add the results to an existing Excel file.
 
-The script does not validate that the file being passed to it is indeed a DOCx. It's up to the user to make sure he/she passes a DOCx.
+The script does not validate that the file(s) being passed to it is/are indeed DOCx. It's up to the user to make sure he/she passes a DOCx file(s).
 
+The script will output data to the command window and uses ASCII escape sequences to add colour to the text. Unfortunately, with the EXE it doesn't work. You will see the escape sequences as text which makes the output look messy. Don't worry, the script is still working as expected.
+
+<h4>Triage Mode</h4>
+When you first execute the script, it will prompt you to run it in either triage mode or full parsing. Triage mode will only create the first two worksheets (doc_summary and RSIDs). The other two worksheets are more technical, and can generate a lot of data (which means longer processing time) that you may not be interested in unless doing a deep dive.
+
+<h4>Log File</h4>
+The script will also create a log file in the same folder as the DOCx file(s) you select to process. The log file is called DOCx_Parser_Log_yyyymmdd_hhmmss.log where yyyymmdd is the date and hhmmss is the time expressed in the computer's local time.
+
+<h4>Excel File</h4>
 The script will do the following processing:
 
 1 - It will extract all the unique RSIDs from the file word/settings.xml and write it to a worksheet
