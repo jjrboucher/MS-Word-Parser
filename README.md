@@ -57,6 +57,11 @@ If the modified time is blank, it will show "nil" for value. Otherwise, it shows
     - textID<br><br>
     And "Count in document.xml" is as the name implies, it's how many times that RSID is present in document.xml.</h6>
 
+<h2>Caveat</h2>
+I have seen where the # of pages and paragraphs was not correct. This was not a problem with the script, but rather with MS Word. When looking at the metadata via the embedded XML files, they were also not accurate (with those inaccurate values accurately extracted by the script). This inaccuracy was also observed in the Details tab when looking at the properties of the document within Windows Explorer. It was only after opening the document and re-saving it did the count update to the correct values. But of course, this modifies the document which is not desireable. Because of this, it is a good practice to make a copy of the document via Windows Explorer copy/paste, and open that one to see if what is being reported is accurate. <br><br>
+
+This doesn't happen often, but it does happen, so it's important to be aware of this.
+
 <h2>Dependencies</h2>
 
 <h6>If running the script on a Linux system, you may need to install python-tk. You can do this with the following
