@@ -1,6 +1,6 @@
 <h1>MS-Word-Parser</h1>
 <h6>
-This script will prompt you for a DOCx file and parse data from it and dump it to an Excel file.
+This script will prompt you for a DOCx file (or several DOCx files if you wish) and parse data from it and dump it to an Excel file.
 
 The script does not validate that the file being passed to it is indeed a DOCx. It's up to the user to make sure he/she passes a DOCx.
 
