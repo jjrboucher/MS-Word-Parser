@@ -1,7 +1,7 @@
 ####################################
 # Written by Jacques Boucher
 # jjrboucher@gmail.com
-# Version Date: 3 April 2024
+# Version Date: 26 August 2024
 #
 # Written in Python 3.11
 #
@@ -69,21 +69,34 @@
 #
 # If any other libraries are missing when trying to execute the script, install those in the same manner.
 #
+# ********** Possible future enhancements **********
+#
+# Option to not hash files (at least in triage mode). Processing a large # of files is time-consuming when needing to
+# hash each file. That may not be needed in some cases. Removing the hashing from the summary worksheet would
+# significantly increase the speed of execution.
+#
 ###################################
+
 from classes.ms_word import Docx
 from colorama import just_fix_windows_console
+import pandas as pd
 import re
 from sys import exit
 import time
 import tkinter as tk
 from tkinter import filedialog
-from functions.excel import write_worksheet  # function to write results to an Excel file
 
 red = f'\033[91m'
 white = f'\033[00m'
 green = f'\033[92m'
 triage = "no selection"
-just_fix_windows_console
+just_fix_windows_console()
+docxErrorCount = 0  # tracks how many files it could not process.
+filesUnableToProcess = []  # list of files that produced an error
+doc_summary_worksheet = {}  # contains summary data parsed from each file processed
+metadata_worksheet = {}  # contains the metadata parsed from each file processed
+archive_files_worksheet = {}  # contains the archive files data from each file processed
+rsids_worksheet = {}  # contains the RSID artifacts extracted from each file processed
 
 
 def process_docx(filename):
@@ -93,61 +106,72 @@ def process_docx(filename):
     then loop through them, calling this function for each DOCx file.
     """
 
-    global excel_file_path, triage
+    global excel_file_path, triage, doc_summary_worksheet, metadata_worksheet, archive_files_worksheet, rsids_worksheet
 
-    writelog(f'{filename.__str__()}\n')
+    write_log(f'{filename.__str__()}\n')
 
     for checkFile in ("word/settings.xml", "docProps/core.xml", "docProps/app.xml"):  # checks if xml files being parsed
         # are present and notes same in the log file.
         xml_exists = checkFile in filename.xml_files().keys()
-        writelog(f'**{checkFile} exists? {xml_exists}\n')
+        write_log(f'**{checkFile} exists? {xml_exists}\n')
 
-    print(f'Updating {green}"Doc_Summary"{white} worksheet in {excel_file_path}')
     # Writing document summary worksheet.
     headers = ["File Name", "MD5 Hash", "Unique rsidR", "RSID Root", "<w:p> tags", "<w:r> tags", "<w:t> tags"]
-    rows = [[filename.filename(), filename.hash(), len(filename.rsidr()), filename.rsid_root(),
-             filename.paragraph_tags(), filename.runs_tags(), filename.text_tags()]]
-    write_worksheet(excel_file_path, "Doc_Summary", headers, rows)  # "Doc_Summary" worksheet
-    writelog(f'"Doc_Summary" worksheet written to Excel file.\n')
+
+    if not bool(doc_summary_worksheet):  # if it's an empty dictionary, add headers to it.
+        doc_summary_worksheet = dict((k, []) for k in headers)
+
+    doc_summary_worksheet[headers[0]].append(filename.filename())
+    doc_summary_worksheet[headers[1]].append(filename.hash())
+    doc_summary_worksheet[headers[2]].append(len(filename.rsidr()))
+    doc_summary_worksheet[headers[3]].append(filename.rsid_root())
+    doc_summary_worksheet[headers[4]].append(filename.paragraph_tags())
+    doc_summary_worksheet[headers[5]].append(filename.runs_tags())
+    doc_summary_worksheet[headers[6]].append(filename.text_tags())
+
+    print(f'Extracted {green}Doc_Summary{white} artifacts')
 
     # The keys will be used as the column heading in the spreadsheet
     # The order they are in is the order that the columns will be in the spreadsheet
     # Corresponding values passed, resulting in a dictionary being passed called allMetadata
     # containing column headings and associated extracted metadata value.
-    allmetadata = {"File Name": filename.filename(),
-                   "Author": filename.creator(),
-                   "Created Date": filename.created(),
-                   "Last Modified By": filename.last_modified_by(),
-                   "Modified Date": filename.modified(),
-                   "Last Printed Date": filename.last_printed(),
-                   "Manager": filename.manager(),
-                   "Company": filename.company(),
-                   "Revision": filename.revision(),
-                   "Total Editing Time": filename.total_editing_time(),
-                   "Pages": filename.pages(),
-                   "Paragraphs": filename.paragraphs(),
-                   "Lines": filename.lines(),
-                   "Words": filename.words(),
-                   "Characters": filename.characters(),
-                   "Characters With Spaces": filename.characters_with_spaces(),
-                   "Title": filename.title(),
-                   "Subject": filename.subject(),
-                   "Keywords": filename.keywords(),
-                   "Description": filename.description(),
-                   "Application": filename.application(),
-                   "App Version": filename.app_version(),
-                   "Template": filename.template(),
-                   "Doc Security": filename.security(),
-                   "Category": filename.category(),
-                   "Content Status": filename.content_status()
-                   }
 
-    print(f'Updating {green}"Metadata"{white} worksheet in "{excel_file_path}"')
-    # Writing metadata "metadata" worksheet
-    headers = (list(allmetadata.keys()))
-    rows = [list(allmetadata.values())]
-    write_worksheet(excel_file_path, "Metadata", headers, rows)  # "metadata" worksheet
-    writelog(f'"Metadata" worksheet written to Excel.\n')
+    headers = ["File Name", "Author", "Created Date", "Last Modified By", "Modified Date", "Last Printed Date",
+               "Manager", "Company", "Revision", "Total Editing Time", "Pages", "Paragraphs", "Lines", "Words",
+               "Characters", "Characters With Spaces", "Title", "Subject", "Keywords", "Description",
+               "Application", "App Version", "Template", "Doc Security", "Category", "Content Status"]
+
+    if not bool(metadata_worksheet):  # if it's an empty dictionary, add headers to it.
+        metadata_worksheet = dict((k, []) for k in headers)
+
+    metadata_worksheet[headers[0]].append(filename.filename())
+    metadata_worksheet[headers[1]].append(filename.creator())
+    metadata_worksheet[headers[2]].append(filename.created())
+    metadata_worksheet[headers[3]].append(filename.last_modified_by())
+    metadata_worksheet[headers[4]].append(filename.modified())
+    metadata_worksheet[headers[5]].append(filename.last_printed())
+    metadata_worksheet[headers[6]].append(filename.manager())
+    metadata_worksheet[headers[7]].append(filename.company())
+    metadata_worksheet[headers[8]].append(filename.revision())
+    metadata_worksheet[headers[9]].append(filename.total_editing_time())
+    metadata_worksheet[headers[10]].append(filename.pages())
+    metadata_worksheet[headers[11]].append(filename.paragraphs())
+    metadata_worksheet[headers[12]].append(filename.lines())
+    metadata_worksheet[headers[13]].append(filename.words())
+    metadata_worksheet[headers[14]].append(filename.characters())
+    metadata_worksheet[headers[15]].append(filename.characters_with_spaces())
+    metadata_worksheet[headers[16]].append(filename.title())
+    metadata_worksheet[headers[17]].append(filename.subject())
+    metadata_worksheet[headers[18]].append(filename.keywords())
+    metadata_worksheet[headers[19]].append(filename.description())
+    metadata_worksheet[headers[20]].append(filename.application())
+    metadata_worksheet[headers[21]].append(filename.app_version())
+    metadata_worksheet[headers[22]].append(filename.template())
+    metadata_worksheet[headers[23]].append(filename.security())
+    metadata_worksheet[headers[24]].append(filename.category())
+    metadata_worksheet[headers[25]].append(filename.content_status())
+
+    print(f'Extracted {green}metadata{white} artifacts')
 
     if not triage:  # will generate these spreadsheet if not triage
         print(f'Updating {green}"Archive Files"{white} worksheet in "{excel_file_path}"')
@@ -168,72 +192,102 @@ def process_docx(filename):
                    "ZIP Extra Flag (len)",
                    "ZIP Extra Characters (truncated)"
                    ]
-        rows = []  # declare empty list
+
+        if not bool(archive_files_worksheet):  # if it's an empty dictionary, add headers to it.
+            archive_files_worksheet = dict((k, []) for k in headers)
 
         for xml, xml_info in filename.xml_files().items():
             extra_characters = xml_info[9] if xml_info[8] == 0 else ",".join(xml_info[9])  # If no extra characters,
             # leave assigned value as "nil". Otherwise, join.
 
-            rows.append([filename.filename(),
-                         xml,
-                         xml_info[0],
-                         xml_info[1],
-                         xml_info[2],
-                         xml_info[3],
-                         xml_info[4],
-                         xml_info[5],
-                         xml_info[6],
-                         xml_info[7],
-                         xml_info[8],
-                         extra_characters
-                         ])
+            archive_files_worksheet[headers[0]].append(filename.filename())
+            archive_files_worksheet[headers[1]].append(xml)
+            archive_files_worksheet[headers[2]].append(xml_info[0])
+            archive_files_worksheet[headers[3]].append(xml_info[1])
+            archive_files_worksheet[headers[4]].append(xml_info[2])
+            archive_files_worksheet[headers[5]].append(xml_info[3])
+            archive_files_worksheet[headers[6]].append(xml_info[4])
+            archive_files_worksheet[headers[7]].append(xml_info[5])
+            archive_files_worksheet[headers[8]].append(xml_info[6])
+            archive_files_worksheet[headers[9]].append(xml_info[7])
+            archive_files_worksheet[headers[10]].append(xml_info[8])
+            archive_files_worksheet[headers[11]].append(extra_characters)
 
-            # add the row to the list "rows"
-        write_worksheet(excel_file_path, "Archive Files", headers, rows)  # "XML Files" worksheet
-        writelog(f'"Archive Files" worksheet written to Excel.\n')
+        print(f'Extracted {green}archive files{white} artifacts')
 
         # Calculating count of rsidR, rsidRPr, rsidP, rsidRDefault, paraId, and textId in document.xml
         # and writing to "rsids" worksheet
         headers = ["File Name", "RSID Type", "RSID Value", "Count in document.xml"]
-        rows = []  # declare empty list
 
-        print(f'Adding {green}rsidR{white} count to "RSIDs" worksheet in "{excel_file_path}"')
+        if not bool(rsids_worksheet):  # if it's an empty dictionary, add headers to it.
+            rsids_worksheet = dict((k, []) for k in headers)
+
+        print(f'Calculating {green}rsidR{white} count')
         for k, v in filename.rsidr_in_document_xml().items():
-            rows.append([filename.filename(), "rsidR", k, v])
+            rsids_worksheet[headers[0]].append(filename.filename())
+            rsids_worksheet[headers[1]].append('rsidR')
+            rsids_worksheet[headers[2]].append(k)
+            rsids_worksheet[headers[3]].append(v)
 
-        print(f'Adding {green}rsidP{white} count to "RSIDs" worksheet in {excel_file_path}')
+        print(f'Calculating {green}rsidP{white} count')
         for k, v in filename.rsidp_in_document_xml().items():
-            rows.append([filename.filename(), "rsidP", k, v])
+            rsids_worksheet[headers[0]].append(filename.filename())
+            rsids_worksheet[headers[1]].append('rsidP')
+            rsids_worksheet[headers[2]].append(k)
+            rsids_worksheet[headers[3]].append(v)
 
-        print(f'Adding {green}rsidPr{white} count to "RSIDs" worksheet in {excel_file_path}')
+        print(f'Calculating {green}rsidPr{white} count')
         for k, v in filename.rsidrpr_in_document_xml().items():
-            rows.append([filename.filename(), "rsidRPr", k, v])
+            rsids_worksheet[headers[0]].append(filename.filename())
+            rsids_worksheet[headers[1]].append('rsidRPr')
+            rsids_worksheet[headers[2]].append(k)
+            rsids_worksheet[headers[3]].append(v)
 
-        print(f'Adding {green}rsidRDefault{white} count to "RSIDs" worksheet in {excel_file_path}')
+        print(f'Calculating {green}rsidRDefault{white} count')
         for k, v in filename.rsidrdefault_in_document_xml().items():
-            rows.append([filename.filename(), "rsidRDefault", k, v])
+            rsids_worksheet[headers[0]].append(filename.filename())
+            rsids_worksheet[headers[1]].append('rsidRDefault')
+            rsids_worksheet[headers[2]].append(k)
+            rsids_worksheet[headers[3]].append(v)
 
-        print(f'Adding {green}paraID{white} count to "RSIDs" worksheet in {excel_file_path}')
+        print(f'Calculating {green}paraID{white} count')
         for k, v in filename.paragraph_id_tags().items():
-            rows.append([filename.filename(), "paraID", k, v])
+            rsids_worksheet[headers[0]].append(filename.filename())
+            rsids_worksheet[headers[1]].append('paraID')
+            rsids_worksheet[headers[2]].append(k)
+            rsids_worksheet[headers[3]].append(v)
 
-        print(f'Adding {green}textID{white} count to "RSIDs" worksheet in {excel_file_path}')
+        print(f'Calculating {green}textID{white} count')
         for k, v in filename.text_id_tags().items():
-            rows.append([filename.filename(), "textID", k, v])
+            rsids_worksheet[headers[0]].append(filename.filename())
+            rsids_worksheet[headers[1]].append('textID')
+            rsids_worksheet[headers[2]].append(k)
+            rsids_worksheet[headers[3]].append(v)
 
-        write_worksheet(excel_file_path, "RSIDs", headers, rows)  # "RSIDs worksheet"
-        writelog(f'"RSIDs" worksheet written to Excel.\n\n')
-
+    write_log(f'\n------------------------------------\n')
     return
 
 
-def writelog(text):
+def write_log(text):
     """
     Write to log file
     """
     global logFile
     #  Open file to write
-    lf = open(logFile, "a")
+    lf = open(logFile, "a", encoding='utf8')
+    #  Write text to it
+    lf.write(text)
+    #  Close file.
+    lf.close()
+
+
+def write_error_log(text):
+    """
+    Write to the error log file
+    """
+    global errorLog
+    #  Open file to write
+    lf = open(errorLog, "a", encoding='utf8')
     #  Write text to it
     lf.write(text)
     #  Close file.
@@ -302,30 +356,79 @@ if __name__ == "__main__":
         excel_file_path = filedialog.asksaveasfilename(title="Select new or existing XLSX file for output.",
                                                        initialdir=docxPath, filetypes=[("Excel Files", "*.xlsx")],
                                                        defaultextension="*.xlsx",
-                                                       confirmoverwrite=False)  # ask for output file
+                                                       confirmoverwrite=True)  # ask for output file
 
         if not excel_file_path:  # if no output file selected
             print(f'{red}No output file selected.{white} Exiting.')
             exit()
 
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
         logFile = (excel_file_path[0:excel_file_path.rindex("/") + 1] + "DOCx_Parser_Log_"
-                   + time.strftime("%Y%m%d_%H%M%S") + ".log")
+                   + timestamp + ".log")
+        errorLog = (excel_file_path[0:excel_file_path.rindex("/") + 1] + "DOCx_error_Log_"
+                    + timestamp + ".log")
 
-        writelog("Script executed: " + time.strftime("%Y-%m-%d_%H:%M:%S") + '\n')
+        write_log("Script executed: " + time.strftime("%Y-%m-%d_%H:%M:%S") + '\n')
 
-        writelog(f'Excel output file: {excel_file_path}\n')
-        writelog(f'\nSummary of files parsed:\n------------------------\n')
+        write_log(f'Excel output file: {excel_file_path}\n')
+        write_log(f'\nSummary of files parsed:\n========================\n')
 
         if not re.search(r'\.xlsx$', excel_file_path):  # if .xlsx was not included in file name, add it.
             excel_file_path += ".xlsx"
 
         for f in msword_file_path:  # loop over the files selected, processing each.
             print(f'\nProcessing {green}"{f}"{white}')
-            process_docx(Docx(f, triage))
+            try:
+                process_docx(Docx(f, triage))
+
+            except Exception as docxError:  # If processing a DOCx file raises an error, let the user know, and write it
+                # to the error log.
+                docxErrorCount += 1  # increment error count by 1.
+                filesUnableToProcess.append(f)
+                print(f'{red}error processing {f}. {white}Skipping.')
+                write_error_log(f'Error trying to process {f}. Skipping.\n'
+                                f'Error: {docxError}\n')
             print(f'Finished processing {green}"{f}"{white}. ')
+
+        df = pd.DataFrame(data=doc_summary_worksheet)
+
+        df.to_excel(excel_writer=excel_file_path, sheet_name="Doc_Summary", index=False)
+
+        write_log(f'"Doc_Summary" worksheet written to Excel file.\n\n')
+
+        df = pd.DataFrame(data=metadata_worksheet)
+
+        with pd.ExcelWriter(path=excel_file_path, engine='openpyxl', mode='a') as writer:
+            df.to_excel(excel_writer=writer, sheet_name="metadata", index=False)
+
+        write_log(f'"Metadata" worksheet written to Excel.\n\n')
+
+        if not triage:
+            df = pd.DataFrame(data=archive_files_worksheet)
+
+            with pd.ExcelWriter(path=excel_file_path, engine='openpyxl', mode='a') as writer:
+                df.to_excel(excel_writer=writer, sheet_name="Archive Files", index=False)
+
+            write_log(f'"Archive Files" worksheet written to Excel.\n\n')
+
+            df = pd.DataFrame(data=rsids_worksheet)
+
+            with pd.ExcelWriter(path=excel_file_path, engine='openpyxl', mode='a') as writer:
+                df.to_excel(excel_writer=writer, sheet_name="RSIDs", index=False)
+
+            write_log(f'"RSIDs" worksheet written to Excel.\n\n')
 
         print(f'\n==============================================\n'
               f'Excel output: {green}"{excel_file_path}"{white}\n'
-              f'Log file: {green}"{logFile}"{white}')
+              f'Log file: {green}"{logFile}"{white}\n')
 
-        writelog("Script finished execution: " + time.strftime("%Y-%m-%d_%H:%M:%S") + '\n')
+        write_log("Script finished execution: " + time.strftime("%Y-%m-%d_%H:%M:%S") + '\n')
+
+        if docxErrorCount:  # count greater than 0, meaning there are errors
+            print(f'A total of {red}{docxErrorCount} files{white} could not be processed.')
+            input(f'Press {green}Enter{white} to see a list of the files that could not be processed.')
+            print(f'File(s) that {red}could not be processed{white}:\n')
+
+            for file in filesUnableToProcess:
+                print(f'{red}{file}{white}')
+            input(f'Press {green}Enter{white} to exit application.')
