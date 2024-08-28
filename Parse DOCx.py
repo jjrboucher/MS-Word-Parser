@@ -420,11 +420,12 @@ if __name__ == "__main__":
 
         print(f'\n==============================================\n'
               f'Excel output: {green}"{excel_file_path}"{white}\n'
-              f'Log file: {green}"{logFile}"{white}\n')
+              f'Log file: {green}"{logFile}"{white}')
 
         write_log("Script finished execution: " + time.strftime("%Y-%m-%d_%H:%M:%S") + '\n')
 
         if docxErrorCount:  # count greater than 0, meaning there are errors
+            print(f'Error log file: {red}"{errorLog}"{white}\n==============================================\n')
             print(f'A total of {red}{docxErrorCount} files{white} could not be processed.')
             input(f'Press {green}Enter{white} to see a list of the files that could not be processed.')
             print(f'File(s) that {red}could not be processed{white}:\n')
