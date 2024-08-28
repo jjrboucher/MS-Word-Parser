@@ -1,9 +1,18 @@
 <h1>MS-Word-Parser</h1>
 <h6>
-This script will prompt you for a DOCx file and parse data from it and dump it to an Excel file.
+This script will prompt you for a DOCx file (or several DOCx files if you wish) and parse data from it and dump it to an Excel file. You can either give it a new file name so it creates a new Excel file, or point to an existing Excel file to have the script add to that Excel file. The one caveate is if running the Python version on a Mac, the author has observed that it won't append to an existing Excel file, rather it will overwrite it. But in Windows, it properly appends to an existing Excel file. This allows you to re-run this script against new documents, and add the results to an existing Excel file.
 
-The script does not validate that the file being passed to it is indeed a DOCx. It's up to the user to make sure he/she passes a DOCx.
+The script does not validate that the file(s) being passed to it is/are indeed DOCx. It's up to the user to make sure he/she passes a DOCx file(s).
 
+The script will output data to the command window and uses ASCII escape sequences to add colour to the text. Unfortunately, with the EXE it doesn't work. You will see the escape sequences as text which makes the output look messy. Don't worry, the script is still working as expected.
+
+<h4>Triage Mode</h4>
+When you first execute the script, it will prompt you to run it in either triage mode or full parsing. Triage mode will only create the first two worksheets (doc_summary and RSIDs). The other two worksheets are more technical, and can generate a lot of data (which means longer processing time) that you may not be interested in unless doing a deep dive.
+
+<h4>Log File</h4>
+The script will also create a log file in the same folder as the DOCx file(s) you select to process. The log file is called DOCx_Parser_Log_yyyymmdd_hhmmss.log where yyyymmdd is the date and hhmmss is the time expressed in the computer's local time.
+
+<h4>Excel File</h4>
 The script will do the following processing:
 
 1 - It will extract all the unique RSIDs from the file word/settings.xml and write it to a worksheet
@@ -47,6 +56,11 @@ If the modified time is blank, it will show "nil" for value. Otherwise, it shows
     - paraID<br>
     - textID<br><br>
     And "Count in document.xml" is as the name implies, it's how many times that RSID is present in document.xml.</h6>
+
+<h2>Caveat</h2>
+I have seen where the # of pages and paragraphs was not correct. This was not a problem with the script, but rather with MS Word. When looking at the metadata via the embedded XML files, they were also not accurate (with those inaccurate values accurately extracted by the script). This inaccuracy was also observed in the Details tab when looking at the properties of the document within Windows Explorer. It was only after opening the document and re-saving it did the count update to the correct values. But of course, this modifies the document which is not desireable. Because of this, it is a good practice to make a copy of the document via Windows Explorer copy/paste, and open that one to see if what is being reported is accurate. <br><br>
+
+This doesn't happen often, but it does happen, so it's important to be aware of this.
 
 <h2>Dependencies</h2>
 
