@@ -13,7 +13,7 @@ class Docx:
     xml_files, xml_hash, xml_size
     """
 
-    def __init__(self, msword_file, triage=False):
+    def __init__(self, msword_file, triage=False, hashing=True):
         """
         .docx file to pass to the class
         Triage value can be True or False. If True, will parse less info to execute faster.
@@ -27,6 +27,7 @@ class Docx:
         self.white = f'\033[00m'
         self.green = f'\033[92m'
         self.msword_file = msword_file
+        self.hashing = hashing
         self.header_offsets, self.binary_content = self.__find_binary_string()
         self.extra_fields = self.__xml_extra_bytes()
         self.core_xml_file = "docProps/core.xml"
@@ -300,9 +301,11 @@ class Docx:
         """
         Function that will return the hash of the file itself
         """
-        filehash = hashlib.md5()
-        filehash.update(self.binary_content)
-        return filehash.hexdigest()
+        if self.hashing:  # if hashing option was selected
+            filehash = hashlib.md5()
+            filehash.update(self.binary_content)
+            return filehash.hexdigest()
+        return ""  # if no hashing was selected.
 
     def xml_files(self):
         """
@@ -326,7 +329,11 @@ class Docx:
             for file_info in zip_file.infolist():
                 with zipfile.ZipFile(self.msword_file, 'r') as zip_ref:
                     with zip_ref.open(file_info.filename) as xml_file:
-                        md5hash = hashlib.md5(xml_file.read()).hexdigest()
+                        if self.hashing:  # if hashing option selected
+                            md5hash = hashlib.md5(xml_file.read()).hexdigest()
+                        else:
+                            md5hash = ""  # else return blank for hash value.
+
                 m_time = file_info.date_time
                 if m_time == (1980, 1, 1, 0, 0, 0):
                     modified_time = "nil"

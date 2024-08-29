@@ -1,7 +1,7 @@
 ####################################
 # Written by Jacques Boucher
 # jjrboucher@gmail.com
-# Version Date: 26 August 2024
+# Version Date: 29 August 2024
 #
 # Written in Python 3.11
 #
@@ -78,18 +78,17 @@
 ###################################
 
 from classes.ms_word import Docx
+from functions.ms_word_menu import docx_menu
 from colorama import just_fix_windows_console
 import pandas as pd
 import re
 from sys import exit
 import time
-import tkinter as tk
-from tkinter import filedialog
 
 red = f'\033[91m'
 white = f'\033[00m'
 green = f'\033[92m'
-triage = "no selection"
+triage = False
 just_fix_windows_console()
 docxErrorCount = 0  # tracks how many files it could not process.
 filesUnableToProcess = []  # list of files that produced an error
@@ -97,6 +96,10 @@ doc_summary_worksheet = {}  # contains summary data parsed from each file proces
 metadata_worksheet = {}  # contains the metadata parsed from each file processed
 archive_files_worksheet = {}  # contains the archive files data from each file processed
 rsids_worksheet = {}  # contains the RSID artifacts extracted from each file processed
+process_or_cancel = ""  # variable to capture whether the user clicked to process, or cancel
+logFile = ""
+errorLog = ""
+excel_file_path = ""
 
 
 def process_docx(filename):
@@ -116,6 +119,7 @@ def process_docx(filename):
         write_log(f'**{checkFile} exists? {xml_exists}\n')
 
     # Writing document summary worksheet.
+
     headers = ["File Name", "MD5 Hash", "Unique rsidR", "RSID Root", "<w:p> tags", "<w:r> tags", "<w:t> tags"]
 
     if not bool(doc_summary_worksheet):  # if it's an empty dictionary, add headers to it.
@@ -294,142 +298,91 @@ def write_error_log(text):
     lf.close()
 
 
-def triage_only():
-    global triage
-    root.destroy()
-    triage = True
-
-
-def full_parse():
-    global triage
-    root.destroy()
-    triage = False
-
-
 if __name__ == "__main__":
 
-    # Output file - same path as where the script is run. It will create it if it does not exist,
-    # or append to it if it does.
-    # excel_file_path = "docx-artifacts(class).xlsx"  # default file name - will be created in the script folder.
-    # Create main window
-    root = tk.Tk()
-    root.title("Parsing Option")
+    process_or_cancel, logFile, errorLog, processingOption, hashFiles, excel_file_path, msword_file_path = docx_menu()
 
-    # Create a variable to hold the selected choice
-    var = tk.IntVar()
-
-    # Create radio buttons
-    # option1 = tk.Radiobutton(root, text="Triage Only", variable=var, value=1)
-    # option2 = tk.Radiobutton(root, text="Full Parsing", variable=var, value=2)
-
-    # Create a button to show the selected choice
-    triage_button = tk.Button(root, text="Triage", width=32, bg='yellow', command=triage_only)
-    full_button = tk.Button(root, text="Full Parsing", width=32, bg='green', command=full_parse)
-
-    # Arrange widgets in a grid
-    # option1.grid(row=0, column=0, padx=5, pady=5)
-    # option2.grid(row=0, column=1, padx=5, pady=5)
-    triage_button.grid(row=1, column=0, padx=10, pady=5)
-    full_button.grid(row=2, column=0, padx=10, pady=5)
-
-    # Start the main event loop
-    root.mainloop()
-
-    if triage == "no selection":
-        print(f"{red}No choice made - exiting.{white}")
-        wait = input(f"Press {green}ENTER{white} to exit application...")
+    if process_or_cancel == "CANCEL":
+        print(f'You clicked on {red}CANCEL{white}.')
+        input(f'Press {green}ENTER{white} to exit script.')
+        exit()
+    elif process_or_cancel == "":
+        print(f'You clicked on the {red}X{white} and {red}closed{white} the window.')
+        input(f'Press {green}ENTER{white} to exit script.')
         exit()
 
-    root = tk.Tk()
-    root.withdraw()  # Hide the main window
+    if processingOption == "triage":
+        triage = True
 
-    msword_file_path = filedialog.askopenfilenames(title="Select DOCx file(s) to process", initialdir=".",
-                                                   filetypes=[("DOCx Files", "*.docx")])  # ask for file(s) to process
+    docxPath = msword_file_path[0][0:msword_file_path[0].rindex("/") + 1]  # extract path of DOCx file(s) to process
 
-    if not msword_file_path:  # if no docx file name was selected to process
-        print(f'{red}No DOCx file selected.{white}')
-        wait = input(f"Press {green}ENTER{white} to exit application...")
-    else:
-        docxPath = msword_file_path[0][0:msword_file_path[0].rindex("/") + 1]  # extract path of DOCx file(s) to process
-        # to use as initial directory for Excel output file.
+    logFilesPath = (excel_file_path[0:excel_file_path.rindex("/") + 1])
+    logFile = (logFilesPath + logFile)
 
-        excel_file_path = filedialog.asksaveasfilename(title="Select new or existing XLSX file for output.",
-                                                       initialdir=docxPath, filetypes=[("Excel Files", "*.xlsx")],
-                                                       defaultextension="*.xlsx",
-                                                       confirmoverwrite=True)  # ask for output file
+    errorLog = (logFilesPath + errorLog)
 
-        if not excel_file_path:  # if no output file selected
-            print(f'{red}No output file selected.{white} Exiting.')
-            exit()
+    write_log("Script executed: " + time.strftime("%Y-%m-%d_%H:%M:%S") + '\n')
 
-        timestamp = time.strftime("%Y%m%d_%H%M%S")
-        logFile = (excel_file_path[0:excel_file_path.rindex("/") + 1] + "DOCx_Parser_Log_"
-                   + timestamp + ".log")
-        errorLog = (excel_file_path[0:excel_file_path.rindex("/") + 1] + "DOCx_error_Log_"
-                    + timestamp + ".log")
+    write_log(f'Excel output file: {excel_file_path}\n')
+    write_log(f'\nSummary of files parsed:\n========================\n')
 
-        write_log("Script executed: " + time.strftime("%Y-%m-%d_%H:%M:%S") + '\n')
+    if not re.search(r'\.xlsx$', excel_file_path):  # if .xlsx was not included in file name, add it.
+        excel_file_path += ".xlsx"
 
-        write_log(f'Excel output file: {excel_file_path}\n')
-        write_log(f'\nSummary of files parsed:\n========================\n')
+    for f in msword_file_path:  # loop over the files selected, processing each.
+        print(f'\nProcessing {green}"{f}"{white}')
+        try:
+            process_docx(Docx(f, triage, hashFiles))
 
-        if not re.search(r'\.xlsx$', excel_file_path):  # if .xlsx was not included in file name, add it.
-            excel_file_path += ".xlsx"
+        except Exception as docxError:  # If processing a DOCx file raises an error, let the user know, and write it
+            # to the error log.
+            docxErrorCount += 1  # increment error count by 1.
+            filesUnableToProcess.append(f)
+            print(f'{red}error processing {f}. {white}Skipping.')
+            write_error_log(f'Error trying to process {f}. Skipping.\n'
+                            f'Error: {docxError}\n')
+        print(f'Finished processing {green}"{f}"{white}. ')
 
-        for f in msword_file_path:  # loop over the files selected, processing each.
-            print(f'\nProcessing {green}"{f}"{white}')
-            try:
-                process_docx(Docx(f, triage))
+    df = pd.DataFrame(data=doc_summary_worksheet)
 
-            except Exception as docxError:  # If processing a DOCx file raises an error, let the user know, and write it
-                # to the error log.
-                docxErrorCount += 1  # increment error count by 1.
-                filesUnableToProcess.append(f)
-                print(f'{red}error processing {f}. {white}Skipping.')
-                write_error_log(f'Error trying to process {f}. Skipping.\n'
-                                f'Error: {docxError}\n')
-            print(f'Finished processing {green}"{f}"{white}. ')
+    df.to_excel(excel_writer=excel_file_path, sheet_name="Doc_Summary", index=False)
 
-        df = pd.DataFrame(data=doc_summary_worksheet)
+    write_log(f'"Doc_Summary" worksheet written to Excel file.\n\n')
 
-        df.to_excel(excel_writer=excel_file_path, sheet_name="Doc_Summary", index=False)
+    df = pd.DataFrame(data=metadata_worksheet)
 
-        write_log(f'"Doc_Summary" worksheet written to Excel file.\n\n')
+    with pd.ExcelWriter(path=excel_file_path, engine='openpyxl', mode='a') as writer:
+        df.to_excel(excel_writer=writer, sheet_name="metadata", index=False)
 
-        df = pd.DataFrame(data=metadata_worksheet)
+    write_log(f'"Metadata" worksheet written to Excel.\n\n')
+
+    if not triage:
+        df = pd.DataFrame(data=archive_files_worksheet)
 
         with pd.ExcelWriter(path=excel_file_path, engine='openpyxl', mode='a') as writer:
-            df.to_excel(excel_writer=writer, sheet_name="metadata", index=False)
+            df.to_excel(excel_writer=writer, sheet_name="Archive Files", index=False)
 
-        write_log(f'"Metadata" worksheet written to Excel.\n\n')
+        write_log(f'"Archive Files" worksheet written to Excel.\n\n')
 
-        if not triage:
-            df = pd.DataFrame(data=archive_files_worksheet)
+        df = pd.DataFrame(data=rsids_worksheet)
 
-            with pd.ExcelWriter(path=excel_file_path, engine='openpyxl', mode='a') as writer:
-                df.to_excel(excel_writer=writer, sheet_name="Archive Files", index=False)
+        with pd.ExcelWriter(path=excel_file_path, engine='openpyxl', mode='a') as writer:
+            df.to_excel(excel_writer=writer, sheet_name="RSIDs", index=False)
 
-            write_log(f'"Archive Files" worksheet written to Excel.\n\n')
+        write_log(f'"RSIDs" worksheet written to Excel.\n\n')
 
-            df = pd.DataFrame(data=rsids_worksheet)
+    print(f'\n==============================================\n'
+          f'Excel output: {green}"{excel_file_path}"{white}\n'
+          f'Log file: {green}"{logFile}"{white}')
 
-            with pd.ExcelWriter(path=excel_file_path, engine='openpyxl', mode='a') as writer:
-                df.to_excel(excel_writer=writer, sheet_name="RSIDs", index=False)
+    write_log("Script finished execution: " + time.strftime("%Y-%m-%d_%H:%M:%S") + '\n')
 
-            write_log(f'"RSIDs" worksheet written to Excel.\n\n')
+    if docxErrorCount:  # count greater than 0, meaning there are errors
+        print(f'Error log file: {red}"{errorLog}"{white}\n==============================================\n')
+        print(f'A total of {red}{docxErrorCount} files{white} could not be processed.')
+        input(f'Press {green}Enter{white} to see a list of the files that could not be processed.')
+        print(f'File(s) that {red}could not be processed{white}:\n')
 
-        print(f'\n==============================================\n'
-              f'Excel output: {green}"{excel_file_path}"{white}\n'
-              f'Log file: {green}"{logFile}"{white}')
-
-        write_log("Script finished execution: " + time.strftime("%Y-%m-%d_%H:%M:%S") + '\n')
-
-        if docxErrorCount:  # count greater than 0, meaning there are errors
-            print(f'Error log file: {red}"{errorLog}"{white}\n==============================================\n')
-            print(f'A total of {red}{docxErrorCount} files{white} could not be processed.')
-            input(f'Press {green}Enter{white} to see a list of the files that could not be processed.')
-            print(f'File(s) that {red}could not be processed{white}:\n')
-
-            for file in filesUnableToProcess:
-                print(f'{red}{file}{white}')
-            input(f'Press {green}Enter{white} to exit application.')
+        for file in filesUnableToProcess:
+            print(f'{red}{file}{white}')
+        input(f'Press {green}Enter{white} to exit application.')
