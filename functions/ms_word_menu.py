@@ -145,11 +145,18 @@ def docx_menu():
         if file_paths:
             docx_files = list(file_paths)
             num_files_label.config(text=f"{len(docx_files)} file(s) selected", foreground="green")
+
             for widget in scrollable_frame.winfo_children():
                 widget.destroy()
-            for file in docx_files:
-                file_label = ttk.Label(scrollable_frame, text=file, wraplength=780, anchor="w",
-                                       justify="left")  # Adjusted wraplength
+
+            if len(docx_files) < 1001:  # if too many files, it causes a problem to display them.
+                for file in docx_files:
+                    file_label = ttk.Label(scrollable_frame, text=file, wraplength=780, anchor="w",
+                                           justify="left")  # Adjusted wraplength
+                    file_label.pack(fill="x", pady=2)
+            else:
+                file_label = ttk.Label(scrollable_frame, text="Too many files to list...", wraplength=780, anchor="w",
+                                       justify="left")
                 file_label.pack(fill="x", pady=2)
             update_process_button_state()
 
