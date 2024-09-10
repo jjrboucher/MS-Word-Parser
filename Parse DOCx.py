@@ -1,7 +1,8 @@
 ####################################
 # Written by Jacques Boucher
 # jjrboucher@gmail.com
-# Version Date: 29 August 2024
+# Version Date: 10 September 2024
+version="10 September 2024"
 #
 # Written in Python 3.11
 #
@@ -78,7 +79,8 @@
 ###################################
 
 from classes.ms_word import Docx
-from functions.ms_word_menu import docx_menu
+from functions.ms_word_menu import docx_menu, error_log_file
+from functions.Display_Output import output_menu
 from colorama import just_fix_windows_console
 import pandas as pd
 import re
@@ -321,7 +323,9 @@ if __name__ == "__main__":
 
     errorLog = (logFilesPath + errorLog)
 
-    write_log("Script executed: " + time.strftime("%Y-%m-%d_%H:%M:%S") + '\n')
+    script_start = time.strftime("%Y-%m-%d_%H:%M:%S")
+    write_log("Script executed: " + script_start + '\n')
+    write_log("Version: " + version + '\n')
 
     write_log(f'Excel output file: {excel_file_path}\n')
     write_log(f'\nSummary of files parsed:\n========================\n')
@@ -371,18 +375,15 @@ if __name__ == "__main__":
 
         write_log(f'"RSIDs" worksheet written to Excel.\n\n')
 
-    print(f'\n==============================================\n'
-          f'Excel output: {green}"{excel_file_path}"{white}\n'
-          f'Log file: {green}"{logFile}"{white}')
+    script_end = time.strftime("%Y-%m-%d_%H:%M:%S")
 
-    write_log("Script finished execution: " + time.strftime("%Y-%m-%d_%H:%M:%S") + '\n')
+    if docxErrorCount > 0:
+        errorFile = error_log_file
+    else:
+        errorFile = "nil - no errors"
 
-    if docxErrorCount:  # count greater than 0, meaning there are errors
-        print(f'Error log file: {red}"{errorLog}"{white}\n==============================================\n')
-        print(f'A total of {red}{docxErrorCount} files{white} could not be processed.')
-        input(f'Press {green}Enter{white} to see a list of the files that could not be processed.')
-        print(f'File(s) that {red}could not be processed{white}:\n')
+    output_menu(log_file=logFile, error_log_file=errorFile, folder=docxPath, file_count=len(msword_file_path),
+                file_error_count=docxErrorCount, excel_file=excel_file_path,
+                start_time=script_start, end_time=script_end)
 
-        for file in filesUnableToProcess:
-            print(f'{red}{file}{white}')
-        input(f'Press {green}Enter{white} to exit application.')
+    write_log("Script finished execution: " + script_end + '\n')
