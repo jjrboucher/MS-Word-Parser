@@ -1,8 +1,17 @@
+from classes.ms_word import Docx
+from functions.ms_word_menu import docx_menu
+from functions.Display_Output import output_menu
+from colorama import just_fix_windows_console
+import pandas as pd
+import re
+from sys import exit
+import time
+
 ####################################
 # Written by Jacques Boucher
 # jjrboucher@gmail.com
 # Version Date: 10 September 2024
-version="10 September 2024"
+version = "11 September 2024"
 #
 # Written in Python 3.11
 #
@@ -77,15 +86,6 @@ version="10 September 2024"
 # significantly increase the speed of execution.
 #
 ###################################
-
-from classes.ms_word import Docx
-from functions.ms_word_menu import docx_menu, error_log_file
-from functions.Display_Output import output_menu
-from colorama import just_fix_windows_console
-import pandas as pd
-import re
-from sys import exit
-import time
 
 red = f'\033[91m'
 white = f'\033[00m'
@@ -378,7 +378,7 @@ if __name__ == "__main__":
     script_end = time.strftime("%Y-%m-%d_%H:%M:%S")
 
     if docxErrorCount > 0:
-        errorFile = error_log_file
+        errorFile = errorLog
     else:
         errorFile = "nil - no errors"
 

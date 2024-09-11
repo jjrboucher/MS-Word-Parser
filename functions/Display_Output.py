@@ -33,26 +33,28 @@ def output_menu(log_file, error_log_file, folder, file_count, file_error_count, 
     folder_label = ttk.Label(input_frame, text="Path to files processed: ", style="TLabel")
     folder_label.grid(row=0, column=0, sticky="W", padx=5)
 
-    folder_value_label = ttk.Label(input_frame, foreground="green",font=("bold"), text=folder, style="TLabel")
+    folder_value_label = ttk.Label(input_frame, foreground="green", font="bold", text=folder, style="TLabel")
     folder_value_label.grid(row=0, column=1, sticky="W", padx=5)
 
     # Display the file processing summary log file path in the first child frame
     file_count_label = ttk.Label(input_frame, text="# of files submitted for processing:", style="TLabel")
     file_count_label.grid(row=1, column=0, sticky="W", padx=5)
 
-    file_count_value_label = ttk.Label(input_frame, foreground="green",font=("Arial", 12, "bold"), text=file_count, style="TLabel")
+    file_count_value_label = ttk.Label(input_frame, foreground="green", font=("Arial", 12, "bold"),
+                                       text=file_count, style="TLabel")
     file_count_value_label.grid(row=1, column=1, sticky="W", padx=5)
 
     file_error_count_label = ttk.Label(input_frame, text="# of files not processed due to an error:", style="TLabel")
     file_error_count_label.grid(row=2, column=0, sticky="W", padx=5)
 
-    file_error_count_value_label = ttk.Label(input_frame, foreground="red",font=("Arial", 12, "bold"), text=file_error_count, style="TLabel")
+    file_error_count_value_label = ttk.Label(input_frame, foreground="red", font=("Arial", 12, "bold"),
+                                             text=file_error_count, style="TLabel")
     file_error_count_value_label.grid(row=2, column=1, sticky="W", padx=5)
 
     results_label = ttk.Label(input_frame, text="Excel output file: ", style="TLabel")
     results_label.grid(row=3, column=0, sticky="W", padx=5)
 
-    results_value_label = ttk.Label(input_frame, foreground="green", font=("bold"), text=excel_file, style="TLabel")
+    results_value_label = ttk.Label(input_frame, foreground="green", font="bold", text=excel_file, style="TLabel")
     results_value_label.grid(row=3, column=1, sticky="W", padx=5)
 
     # Create the second child frame within the parent frame for Log Files
@@ -63,14 +65,15 @@ def output_menu(log_file, error_log_file, folder, file_count, file_error_count, 
     log_file_label = ttk.Label(log_frame, text="Log File:", style="TLabel")
     log_file_label.grid(row=0, column=0, sticky="W", padx=5)
 
-    log_file_value_label = ttk.Label(log_frame, foreground="green",font=("bold"), text=log_file, style="TLabel")
+    log_file_value_label = ttk.Label(log_frame, foreground="green", font="bold", text=log_file, style="TLabel")
     log_file_value_label.grid(row=0, column=1, sticky="W", padx=5)
 
     # Display the error log file path in the third child frame
     error_log_file_label = ttk.Label(log_frame, text="Error Log File (if applicable):", style="TLabel")
     error_log_file_label.grid(row=1, column=0, sticky="W", padx=5)
 
-    error_log_file_value_label = ttk.Label(log_frame, foreground="red",font=("bold"), text=error_log_file, style="TLabel")
+    error_log_file_value_label = ttk.Label(log_frame, foreground="red", font="bold",
+                                           text=error_log_file, style="TLabel")
     error_log_file_value_label.grid(row=1, column=1, sticky="W", padx=5)
 
     # Create the third child frame within the parent frame for execution time
@@ -94,7 +97,6 @@ def output_menu(log_file, error_log_file, folder, file_count, file_error_count, 
 
     end_time_value_label = ttk.Label(execution_frame, foreground="green", text=end_time, style="TLabel")
     end_time_value_label.grid(row=1, column=1, sticky="W", padx=5)
-
 
     # Create and place "EXIT" button at the bottom of the main frame
 
