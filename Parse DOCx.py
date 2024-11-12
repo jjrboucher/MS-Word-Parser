@@ -11,7 +11,7 @@ import time
 # Written by Jacques Boucher
 # jjrboucher@gmail.com
 # Version Date: 10 September 2024
-version = "11 September 2024"
+version = "12 November 2024"
 #
 # Written in Python 3.11
 #

@@ -435,7 +435,7 @@ class Docx:
         """
         :return: the last printed date metadata from core.xml
         """
-        doc_lastprinted = re.search(r'<.{0,2}:?astPrinted>(.*?)</.{0,2}:?lastPrinted>', self.core_xml_content)
+        doc_lastprinted = re.search(r'<.{0,2}:?lastPrinted>(.*?)</.{0,2}:?lastPrinted>', self.core_xml_content)
         return "" if doc_lastprinted is None else doc_lastprinted.group(1)
 
     def category(self):
