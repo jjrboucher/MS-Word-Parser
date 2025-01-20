@@ -1,6 +1,8 @@
 import hashlib
 import re
 import zipfile
+from tokenize import String
+import xml.etree.ElementTree as ET
 
 
 class Docx:
@@ -35,7 +37,10 @@ class Docx:
         self.app_xml_file = "docProps/app.xml"
         self.app_xml_content = self.__load_app_xml()
         self.document_xml_file = "word/document.xml"
+        self.got_comments = ""  # Flag to denote if there are comments in the document.
         self.document_xml_content = self.__load_document_xml()
+        self.comments = "word/comments.xml"
+        self.comments_xml_content = self.__load_comments_xml()
         self.settings_xml_file = "word/settings.xml"
         self.settings_xml_content = self.__load_settings_xml()
         self.rsidRs = self.__extract_all_rsidr_from_summary_xml()
@@ -620,6 +625,57 @@ class Docx:
 
     def text_id_tags(self):
         return self.text_id
+
+    def __load_comments_xml(self):
+        # load comments.xml
+        if self.comments in self.xml_files():  # if the file exists, read it and return its content
+            self.got_comments = True
+            with zipfile.ZipFile(self.msword_file, 'r') as zipref:
+                with zipref.open(self.comments) as xmlFile:
+                    return xmlFile.read().decode("utf-8")
+        else:  # if it doesn't exist, return an empty string.
+            self.got_comments = False
+            return ""
+
+    def get_comments(self):
+        """"
+        return the list all_comments that contains the following:
+            comment ID #,
+            Timestamp,
+            Author,
+            Initials,
+            Text
+        :return:
+        """
+
+        if not self.got_comments:  # There are no comments
+            return ["", "", "", "", ""]
+        xml = ET.fromstring(self.comments_xml_content)
+
+        namespaces = {
+            'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',  # Main namespace
+            'w14': 'http://schemas.microsoft.com/office/word/2010/wordml',  # Other used namespace
+            'wp': 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing'
+        }
+
+        # Find all comments
+        comments = xml.findall('.//w:comment', namespaces)
+
+        all_comments = []  # list to contain all comments
+
+        for comment in comments:
+            author = comment.get("{"+namespaces['w']+"}"+"author")
+            timestamp = comment.get("{"+namespaces['w']+"}"+"date")
+            initials = comment.get("{"+namespaces['w']+"}"+"initials")
+            comment_id = comment.get("{"+namespaces['w']+"}"+"id")
+            text = ''.join([t.text for t in comment.findall('.//w:t', namespaces)])
+
+            all_comments.append([comment_id, timestamp, author, initials, text])
+
+        return all_comments
+
+    def any_comments(self):
+        return self.got_comments
 
     def __str__(self):
         """

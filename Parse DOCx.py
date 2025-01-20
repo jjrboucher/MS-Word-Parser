@@ -98,6 +98,7 @@ doc_summary_worksheet = {}  # contains summary data parsed from each file proces
 metadata_worksheet = {}  # contains the metadata parsed from each file processed
 archive_files_worksheet = {}  # contains the archive files data from each file processed
 rsids_worksheet = {}  # contains the RSID artifacts extracted from each file processed
+comments_worksheet = {}  # contains the comments within each file processed
 process_or_cancel = ""  # variable to capture whether the user clicked to process, or cancel
 logFile = ""
 errorLog = ""
@@ -111,7 +112,8 @@ def process_docx(filename):
     then loop through them, calling this function for each DOCx file.
     """
 
-    global excel_file_path, triage, doc_summary_worksheet, metadata_worksheet, archive_files_worksheet, rsids_worksheet
+    global excel_file_path, triage, doc_summary_worksheet, metadata_worksheet, archive_files_worksheet, \
+        rsids_worksheet, comments_worksheet
 
     write_log(f'{filename.__str__()}\n')
 
@@ -178,6 +180,22 @@ def process_docx(filename):
     metadata_worksheet[headers[25]].append(filename.content_status())
 
     print(f'Extracted {green}metadata{white} artifacts')
+
+    if filename.any_comments():  # checks if there are comments
+        headers = ['File Name', 'Comment ID #', 'Timestamp (UTC)', 'Author', 'Initials', 'Comment']
+        if not bool(comments_worksheet):  # if it's an empty dictionary, add headers to it.
+            comments_worksheet = dict((k, []) for k in headers)
+
+        for comment in filename.get_comments():
+            print(f'processing comment: {comment}')
+            comments_worksheet[headers[0]].append(filename.filename())  # Filename
+            comments_worksheet[headers[1]].append(comment[0])  # ID
+            comments_worksheet[headers[2]].append(comment[1])  # Timestamp
+            comments_worksheet[headers[3]].append(comment[2])  # Author
+            comments_worksheet[headers[4]].append(comment[3])  # Initials
+            comments_worksheet[headers[5]].append(comment[4])  # Text
+
+        print(f'Extracted {green}comments{white} artifacts')
 
     if not triage:  # will generate these spreadsheet if not triage
         print(f'Updating {green}"Archive Files"{white} worksheet in "{excel_file_path}"')
@@ -356,7 +374,7 @@ if __name__ == "__main__":
     df = pd.DataFrame(data=metadata_worksheet)
 
     with pd.ExcelWriter(path=excel_file_path, engine='openpyxl', mode='a') as writer:
-        df.to_excel(excel_writer=writer, sheet_name="metadata", index=False)
+        df.to_excel(excel_writer=writer, sheet_name="Metadata", index=False)
 
     write_log(f'"Metadata" worksheet written to Excel.\n\n')
 
@@ -374,6 +392,13 @@ if __name__ == "__main__":
             df.to_excel(excel_writer=writer, sheet_name="RSIDs", index=False)
 
         write_log(f'"RSIDs" worksheet written to Excel.\n\n')
+
+    df = pd.DataFrame(data=comments_worksheet)
+
+    with pd.ExcelWriter(path=excel_file_path, engine='openpyxl', mode='a') as writer:
+        df.to_excel(excel_writer=writer, sheet_name="Comments", index=False)
+
+    write_log(f'"Metadata" worksheet written to Excel.\n\n')
 
     script_end = time.strftime("%Y-%m-%d_%H:%M:%S")
 
