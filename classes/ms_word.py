@@ -116,7 +116,10 @@ class Docx:
             filename_start = offset + 30
             filename_end = offset + 30 + filename_len
 
-            filename = self.binary_content[filename_start:filename_end].decode('ascii')  # decode filename as ASCII
+            if filename_end - filename_start < 256:  # some DOCx files somehow produce false positives of
+                # excessively long filenames and results in an error. This avoids that error.
+                filename = self.binary_content[filename_start:filename_end].decode('ascii')  # decode filename as ASCII
+
 
             extrafield_len = int.from_bytes(self.binary_content[
                                             zip_header["extra field length"][0] + offset:
@@ -328,6 +331,7 @@ class Docx:
         """
         month = {1: "Jan", 2: "Feb", 3: "Mar", 4: "Apr", 5: "May", 6: "Jun",
                  7: "Jul", 8: "Aug", 9: "Sep", 10: "Oct", 11: "Nov", 12: "Dec"}
+
         with zipfile.ZipFile(self.msword_file, 'r') as zip_file:
             # returns XML files in the DOCx
             xml_files = {}
@@ -340,7 +344,8 @@ class Docx:
                             md5hash = ""  # else return blank for hash value.
 
                 m_time = file_info.date_time
-                if m_time == (1980, 1, 1, 0, 0, 0):
+
+                if m_time == (1980, 1, 1, 0, 0, 0) or m_time == (1980, 0, 0 , 0, 0, 0):
                     modified_time = "nil"
                 else:
                     modified_time = str(m_time[0]) + "-" + month[m_time[1]] + "-" + str("%02d" % m_time[2]) + " " + str(
@@ -357,6 +362,7 @@ class Docx:
                                                  self.extra_fields[file_info.filename][0],
                                                  self.extra_fields[file_info.filename][1]
                                                  ]
+
             return xml_files  # returns dictionary {xml_filename: [file size, file hash]}
 
     def xml_hash(self, xmlfile):
