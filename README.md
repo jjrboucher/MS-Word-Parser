@@ -57,6 +57,10 @@ If the modified time is blank, it will show "nil" for value. Otherwise, it shows
     - textID<br><br>
     And "Count in document.xml" is as the name implies, it's how many times that RSID is present in document.xml.</h6>
 
+5 - It will extract any comments metadata from word/comments.xml and write it to a worksheet called Comments.
+    In this worksheet, it will save the following information to rows:
+    "File Name", "ID", "Timestamp", "Author", "Initials", "Text"<br><br>
+
 <h2>Caveat</h2>
 I have seen where the # of pages and paragraphs was not correct. This was not a problem with the script, but rather with MS Word. When looking at the metadata via the embedded XML files, they were also not accurate (with those inaccurate values accurately extracted by the script). This inaccuracy was also observed in the Details tab when looking at the properties of the document within Windows Explorer. It was only after opening the document and re-saving it did the count update to the correct values. But of course, this modifies the document which is not desireable. Because of this, it is a good practice to make a copy of the document via Windows Explorer copy/paste, and open that one to see if what is being reported is accurate. <br><br>
 
