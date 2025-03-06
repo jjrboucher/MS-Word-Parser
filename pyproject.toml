@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+exclude = ["debian*", "binaries*", "build*", "dist*"]
+
+[project]
+name = "ms-word-parser"
+version = "2.0.0"
+dependencies = [
+    "PyQt6",
+    "pandas"
+]
+requires-python = ">=3.9"
+authors = [
+  {name = "Jacques Boucher (jjrboucher)", email = "jjrboucher@gmail.com"}
+]
+maintainers = [
+  {name = "Jacques Boucher (jjrboucher)", email = "jjrboucher@gmail.com"}
+]
+description = "MS Word DOCx Parsing Tool"
+readme = "README.md"
+keywords = ["digital forensics", "dfir", "word", "docx", "parse"]
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Programming Language :: Python :: 3",
+  "Operating System :: OS Independent"
+]
+
+[project.urls]
+Homepage = "https://github.com/jjrboucher/MS-Word-Parser"
+References = "https://github.com/jjrboucher/MS-Word-Parser/tree/master/Resources"
+
+[project.scripts]
+parse-docx = "ms_word_parser.parse_docx:main"
