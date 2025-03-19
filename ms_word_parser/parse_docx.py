@@ -4,53 +4,69 @@
 # jjrboucher@gmail.com
 #
 # ********** Description **********
-#
-# Script will open a windows dialog to allow you to select a DOCx file.
-# The script does not attempt to validate the file.
-# A docx file is nothing more than a ZIP file, hence why this script uses the zipfile library.
-#
-# It will extract the results to a file called docx-artifacts.xlsx as defined by the variable excel_file_path at the
-# start of the main part of the script.
-# If the file does not exist, it creates it. If the file does exist, it appends to it.
-# The file will be located in the folder where the script is executed from.
-# If executing from the GUI by double-clicking on the .py file, it should be stored in that same folder.
-# If executing it from the command line, it will create it in whichever folder you are in when executing it.
-#
-# This allows you to run this repeatedly against many DOCx file for an investigation and compare them.
-# You can then copy/move/rename the default file, docx-artifacts.xlsx to another file name for your case.
-#
-# Processes that this script will do:
-#
-# 1 - It will extract a list of all the files within the zip file and save it to a worksheet called XML_files.
-#     In this worksheet, it will save the following information to a row:
-#     "File Name", "XML", "Size (bytes)", "MD5Hash"
-#
-# 2 - It will extract all the unique RSIDs from the file word/settings.xml and write it to a worksheet
-#     called doc_summary.
-#     In this worksheet, it will save the following information to a row:
-#     "File Name", "Unique rsidR", "RSID Root", "<w:p> tags", "<w:r> tags", "<w:t> tags"
-#     Where "Unique RSID" is a numerical count of the # of RSIDs in the file settings.xml.
-#
-#     What is an RSID (Revision Save ID)?
-#     See https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.rsid?view=openxml-2.8.1
-#
-# 3 - It will extract all the unique RSIDs from the file word/settings.xml and write it to a worksheet called RSIDs,
-#     along with a count of how many times that RSID is in document.xml
-#     It will also search document.xml for all unique rsidRPr, rsidP, and rsidRDefault values and count of how many
-#     are in document.xml.
-#     It also extracts the unique paraId and textId tags from the <w:p> tag and saves the values and count of how
-#     many are in document.xml.
-#     In this worksheet, it will save the following information to rows (one for each unique RSID):
-#     "File Name", "RSID Type", "RSID Value", "Count in document.xml"
-#
-# 3 - It will extract all known relevant metadata from the files docProps/app.xml and docProps/core.xml
-#     and write it to a worksheet called metadata.
-#     In this worksheet, it will save the following information to a row:
-#     "File Name", "Author", "Created Date","Last Modified By","Modified Date","Last Printed Date","Manager","Company",
-#     "Revision","Total Editing Time","Pages","Paragraphs","Lines","Words","Characters","Characters With Spaces",
-#     "Title","Subject","Keywords","Description","Application","App Version","Template","Doc Security","Category",
-#     "contentStatus"
-#
+"""The script does not attempt to validate the loaded file.
+A docx file is nothing more than a ZIP file, hence why this script uses the zipfile library.
+
+It will extract the results to an Excel file in a location, and with a name, both defined by you.
+If the file does not exist, it creates it. If the file does exist, it will overwrite it.
+You will have the option to load a single file, or load a directory. If you select directory,
+you will be prompted to decide if you'd like the script to recursively load all files from that path.
+This allows you to run this against many DOCx files at once for an investigation and compare results.
+
+Usage:
+
+- First, click File - Select Excel File. This will be the file containing the output. If it exists,
+  it will be overwritten. If not, it will be created.
+  
+- Second, click File - Open Files ... or Open Directory ..., depending on what you'd like to do.
+  Again, if you select a directory, you will be asked if you'd like to recursively load all files.
+  
+- Third, choose your processing options: Triage or Full.
+  Triage will give cursory information about the document and the metadata contained within, as well as any
+  comments.
+  Full will do a full analysis of the document, including looking at RSID's and determining uniqueness,
+  and examining w:p, w:r, and w:t tags.
+  
+  You also have the option to Hash the file and the contents of the file (ie: the files in the zip). 
+  This will generate an MD5 Hash for each value.
+  
+- Fourth, click Process at the bottom left of the Window. The output will be placed both in the Processing
+  Status window on the right, and in a log file named DOCx_Parser_Log_<date_time>.log in the same path
+  as the Excel document. The date_time value, and subsequently the log name, are determined at launch,
+  but the log file will only be created once an Excel document is chosen and files are selected, even
+  if the Process button is not selected.
+
+Processes that this script will do:
+
+1 - It will extract a list of all the files within the zip file and save it to a worksheet called XML_files.
+    In this worksheet, it will save the following information to a row:
+    "File Name", "XML", "Size (bytes)", "MD5Hash"
+
+2 - It will extract all the unique RSIDs from the file word/settings.xml and write it to a worksheet
+    called doc_summary.
+    In this worksheet, it will save the following information to a row:
+    "File Name", "Unique rsidR", "RSID Root", "<w:p> tags", "<w:r> tags", "<w:t> tags"
+    Where "Unique RSID" is a numerical count of the of RSIDs in the file settings.xml.
+
+    What is an RSID (Revision Save ID)?
+    See https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.rsid?view=openxml-2.8.1
+
+3 - It will extract all the unique RSIDs from the file word/settings.xml and write it to a worksheet
+    called RSIDs, along with a count of how many times that RSID is in document.xml
+    It will also search document.xml for all unique rsidRPr, rsidP, and rsidRDefault values and count 
+    of how many are in document.xml.
+    It also extracts the unique paraId and textId tags from the <w:p> tag and saves the values and count
+    of how many are in document.xml.
+    In this worksheet, it will save the following information to rows (one for each unique RSID):
+    "File Name", "RSID Type", "RSID Value", "Count in document.xml"
+
+4 - It will extract all known relevant metadata from the files docProps/app.xml and docProps/core.xml
+    and write it to a worksheet called metadata.
+    In this worksheet, it will save the following information to a row:
+    "File Name", "Author", "Created Date", "Last Modified By", "Modified Date", "Last Printed Date",
+    "Manager", "Company", "Revision", "Total Editing Time", "Pages", "Paragraphs", "Lines", "Words",
+    "Characters", "Characters With Spaces", "Title", "Subject", "Keywords", "Description", "Application",
+    "App Version", "Template", "Doc Security", "Category", "contentStatus" """
 # ********** Possible future enhancements **********
 
 
@@ -79,11 +95,11 @@ from PyQt6.QtCore import (
 from PyQt6.QtGui import (
     QAction,
     QColor,
+    QDesktopServices,
     QFont,
+    QGuiApplication,
     QIcon,
     # QImage,
-    QDesktopServices,
-    QGuiApplication,
     QKeySequence,
 )
 from PyQt6.QtWidgets import (
@@ -98,11 +114,14 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QFileDialog,
     QGridLayout,
+    QPlainTextEdit,
     QPushButton,
     QRadioButton,
     QTextEdit,
+    QVBoxLayout,
     QWidget,
 )
+
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 filesUnableToProcess = []  # list of files that produced an error
 doc_summary_worksheet = {}  # contains summary data parsed from each file processed
@@ -119,8 +138,10 @@ black = QColor(0, 0, 0)
 __version__ = "2.0.0"
 __appname__ = f"MS Word Parser v{__version__}"
 __source__ = "https://github.com/jjrboucher/MS-Word-Parser"
-__date__ = "6 March 2025"
-__author__ = "Jacques Boucher - jjrboucher@gmail.com"
+__date__ = "19 March 2025"
+__author__ = (
+    "Jacques Boucher - jjrboucher@gmail.com\nCorey Forman - corey@digitalsleuth.ca"
+)
 
 
 class AboutWindow(QWidget):
@@ -138,8 +159,33 @@ class AboutWindow(QWidget):
         layout.addWidget(self.urlLabel, 1, 0)
         layout.addWidget(self.logoLabel, 0, 2)
         self.setStyleSheet("background-color: white; color: black;")
-        self.setFixedHeight(100)
-        self.setFixedWidth(350)
+        self.setFixedSize(350, 140)
+        screen = QApplication.primaryScreen()
+        screen_geometry = screen.geometry()
+        x = (screen_geometry.width() - self.width()) // 2
+        y = (screen_geometry.height() - self.height()) // 2
+        self.move(x, y)
+        self.setLayout(layout)
+
+
+class ContentsWindow(QWidget):
+    """Sets the structure for the Contents window"""
+
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Contents")
+        self.setFixedSize(600, 800)
+        self.text_edit = QPlainTextEdit()
+        self.text_edit.setReadOnly(True)
+        self.text_edit.setPlainText(__doc__)
+        self.text_edit.setStyleSheet("padding: 0px;")
+        layout = QVBoxLayout()
+        layout.addWidget(self.text_edit)
+        screen = QApplication.primaryScreen()
+        screen_geometry = screen.geometry()
+        x = (screen_geometry.width() - self.width()) // 2
+        y = (screen_geometry.height() - self.height()) // 2
+        self.move(x, y)
         self.setLayout(layout)
 
 
@@ -160,7 +206,7 @@ class UiDialog:
             "%(asctime)s | %(levelname)-8s | %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S",
         )
-        if os.sys.platform == 'win32':
+        if os.sys.platform == "win32":
             font_size = 10
         else:
             font_size = 9
@@ -200,6 +246,7 @@ class UiDialog:
         self.actionAbout.triggered.connect(self._about)
         self.actionContents = QAction(MainWindow)
         self.actionContents.setObjectName("actionContents")
+        self.actionContents.triggered.connect(self._contents)
         self.centralwidget = QWidget(MainWindow)
         self.centralwidget.setObjectName("centralwidget")
         self.parsingOptions = QGroupBox(self.centralwidget)
@@ -222,14 +269,16 @@ class UiDialog:
         self.separator.setFrameShape(QFrame.Shape.Box)
         self.separator.setFrameShadow(QFrame.Shadow.Plain)
         self.separator.setGeometry(QRect(220, 20, 6, 60))
-        self.separator.setStyleSheet("""
+        self.separator.setStyleSheet(
+            """
             QFrame {
                 border-top: white;
                 border-bottom: white;
                 border-left: 1px solid #e4e4e4;
                 border-right: 1px solid #e4e4e4;
             }
-        """)
+        """
+        )
         self.hashFiles = QCheckBox(self.parsingOptions)
         self.hashFiles.setObjectName("hashFiles")
         self.hashFiles.setGeometry(QRect(250, 30, 75, 20))
@@ -252,9 +301,7 @@ class UiDialog:
             Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft
         )
         self.excelFile.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
-        self.excelFile.setVerticalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
-        )
+        self.excelFile.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.excelFile.setHorizontalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAlwaysOff
         )
@@ -280,7 +327,7 @@ class UiDialog:
         self.generalLogFile.setHorizontalScrollBarPolicy(
             Qt.ScrollBarPolicy.ScrollBarAlwaysOff
         )
-        self.generalLogFile.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)        
+        self.generalLogFile.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
         self.outputPathLabel = QLabel(self.outputFiles)
         self.outputPathLabel.setObjectName("outputPathLabel")
         self.outputPathLabel.setGeometry(QRect(10, 92, 80, 16))
@@ -388,6 +435,12 @@ class UiDialog:
             Qt.ScrollBarPolicy.ScrollBarAlwaysOff
         )
         self.numOfErrors.setFont(self.text_font)
+        self.resetButton = QPushButton(self.processStatus)
+        self.resetButton.setObjectName("resetButton")
+        self.resetButton.setGeometry(QRect(672, 29, 80, 24))
+        self.resetButton.setFont(self.text_font)
+        self.resetButton.setStyleSheet(self.stylesheet)
+        self.resetButton.clicked.connect(self._reset)
         MainWindow.setCentralWidget(self.centralwidget)
         self.menubar = QMenuBar(MainWindow)
         self.menubar.setObjectName("menubar")
@@ -460,6 +513,9 @@ class UiDialog:
         )
         self.processStatus.setTitle(
             QCoreApplication.translate("MainWindow", "Processing Status", None)
+        )
+        self.resetButton.setText(
+            QCoreApplication.translate("MainWindow", "Reset", None)
         )
         self.processButton.setText(
             QCoreApplication.translate("MainWindow", "Process", None)
@@ -573,6 +629,24 @@ class UiDialog:
         if out_path:
             QDesktopServices.openUrl(QUrl.fromLocalFile(out_path))
 
+    def _reset(self):
+        global timestamp, log_file
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        log_file = f"DOCx_Parser_Log_{timestamp}.log"
+        self.excelFile.setText("File -> Select Excel File")
+        self.generalLogFile.setText(log_file)
+        self.outputPath.clear()
+        self.numOfFiles.setText("0")
+        self.numOfErrors.setText("0")
+        self.docxOutput.setTextColor(black)
+        self.docxOutput.clear()
+        self.processButton.setEnabled(False)
+        self.processButton.setStyleSheet("background: white; color: grey")
+        self.openButton.setEnabled(False)
+        self.openButton.setStyleSheet("background: white; color: grey")
+        self.actionOpen_File.setVisible(False)
+        self.actionOpen_Directory.setVisible(False)
+
     def _about(self):
         self.aboutWindow = AboutWindow()
         self.aboutWindow.setWindowFlags(
@@ -581,16 +655,18 @@ class UiDialog:
         githubLink = f'<a href="{__source__}">View the source on GitHub</a>'
         self.aboutWindow.setWindowTitle("About")
         self.aboutWindow.aboutLabel.setText(
-            f"Version: {__appname__}\nLast Updated: {__date__}\nAuthor: {__author__}"
+            f"Version: {__appname__}\nLast Updated: {__date__}\n\nAuthors:\n{__author__}"
         )
         self.aboutWindow.urlLabel.setOpenExternalLinks(True)
         self.aboutWindow.urlLabel.setText(githubLink)
-        about_width = self.aboutWindow.width()
-        about_height = self.aboutWindow.height()
-        self.aboutWindow.move(
-            self.center_x + (about_width // 4), self.center_y + (about_height // 4)
-        )
         self.aboutWindow.show()
+
+    def _contents(self):
+        self.contentsWindow = ContentsWindow()
+        self.contentsWindow.setWindowFlags(
+            self.contentsWindow.windowFlags() & ~Qt.WindowType.WindowMinMaxButtonsHint
+        )
+        self.contentsWindow.show()
 
     def update_status(self, msg, level="info", color=black):
 
@@ -602,7 +678,11 @@ class UiDialog:
         self.docxOutput.setTextColor(color)
         self.docxOutput.append(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {msg}")
         self.docxOutput.setTextColor(black)
-        
+        QApplication.processEvents()
+        self.docxOutput.verticalScrollBar().setValue(
+            self.docxOutput.verticalScrollBar().maximum()
+        )
+
     def null_output(self, message):
         pass
 
@@ -624,11 +704,8 @@ class UiDialog:
             update_status(f"Processing {f}")
             try:
                 self.launch_threads(f, triage_files, hash_files)
-                #process_docx(Docx(f, triage_files, hash_files))
-
-            except (
-                Exception
-            ) as docxError:  # If processing a DOCx file raises an error, let the user know, and write it
+            except Exception as docxError:
+                # If processing a DOCx file raises an error, let the user know, and write it
                 # to the error log.
                 docxErrorCount += 1  # increment error count by 1.
                 self.numOfErrors.setText(str(docxErrorCount))
@@ -638,6 +715,7 @@ class UiDialog:
                     level="error",
                 )
             update_status(f"Finished processing {f}.")
+            update_status(f'{"-"*36}')
 
         df = pd.DataFrame(data=doc_summary_worksheet)
 
@@ -687,12 +765,14 @@ class UiDialog:
         update_status('"Comments" worksheet written to Excel.')
 
         script_end = time.strftime("%Y-%m-%d %H:%M:%S")
+        update_status(f'{"="*24}')
         if docxErrorCount > 0:
             clr = red
         else:
             clr = black
         update_status(
-            f"Processing finished for all files. Errors detected: {docxErrorCount}", color=clr
+            f"Processing finished for all files. Errors detected: {docxErrorCount}",
+            color=clr,
         )
         if docxErrorCount > 0:
             update_status("The following files had errors:", "error")
@@ -859,15 +939,30 @@ class Docx:
         self.extra_fields = self.__xml_extra_bytes()
         self.core_xml_file = "docProps/core.xml"
         self.core_xml_content = self.__load_core_xml()
+        if self.core_xml_content == "":
+            self.core_xml_file = "docProps\\core.xml"
+            self.core_xml_content = self.__load_core_xml()
         self.app_xml_file = "docProps/app.xml"
         self.app_xml_content = self.__load_app_xml()
+        if self.app_xml_content == "":
+            self.app_xml_file = "docProps\\app.xml"
+            self.app_xml_content = self.__load_app_xml()
         self.document_xml_file = "word/document.xml"
-        self.has_comments = ""  # Flag to denote if there are comments in the document.
         self.document_xml_content = self.__load_document_xml()
+        if self.document_xml_content == "":
+            self.document_xml_file = "word\\document.xml"
+            self.document_xml_content = self.__load_document_xml()
+        self.has_comments = ""  # Flag to denote if there are comments in the document.
         self.comments = "word/comments.xml"
         self.comments_xml_content = self.__load_comments_xml()
+        if self.comments_xml_content == "":
+            self.comments = "word\\comments.xml"
+            self.comments_xml_content = self.__load_comments_xml()
         self.settings_xml_file = "word/settings.xml"
         self.settings_xml_content = self.__load_settings_xml()
+        if self.settings_xml_content == "":
+            self.settings_xml_file = "word\\settings.xml"
+            self.settings_xml_content = self.__load_settings_xml()
         self.rsidRs = self.__extract_all_rsidr_from_summary_xml()
 
         self.p_tags = re.findall(r"<w:p>|<w:p [^>]*/?>", self.document_xml_content)
@@ -910,6 +1005,7 @@ class Docx:
 
         return: list [xml file name, # of bytes in extra field, truncated bytes]
         """
+        filename = ""
         zip_header = {
             "signature": [0, 4],  # byte 0 for 4 bytes
             "extract version": [4, 2],  # byte 4 for 2 bytes
@@ -945,14 +1041,12 @@ class Docx:
             filename_start = offset + 30
             filename_end = offset + 30 + filename_len
 
-            if (
-                filename_end - filename_start < 256
-            ):  # some DOCx files somehow produce false positives of
+            if filename_end - filename_start < 256:
+                # some DOCx files somehow produce false positives of
                 # excessively long filenames and results in an error. This avoids that error.
                 filename = self.binary_content[filename_start:filename_end].decode(
                     "ascii"
-                )  # decode filename as ASCII
-
+                )
             extrafield_len = int.from_bytes(
                 self.binary_content[
                     zip_header["extra field length"][0]
@@ -968,9 +1062,8 @@ class Docx:
 
             extrafield = self.binary_content[extrafield_start:extrafield_end]
 
-            extrafield_hex_as_text = (
-                []
-            )  # List that will contain the extra characters represented as text.
+            extrafield_hex_as_text = []
+            # List that will contain the extra characters represented as text.
 
             for h in extrafield:
                 extrafield_hex_as_text.append(str(hex(h)))
@@ -1210,14 +1303,15 @@ class Docx:
                         if self.hashing:  # if hashing option selected
                             md5hash = hashlib.md5(xml_file.read()).hexdigest()
                         else:
-                            md5hash = ""  # else return blank for hash value.
-
+                            md5hash = "Option Not Selected"  # else return blank for hash value.
                 m_time = file_info.date_time
                 if m_time in ((1980, 1, 1, 0, 0, 0), (1980, 0, 0, 0, 0, 0)):
                     modified_time = "nil"
                 else:
-                    modified_time = f"{m_time[0]}-{month[m_time[1]]}-{m_time[2]:02d} {m_time[3]:02d}:{m_time[4]:02d}:{m_time[5]:02d}"
-
+                    modified_time = f"{m_time[0]}-{month[m_time[1]]}-{m_time[2]:02d} {m_time[3]:02d}:{m_time[4]:02d}:{m_time[5]:02d}"  ##TODO, fix timestamp formatting
+                fname = file_info.filename
+                if fname not in self.extra_fields:
+                    fname = fname.replace("/", "\\")
                 xml_files[file_info.filename] = [
                     md5hash,
                     modified_time,
@@ -1227,8 +1321,8 @@ class Docx:
                     file_info.create_version,
                     file_info.extract_version,
                     f"{file_info.flag_bits:#0{6}x}",
-                    self.extra_fields[file_info.filename][0],
-                    self.extra_fields[file_info.filename][1],
+                    self.extra_fields[fname][0],
+                    self.extra_fields[fname][1],
                 ]
             return (
                 xml_files  # returns dictionary {xml_filename: [file size, file hash]}
@@ -1641,16 +1735,20 @@ def process_docx(filename):
     update_status = ms_word_form.update_status
     excel_file_path = ms_word_form.excel_full_path
     triage = ms_word_form.triageButton.isChecked()
+    hashing = ms_word_form.hashFiles.isChecked()
     global doc_summary_worksheet, metadata_worksheet, archive_files_worksheet, rsids_worksheet, comments_worksheet
 
     for checkFile in (
         "word/settings.xml",
         "docProps/core.xml",
         "docProps/app.xml",
+        "word\\settings.xml",
+        "docProps\\core.xml",
+        "docProps\\app.xml",
     ):  # checks if xml files being parsed
         # are present and notes same in the log file.
         xml_exists = checkFile in filename.xml_files().keys()
-        update_status(f"**{checkFile} exists? {xml_exists}")
+        update_status(f"{checkFile} exists: {xml_exists}")
 
     # Writing document summary worksheet.
 
@@ -1670,7 +1768,10 @@ def process_docx(filename):
         doc_summary_worksheet = dict((k, []) for k in headers)
 
     doc_summary_worksheet[headers[0]].append(filename.filename())
-    doc_summary_worksheet[headers[1]].append(filename.hash())
+    if hashing:
+        doc_summary_worksheet[headers[1]].append(filename.hash())
+    else:
+        doc_summary_worksheet[headers[1]].append("Option Not Selected")
     doc_summary_worksheet[headers[2]].append(len(filename.rsidr()))
     doc_summary_worksheet[headers[3]].append(filename.rsid_root())
     doc_summary_worksheet[headers[4]].append(filename.paragraph_tags())
@@ -1866,21 +1967,22 @@ def process_docx(filename):
             rsids_worksheet[headers[2]].append(k)
             rsids_worksheet[headers[3]].append(v)
 
-    update_status(f'{"-"*36}')
 
 def main():
+    global ms_word_form
     ms_word_app = QApplication([__appname__, "windows:darkmode=2"])
-    #ms_word_app.setWindowIcon(QIcon("logo.ico"))
+    # ms_word_app.setWindowIcon(QIcon("logo.ico"))
     ms_word_app.setStyle("Fusion")
     ms_word_form = MsWordGui()
     ms_word_form.show()
     ms_word_app.exec()
 
+
 if __name__ == "__main__":
-    #main()
-    ms_word_app = QApplication([__appname__, "windows:darkmode=2"])
-    #ms_word_app.setWindowIcon(QIcon("logo.ico"))
-    ms_word_app.setStyle("Fusion")
-    ms_word_form = MsWordGui()
-    ms_word_form.show()
-    ms_word_app.exec()    
+    main()
+    # ms_word_app = QApplication([__appname__, "windows:darkmode=2"])
+    ## ms_word_app.setWindowIcon(QIcon("logo.ico"))
+    # ms_word_app.setStyle("Fusion")
+    # ms_word_form = MsWordGui()
+    # ms_word_form.show()
+    # ms_word_app.exec()

@@ -3,7 +3,7 @@ requires = ["setuptools >= 61.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-exclude = ["debian*", "binaries*", "build*", "dist*"]
+exclude = ["debian*", "binaries*", "build*", "dist*", "archive*"]
 
 [project]
 name = "ms-word-parser"
@@ -14,10 +14,10 @@ dependencies = [
 ]
 requires-python = ">=3.9"
 authors = [
-  {name = "Jacques Boucher (jjrboucher)", email = "jjrboucher@gmail.com"}
+  {name = "Jacques Boucher (jjrboucher) and Corey Forman (digitalsleuth)", email = "jjrboucher@gmail.com"}
 ]
 maintainers = [
-  {name = "Jacques Boucher (jjrboucher)", email = "jjrboucher@gmail.com"}
+  {name = "Jacques Boucher (jjrboucher) and Corey Forman (digitalsleuth)", email = "jjrboucher@gmail.com"}
 ]
 description = "MS Word DOCx Parsing Tool"
 readme = "README.md"
