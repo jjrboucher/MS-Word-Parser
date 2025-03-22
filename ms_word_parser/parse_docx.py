@@ -1189,7 +1189,7 @@ class Docx:
 
         for match in matches:  # loops through all matches
             # greps for rsid using a group to extract the actual RSID from the string.
-            group_pattern = rf'w:{rsid}="([0-9A-F]{8})"'
+            group_pattern = rf"w:" + rsid + '="([0-9A-F]{8})"'
             rsid_match = re.search(group_pattern, match)
             if rsid_match:
                 if rsid_match.group(1) in rsids:
