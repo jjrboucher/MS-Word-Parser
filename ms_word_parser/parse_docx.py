@@ -1079,7 +1079,7 @@ class Docx:
                     return xmlFile.read().decode("utf-8")
         else:  # if it doesn't exist, return an empty string.
             ms_word_form.update_status(
-                f'"{self.core_xml_file}" does not exist in "{self.filename()}". '
+                f'"{self.core_xml_file}" does not exist in "{self.msword_file}". '
                 f"Returning empty string."
             )
             return ""
@@ -1094,7 +1094,7 @@ class Docx:
                     return xmlFile.read().decode("utf-8")
         else:  # if it doesn't exist, return an empty string.
             ms_word_form.update_status(
-                f'"{self.app_xml_file}" does not exist in "{self.filename()}". '
+                f'"{self.app_xml_file}" does not exist in "{self.msword_file}". '
                 f"Returning empty string."
             )
             return ""
@@ -1109,7 +1109,7 @@ class Docx:
                     return xmlFile.read().decode("utf-8")
         else:  # if it doesn't exist, return an empty string.
             ms_word_form.update_status(
-                f'"{self.document_xml_file}" does not exist in "{self.filename()}". '
+                f'"{self.document_xml_file}" does not exist in "{self.msword_file}". '
                 f"Returning empty string."
             )
             return ""
@@ -1123,7 +1123,7 @@ class Docx:
                     return xmlFile.read().decode("utf-8")
         else:
             ms_word_form.update_status(
-                f'"{self.settings_xml_file}" does not exist in "{self.filename()}". '
+                f'"{self.settings_xml_file}" does not exist in "{self.msword_file}". '
                 f"Returning empty string."
             )
             return ""
@@ -1952,7 +1952,7 @@ def process_docx(filename):
             rsids_worksheet[headers[1]].append("textID")
             rsids_worksheet[headers[2]].append(k)
             rsids_worksheet[headers[3]].append(v)
-    update_status(f"Finished processing {filename.msword_file}")
+    update_status(f"Finished processing {filename.filename()}")
     update_status(f'{"-"*36}')
 
 
@@ -1968,9 +1968,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    # ms_word_app = QApplication([__appname__, "windows:darkmode=2"])
-    ## ms_word_app.setWindowIcon(QIcon("logo.ico"))
-    # ms_word_app.setStyle("Fusion")
-    # ms_word_form = MsWordGui()
-    # ms_word_form.show()
-    # ms_word_app.exec()
