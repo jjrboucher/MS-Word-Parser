@@ -84,13 +84,9 @@ import pandas as pd
 from PyQt6.QtCore import (
     QCoreApplication,
     QMetaObject,
-    QObject,
     QRect,
-    QRunnable,
     Qt,
-    QThreadPool,
     QUrl,
-    pyqtSignal,
 )
 from PyQt6.QtGui import (
     QAction,
@@ -100,7 +96,6 @@ from PyQt6.QtGui import (
     QGuiApplication,
     QIcon,
     # QImage,
-    QKeySequence,
 )
 from PyQt6.QtWidgets import (
     QApplication,
@@ -138,7 +133,7 @@ black = QColor(0, 0, 0)
 __version__ = "2.0.0"
 __appname__ = f"MS Word Parser v{__version__}"
 __source__ = "https://github.com/jjrboucher/MS-Word-Parser"
-__date__ = "19 March 2025"
+__date__ = "22 March 2025"
 __author__ = (
     "Jacques Boucher - jjrboucher@gmail.com\nCorey Forman - corey@digitalsleuth.ca"
 )
@@ -206,12 +201,9 @@ class UiDialog:
             "%(asctime)s | %(levelname)-8s | %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S",
         )
-        if os.sys.platform == "win32":
-            font_size = 10
-        else:
-            font_size = 9
         self.text_font = QFont()
         self.text_font.setPointSize(9)
+        self.running = False
 
     def setupUi(self, MainWindow):
         if not MainWindow.objectName():
@@ -373,7 +365,7 @@ class UiDialog:
         self.processButton.setObjectName("processButton")
         self.processButton.setGeometry(QRect(10, 32, 80, 24))
         self.processButton.setEnabled(False)
-        self.processButton.setStyleSheet("background: white; color: grey")
+        self.processButton.setStyleSheet(self.disabled)
         self.processButton.clicked.connect(
             lambda: self.analyze_docs(
                 self.files,
@@ -382,19 +374,19 @@ class UiDialog:
             )
         )
         self.processButton.setFont(self.text_font)
-        self.cancelButton = QPushButton(self.operationOptions)
-        self.cancelButton.setObjectName("cancelButton")
-        self.cancelButton.setGeometry(QRect(100, 32, 80, 24))
-        self.cancelButton.setStyleSheet(self.stylesheet)
-        self.cancelButton.clicked.connect(self.close)
-        self.cancelButton.setFont(self.text_font)
-        self.openButton = QPushButton(self.operationOptions)
-        self.openButton.setObjectName("openButton")
-        self.openButton.setGeometry(QRect(190, 32, 80, 24))
-        self.openButton.clicked.connect(self.open_path)
-        self.openButton.setEnabled(False)
-        self.openButton.setStyleSheet("background: white; color: grey")
-        self.openButton.setFont(self.text_font)
+        self.stopButton = QPushButton(self.operationOptions)
+        self.stopButton.setObjectName("stopButton")
+        self.stopButton.setGeometry(QRect(100, 32, 80, 24))
+        self.stopButton.setEnabled(False)
+        self.stopButton.setStyleSheet(self.disabled)
+        self.stopButton.clicked.connect(self._stop)
+        self.stopButton.setFont(self.text_font)
+        self.resetButton = QPushButton(self.operationOptions)
+        self.resetButton.setObjectName("resetButton")
+        self.resetButton.setGeometry(QRect(190, 32, 80, 24))
+        self.resetButton.clicked.connect(self._reset)
+        self.resetButton.setStyleSheet(self.stylesheet)
+        self.resetButton.setFont(self.text_font)
         self.numOfFilesLabel = QLabel(self.processStatus)
         self.numOfFilesLabel.setObjectName("numOfFilesLabel")
         self.numOfFilesLabel.setGeometry(QRect(18, 28, 120, 26))
@@ -435,12 +427,33 @@ class UiDialog:
             Qt.ScrollBarPolicy.ScrollBarAlwaysOff
         )
         self.numOfErrors.setFont(self.text_font)
-        self.resetButton = QPushButton(self.processStatus)
-        self.resetButton.setObjectName("resetButton")
-        self.resetButton.setGeometry(QRect(672, 29, 80, 24))
-        self.resetButton.setFont(self.text_font)
-        self.resetButton.setStyleSheet(self.stylesheet)
-        self.resetButton.clicked.connect(self._reset)
+        self.numRemainingLabel = QLabel(self.processStatus)
+        self.numRemainingLabel.setObjectName("numRemainingLabel")
+        self.numRemainingLabel.setGeometry(QRect(302, 28, 120, 26))
+        self.numRemainingLabel.setStyleSheet("background: #fcfcfc; color: black;")
+        self.numRemainingLabel.setFont(self.text_font)
+        self.numRemaining = QTextEdit(self.processStatus)
+        self.numRemaining.setObjectName("numRemaining")
+        self.numRemaining.setGeometry(QRect(384, 28, 40, 26))
+        self.numRemaining.setAlignment(
+            Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft
+        )
+        self.numRemaining.setReadOnly(True)
+        self.numRemaining.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
+        self.numRemaining.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self.numRemaining.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self.numRemaining.setFont(self.text_font)
+        self.openButton = QPushButton(self.processStatus)
+        self.openButton.setObjectName("openButton")
+        self.openButton.setGeometry(QRect(642, 29, 110, 24))
+        self.openButton.setFont(self.text_font)
+        self.openButton.setStyleSheet(self.disabled)
+        self.openButton.setEnabled(False)
+        self.openButton.clicked.connect(self.open_path)
         MainWindow.setCentralWidget(self.centralwidget)
         self.menubar = QMenuBar(MainWindow)
         self.menubar.setObjectName("menubar")
@@ -465,7 +478,6 @@ class UiDialog:
         self.retranslateUi(MainWindow)
 
         QMetaObject.connectSlotsByName(MainWindow)
-        self.thread_pool = QThreadPool.globalInstance()
 
     # setupUi
 
@@ -514,17 +526,15 @@ class UiDialog:
         self.processStatus.setTitle(
             QCoreApplication.translate("MainWindow", "Processing Status", None)
         )
-        self.resetButton.setText(
-            QCoreApplication.translate("MainWindow", "Reset", None)
-        )
         self.processButton.setText(
             QCoreApplication.translate("MainWindow", "Process", None)
         )
-        self.cancelButton.setText(
-            QCoreApplication.translate("MainWindow", "Cancel", None)
+        self.stopButton.setText(QCoreApplication.translate("MainWindow", "Stop", None))
+        self.resetButton.setText(
+            QCoreApplication.translate("MainWindow", "Reset", None)
         )
         self.openButton.setText(
-            QCoreApplication.translate("MainWindow", "Open Output", None)
+            QCoreApplication.translate("MainWindow", "Open Output Path", None)
         )
         self.numOfFilesLabel.setText(
             QCoreApplication.translate("MainWindow", "# of Files Selected", None)
@@ -534,6 +544,10 @@ class UiDialog:
             QCoreApplication.translate("MainWindow", "# of Errors", None)
         )
         self.numOfErrors.setText(QCoreApplication.translate("MainWindow", "0", None))
+        self.numRemainingLabel.setText(
+            QCoreApplication.translate("MainWindow", "# Remaining", None)
+        )
+        self.numRemaining.setText(QCoreApplication.translate("MainWindow", "0", None))
         self.generalLog.setText(
             QCoreApplication.translate("MainWindow", "Log File:", None)
         )
@@ -566,14 +580,17 @@ class UiDialog:
                 non_recursive_list = list(folder_path.glob("*.docx"))
                 files = [str(file) for file in non_recursive_list]
             self.numOfFiles.setText(str(len(files)))
-            update_status(f"The following {len(files)} files have been loaded:")
+            self.numRemaining.setText(str(len(files)))
             if files:
+                update_status(f"The following {len(files)} files have been loaded:")
                 for file in files:
-                    update_status(f"  {file}")
+                    update_status(f"    {file}")
                 if self.excelFile.toPlainText() != "File -> Select Excel File":
                     self.processButton.setEnabled(True)
                     self.processButton.setStyleSheet(self.stylesheet)
                 self.files = files
+            else:
+                update_status("No files found. Please check your path and try again.")
 
     def open_files(self):
         update_status = self.update_status
@@ -585,9 +602,10 @@ class UiDialog:
             for file in files:
                 all_files.append(os.path.normpath(file))
             self.numOfFiles.setText(str(len(all_files)))
+            self.numRemaining.setText(str(len(all_files)))
             update_status(f"The following {len(all_files)} files have been loaded:")
             for file in all_files:
-                update_status(f"  {file}")
+                update_status(f"    {file}")
             if self.excelFile.toPlainText() != "File -> Select Excel File":
                 self.processButton.setEnabled(True)
                 self.processButton.setStyleSheet(self.stylesheet)
@@ -638,14 +656,24 @@ class UiDialog:
         self.outputPath.clear()
         self.numOfFiles.setText("0")
         self.numOfErrors.setText("0")
+        self.numRemaining.setText("0")
         self.docxOutput.setTextColor(black)
         self.docxOutput.clear()
         self.processButton.setEnabled(False)
-        self.processButton.setStyleSheet("background: white; color: grey")
+        self.processButton.setStyleSheet(self.disabled)
         self.openButton.setEnabled(False)
-        self.openButton.setStyleSheet("background: white; color: grey")
+        self.openButton.setStyleSheet(self.disabled)
         self.actionOpen_File.setVisible(False)
         self.actionOpen_Directory.setVisible(False)
+        self.triageButton.setChecked(True)
+        self.hashFiles.setChecked(False)
+        self.stopButton.setEnabled(False)
+        self.stopButton.setStyleSheet(self.disabled)
+
+    def _stop(self):
+        self.running = False
+        self.stopButton.setStyleSheet(self.disabled)
+        self.stopButton.setEnabled(False)
 
     def _about(self):
         self.aboutWindow = AboutWindow()
@@ -669,7 +697,6 @@ class UiDialog:
         self.contentsWindow.show()
 
     def update_status(self, msg, level="info", color=black):
-
         if level == "info":
             self.logger.info(msg)
         elif level == "error":
@@ -679,31 +706,30 @@ class UiDialog:
         self.docxOutput.append(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {msg}")
         self.docxOutput.setTextColor(black)
         QApplication.processEvents()
-        self.docxOutput.verticalScrollBar().setValue(
-            self.docxOutput.verticalScrollBar().maximum()
-        )
-
-    def null_output(self, message):
-        pass
-
-    def launch_threads(self, filename, triage_file, hash_file):
-
-        threader = Threader(process_docx, Docx(filename, triage_file, hash_file))
-        threader.signals.signal.connect(self.null_output)
-        self.thread_pool.start(threader)
 
     def analyze_docs(self, files, triage_files, hash_files):
+        if not self.running:
+            self.running = True
+        self.stopButton.setEnabled(True)
+        self.stopButton.setStyleSheet(self.stylesheet)
+        self.resetButton.setEnabled(False)
+        self.resetButton.setStyleSheet(self.disabled)
+        self.processButton.setEnabled(False)
+        self.processButton.setStyleSheet(self.disabled)
         docxErrorCount = 0
         update_status = self.update_status
         script_start = time.strftime("%Y-%m-%d %H:%M:%S")
         update_status(f"Script executed: {script_start}")
         update_status("Summary of files parsed:")
-        update_status(f'{"="*24}')
-
+        update_status(f'{"="*36}')
+        remaining = int(self.numRemaining.toPlainText())
         for f in files:  # loop over the files selected, processing each.
-            update_status(f"Processing {f}")
+            if not self.running:
+                update_status("Processing stopped")
+                self.stopButton.setEnabled(False)
+                return
             try:
-                self.launch_threads(f, triage_files, hash_files)
+                process_docx(Docx(f, triage_files, hash_files))
             except Exception as docxError:
                 # If processing a DOCx file raises an error, let the user know, and write it
                 # to the error log.
@@ -714,56 +740,37 @@ class UiDialog:
                     f"Error trying to process {f}. Skipping. Error: {docxError}",
                     level="error",
                 )
-            update_status(f"Finished processing {f}.")
-            update_status(f'{"-"*36}')
-
-        df = pd.DataFrame(data=doc_summary_worksheet)
-
-        df.to_excel(
-            excel_writer=self.excel_full_path, sheet_name="Doc_Summary", index=False
-        )
-
-        update_status('"Doc_Summary" worksheet written to Excel file.')
-
-        df = pd.DataFrame(data=metadata_worksheet)
-
+            if remaining != 0:
+                remaining -= 1
+            self.numRemaining.setText(str(remaining))
+        df_summary = pd.DataFrame(data=doc_summary_worksheet)
+        df_metadata = pd.DataFrame(data=metadata_worksheet)
+        df_comments = pd.DataFrame(data=comments_worksheet)
         with pd.ExcelWriter(
-            path=self.excel_full_path, engine="openpyxl", mode="a"
+            path=self.excel_full_path, engine="xlsxwriter", mode="w"
         ) as writer:
-            df.to_excel(excel_writer=writer, sheet_name="Metadata", index=False)
-
-        update_status('"Metadata" worksheet written to Excel.')
-
-        if not triage_files:
-            df = pd.DataFrame(data=archive_files_worksheet)
-
-            with pd.ExcelWriter(
-                path=self.excel_full_path, engine="openpyxl", mode="a"
-            ) as writer:
-                df.to_excel(
+            df_summary.to_excel(
+                excel_writer=writer, sheet_name="Doc_Summary", index=False
+            )
+            update_status('"Doc_Summary" worksheet written to Excel.')
+            df_metadata.to_excel(
+                excel_writer=writer, sheet_name="Metadata", index=False
+            )
+            update_status('"Metadata" worksheet written to Excel.')
+            if not df_comments.empty:
+                df_comments.to_excel(
+                    excel_writer=writer, sheet_name="Comments", index=False
+                )
+                update_status('"Comments" worksheet written to Excel.')
+            if not triage_files:
+                df_archive = pd.DataFrame(data=archive_files_worksheet)
+                df_rsids = pd.DataFrame(data=rsids_worksheet)
+                df_archive.to_excel(
                     excel_writer=writer, sheet_name="Archive Files", index=False
                 )
-
-            update_status('"Archive Files" worksheet written to Excel.')
-
-            df = pd.DataFrame(data=rsids_worksheet)
-
-            with pd.ExcelWriter(
-                path=self.excel_full_path, engine="openpyxl", mode="a"
-            ) as writer:
-                df.to_excel(excel_writer=writer, sheet_name="RSIDs", index=False)
-
-            update_status('"RSIDs" worksheet written to Excel.')
-
-        df = pd.DataFrame(data=comments_worksheet)
-
-        with pd.ExcelWriter(
-            path=self.excel_full_path, engine="openpyxl", mode="a"
-        ) as writer:
-            df.to_excel(excel_writer=writer, sheet_name="Comments", index=False)
-
-        update_status('"Comments" worksheet written to Excel.')
-
+                update_status('"Archive Files" worksheet written to Excel.')
+                df_rsids.to_excel(excel_writer=writer, sheet_name="RSIDs", index=False)
+                update_status('"RSIDs" worksheet written to Excel.')
         script_end = time.strftime("%Y-%m-%d %H:%M:%S")
         update_status(f'{"="*24}')
         if docxErrorCount > 0:
@@ -779,28 +786,18 @@ class UiDialog:
             for each_file in filesUnableToProcess:
                 update_status(f"  {each_file}", "error")
         update_status(f"Script finished execution: {script_end}", color=green)
-
-
-class ThreaderSignals(QObject):
-    signal = pyqtSignal(str)
-
-
-class Threader(QRunnable):
-
-    def __init__(self, function, *args, **kwargs):
-        super().__init__()
-        self.function = function
-        self.args = args
-        self.kwargs = kwargs
-        self.signals = ThreaderSignals()
-
-    def run(self):
-        self.function(*self.args, **self.kwargs)
-        self.signals.signal.emit("")
+        self.resetButton.setEnabled(True)
+        self.resetButton.setStyleSheet(self.stylesheet)
 
 
 class MsWordGui(QMainWindow, UiDialog):
     """MS Word Parser GUI Class"""
+
+    disabled = """
+            QPushButton {
+            background-color: white; border: 1px solid black; color: grey;
+        }
+        """
 
     stylesheet = """
         QMainWindow {
@@ -843,59 +840,52 @@ class MsWordGui(QMainWindow, UiDialog):
             background: #fcfcfc; color:black;
         }
         """
-
     scrollbar_sheet = """
-        QScrollBar:vertical {
-            border: none;
-            background: #e0e0e0;
-            width: 8px;
-            border-radius: 12px;
+    QScrollBar:vertical {
+            border: 0px;
+            background:white;
+            width:7px;    
+            margin: 0px 0px 0px 0px;
         }
-        QScrollBar::handle:vertical {
-            background: #a0a0a0;
+        QScrollBar::handle:vertical {         
             min-height: 30px;
-            border-radius: 30px;
+            border: 0px;
+            border-radius: 3px;
+            background-color: #a0a0a0;
         }
         QScrollBar::handle:vertical:hover {
             background: #808080;
         }
-        QScrollBar::sub-page:vertical, QScrollBar::add-page:vertical {
-            background: #d0d0d0;
-            border-radius: 6px;
+        QScrollBar::add-line:vertical {       
+            height: 0px;
+            subcontrol-position: bottom;
+            subcontrol-origin: margin;
         }
-        QScrollBar::sub-line:vertical, QScrollBar::add-line:vertical {
-            background: none;
-            border: none;
-            height: 10px;
+        QScrollBar::sub-line:vertical {
+            height: 0 px;
+            subcontrol-position: top;
             subcontrol-origin: margin;
         }
         QScrollBar:horizontal {
-            border: none;
-            background: #e0e0e0;
-            height: 8px;
-            border-radius: 12px;
+            border: 0px;
+            background: white;
+            height: 7px;
+            margin: 0px 0px 0px 0px;
         }
         QScrollBar::handle:horizontal {
-            background: #a0a0a0;
-            min-height: 30px;
-            border-radius: 30px;
+            background-color: #a0a0a0;
+            min-width: 5px;
+            border: 0px;
+            border-radius: 3px;
         }
         QScrollBar::handle:horizontal:hover {
             background: #808080;
         }
-        QScrollBar::sub-page:horizontal, QScrollBar::add-page:horizontal {
-            background: #d0d0d0;
-            border-radius: 12px;
-        }
         QScrollBar::sub-line:horizontal, QScrollBar::add-line:horizontal {
             background: none;
             border: none;
-            width: 10px;
+            width: 7px;
             subcontrol-origin: margin;
-        }
-        QScrollBar::sub-line:horizontal, QScrollBar::add-line:horizontal {
-            width: 8px;
-            height: 8px;
         }
         """
 
@@ -903,13 +893,6 @@ class MsWordGui(QMainWindow, UiDialog):
         """Call and setup the UI"""
         super().__init__()
         self.setupUi(self)
-
-    def keyPressEvent(self, event):
-        """Create a KeyPress event for a Ctrl+C (Copy) event for selected text"""
-        if event.matches(QKeySequence.StandardKey.Copy):
-            self.context_menu.copy()
-        else:
-            super().keyPressEvent(event)
 
 
 class Docx:
@@ -1704,7 +1687,7 @@ class Docx:
     def any_comments(self):
         return self.has_comments
 
-    def __str__(self):
+    def details(self):
         """
         :return: a text string that you can print out to get a summary of the document.
         This can be edited to suit your needs. You can naturally accomplish the same results by calling each of
@@ -1737,7 +1720,10 @@ def process_docx(filename):
     triage = ms_word_form.triageButton.isChecked()
     hashing = ms_word_form.hashFiles.isChecked()
     global doc_summary_worksheet, metadata_worksheet, archive_files_worksheet, rsids_worksheet, comments_worksheet
-
+    update_status(f"Processing {filename.msword_file}")
+    file_details = filename.details()
+    for line in file_details.split("\n"):
+        update_status(f"    {line.rstrip()}")
     for checkFile in (
         "word/settings.xml",
         "docProps/core.xml",
@@ -1748,7 +1734,7 @@ def process_docx(filename):
     ):  # checks if xml files being parsed
         # are present and notes same in the log file.
         xml_exists = checkFile in filename.xml_files().keys()
-        update_status(f"{checkFile} exists: {xml_exists}")
+        update_status(f"    {checkFile} exists: {xml_exists}")
 
     # Writing document summary worksheet.
 
@@ -1778,7 +1764,7 @@ def process_docx(filename):
     doc_summary_worksheet[headers[5]].append(filename.runs_tags())
     doc_summary_worksheet[headers[6]].append(filename.text_tags())
 
-    update_status("Extracted Doc_Summary artifacts")
+    update_status("    Extracted Doc_Summary artifacts")
 
     # The keys will be used as the column heading in the spreadsheet
     # The order they are in is the order that the columns will be in the spreadsheet
@@ -1844,7 +1830,7 @@ def process_docx(filename):
     metadata_worksheet[headers[24]].append(filename.category())
     metadata_worksheet[headers[25]].append(filename.content_status())
 
-    update_status("Extracted metadata artifacts")
+    update_status("    Extracted metadata artifacts")
 
     if filename.any_comments():  # checks if there are comments
         headers = [
@@ -1861,7 +1847,7 @@ def process_docx(filename):
             comments_worksheet = dict((k, []) for k in headers)
 
         for comment in filename.get_comments():
-            update_status(f"processing comment: {comment}")
+            update_status(f"    Processing comment: {comment}")
             comments_worksheet[headers[0]].append(filename.filename())  # Filename
             comments_worksheet[headers[1]].append(comment[0])  # ID
             comments_worksheet[headers[2]].append(comment[1])  # Timestamp
@@ -1869,10 +1855,10 @@ def process_docx(filename):
             comments_worksheet[headers[4]].append(comment[3])  # Initials
             comments_worksheet[headers[5]].append(comment[4])  # Text
 
-        update_status("Extracted comments artifacts")
+        update_status("    Extracted comments artifacts")
 
     if not triage:  # will generate these spreadsheet if not triage
-        update_status(f'Updating "Archive Files" worksheet in "{excel_file_path}"')
+        update_status(f'    Updating "Archive Files" worksheet in "{excel_file_path}"')
         # Writing XML files to "Archive Files" worksheet
         headers = [
             "File Name",
@@ -1916,7 +1902,7 @@ def process_docx(filename):
             archive_files_worksheet[headers[10]].append(xml_info[8])
             archive_files_worksheet[headers[11]].append(extra_characters)
 
-        update_status("Extracted archive files artifacts")
+        update_status("    Extracted archive files artifacts")
 
         # Calculating count of rsidR, rsidRPr, rsidP, rsidRDefault, paraId, and textId in document.xml
         # and writing to "rsids" worksheet
@@ -1925,47 +1911,49 @@ def process_docx(filename):
         if not bool(rsids_worksheet):  # if it's an empty dictionary, add headers to it.
             rsids_worksheet = dict((k, []) for k in headers)
 
-        update_status("Calculating rsidR count")
+        update_status("    Calculating rsidR count")
         for k, v in filename.rsidr_in_document_xml().items():
             rsids_worksheet[headers[0]].append(filename.filename())
             rsids_worksheet[headers[1]].append("rsidR")
             rsids_worksheet[headers[2]].append(k)
             rsids_worksheet[headers[3]].append(v)
 
-        update_status("Calculating rsidP count")
+        update_status("    Calculating rsidP count")
         for k, v in filename.rsidp_in_document_xml().items():
             rsids_worksheet[headers[0]].append(filename.filename())
             rsids_worksheet[headers[1]].append("rsidP")
             rsids_worksheet[headers[2]].append(k)
             rsids_worksheet[headers[3]].append(v)
 
-        update_status("Calculating rsidPr count")
+        update_status("    Calculating rsidPr count")
         for k, v in filename.rsidrpr_in_document_xml().items():
             rsids_worksheet[headers[0]].append(filename.filename())
             rsids_worksheet[headers[1]].append("rsidRPr")
             rsids_worksheet[headers[2]].append(k)
             rsids_worksheet[headers[3]].append(v)
 
-        update_status("Calculating rsidRDefault count")
+        update_status("    Calculating rsidRDefault count")
         for k, v in filename.rsidrdefault_in_document_xml().items():
             rsids_worksheet[headers[0]].append(filename.filename())
             rsids_worksheet[headers[1]].append("rsidRDefault")
             rsids_worksheet[headers[2]].append(k)
             rsids_worksheet[headers[3]].append(v)
 
-        update_status("Calculating paraID count")
+        update_status("    Calculating paraID count")
         for k, v in filename.paragraph_id_tags().items():
             rsids_worksheet[headers[0]].append(filename.filename())
             rsids_worksheet[headers[1]].append("paraID")
             rsids_worksheet[headers[2]].append(k)
             rsids_worksheet[headers[3]].append(v)
 
-        update_status("Calculating textID count")
+        update_status("    Calculating textID count")
         for k, v in filename.text_id_tags().items():
             rsids_worksheet[headers[0]].append(filename.filename())
             rsids_worksheet[headers[1]].append("textID")
             rsids_worksheet[headers[2]].append(k)
             rsids_worksheet[headers[3]].append(v)
+    update_status(f"Finished processing {filename.msword_file}")
+    update_status(f'{"-"*36}')
 
 
 def main():
