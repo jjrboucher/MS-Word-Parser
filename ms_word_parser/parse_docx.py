@@ -73,9 +73,9 @@ Processes that this script will do:
 import hashlib
 import re
 import os
-import time
 import zipfile
 import logging
+from datetime import datetime as dt
 from pathlib import Path
 import xml.etree.ElementTree as ET
 import warnings
@@ -94,8 +94,6 @@ from PyQt6.QtGui import (
     QDesktopServices,
     QFont,
     QGuiApplication,
-    QIcon,
-    # QImage,
 )
 from PyQt6.QtWidgets import (
     QApplication,
@@ -112,6 +110,7 @@ from PyQt6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QRadioButton,
+    QStyle,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -124,7 +123,7 @@ metadata_worksheet = {}  # contains the metadata parsed from each file processed
 archive_files_worksheet = {}  # contains the archive files data from each file processed
 rsids_worksheet = {}  # contains the RSID artifacts extracted from each file processed
 comments_worksheet = {}  # contains the comments within each file processed
-timestamp = time.strftime("%Y%m%d_%H%M%S")
+timestamp = dt.now().strftime("%Y%m%d_%H%M%S")
 log_file = f"DOCx_Parser_Log_{timestamp}.log"
 ms_word_form = None
 green = QColor(86, 208, 50)
@@ -137,6 +136,7 @@ __date__ = "22 March 2025"
 __author__ = (
     "Jacques Boucher - jjrboucher@gmail.com\nCorey Forman - corey@digitalsleuth.ca"
 )
+__dtfmt__ = "%Y-%m-%d %H:%M:%S"
 
 
 class AboutWindow(QWidget):
@@ -161,6 +161,11 @@ class AboutWindow(QWidget):
         y = (screen_geometry.height() - self.height()) // 2
         self.move(x, y)
         self.setLayout(layout)
+        style = self.style()
+        dialog_icon = style.standardIcon(
+            QStyle.StandardPixmap.SP_FileDialogDetailedView
+        )
+        self.setWindowIcon(dialog_icon)
 
 
 class ContentsWindow(QWidget):
@@ -182,6 +187,11 @@ class ContentsWindow(QWidget):
         y = (screen_geometry.height() - self.height()) // 2
         self.move(x, y)
         self.setLayout(layout)
+        style = self.style()
+        dialog_icon = style.standardIcon(
+            QStyle.StandardPixmap.SP_FileDialogDetailedView
+        )
+        self.setWindowIcon(dialog_icon)
 
 
 class UiDialog:
@@ -199,7 +209,7 @@ class UiDialog:
         self.logger.setLevel(logging.DEBUG)
         self.log_fmt = logging.Formatter(
             "%(asctime)s | %(levelname)-8s | %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
+            datefmt=__dtfmt__,
         )
         self.text_font = QFont()
         self.text_font.setPointSize(9)
@@ -222,14 +232,14 @@ class UiDialog:
         self.actionSelect_Excel = QAction(MainWindow)
         self.actionSelect_Excel.setObjectName("actionSelect_Excel")
         self.actionSelect_Excel.triggered.connect(self.open_excel)
-        self.actionOpen_File = QAction(MainWindow)
-        self.actionOpen_File.setObjectName("actionOpen_File")
-        self.actionOpen_File.triggered.connect(self.open_files)
-        self.actionOpen_File.setVisible(False)
-        self.actionOpen_Directory = QAction(MainWindow)
-        self.actionOpen_Directory.setObjectName("actionOpen_Directory")
-        self.actionOpen_Directory.triggered.connect(self.open_directory)
-        self.actionOpen_Directory.setVisible(False)
+        self.actionAdd_Files = QAction(MainWindow)
+        self.actionAdd_Files.setObjectName("actionAdd_Files")
+        self.actionAdd_Files.triggered.connect(self.add_files)
+        self.actionAdd_Files.setVisible(False)
+        self.actionAdd_Directory = QAction(MainWindow)
+        self.actionAdd_Directory.setObjectName("actionAdd_Directory")
+        self.actionAdd_Directory.triggered.connect(self.add_directory)
+        self.actionAdd_Directory.setVisible(False)
         self.actionExit = QAction(MainWindow)
         self.actionExit.setObjectName("actionExit")
         self.actionExit.triggered.connect(self.close)
@@ -278,7 +288,7 @@ class UiDialog:
         self.hashFiles.setFont(self.text_font)
         self.outputFiles = QGroupBox(self.centralwidget)
         self.outputFiles.setObjectName("outputFiles")
-        self.outputFiles.setGeometry(QRect(10, 80, 350, 120))
+        self.outputFiles.setGeometry(QRect(10, 76, 350, 120))
         self.outputFiles.setStyleSheet("background-color: #ffffff; color: black;")
         self.outputFiles.setFont(self.text_font)
         self.excelFileLabel = QLabel(self.outputFiles)
@@ -341,29 +351,32 @@ class UiDialog:
         )
         self.outputPath.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
         self.outputPath.setFont(self.text_font)
-        self.processStatus = QGroupBox(self.centralwidget)
-        self.processStatus.setObjectName("processStatus")
-        self.processStatus.setGeometry(QRect(370, 10, 768, 270))
-        self.processStatus.setStyleSheet("background: #ffffff; color: black;")
-        self.processStatus.setFont(self.text_font)
-        self.docxOutput = QTextEdit(self.processStatus)
-        self.docxOutput.setObjectName("docxOutput")
-        self.docxOutput.setGeometry(QRect(16, 60, 737, 200))
-        self.docxOutput.setStyleSheet(self.scrollbar_sheet)
-        self.docxOutput.setReadOnly(True)
-        self.docxOutput.setHorizontalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAsNeeded
-        )
-        self.docxOutput.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
-        self.docxOutput.setFont(self.text_font)
+
         self.operationOptions = QGroupBox(self.centralwidget)
         self.operationOptions.setObjectName("operationOptions")
-        self.operationOptions.setGeometry(QRect(10, 210, 350, 70))
+        self.operationOptions.setGeometry(QRect(10, 200, 350, 90))
         self.operationOptions.setStyleSheet("background-color: #ffffff; color:black;")
         self.operationOptions.setFont(self.text_font)
+        self.excelButton = QPushButton(self.operationOptions)
+        self.excelButton.setObjectName("excelButton")
+        self.excelButton.setGeometry(QRect(10, 28, 86, 24))
+        self.excelButton.setStyleSheet(self.stylesheet)
+        self.excelButton.clicked.connect(self.open_excel)
+        self.addFilesButton = QPushButton(self.operationOptions)
+        self.addFilesButton.setObjectName("addFilesButton")
+        self.addFilesButton.setGeometry(QRect(112, 28, 86, 24))
+        self.addFilesButton.setEnabled(False)
+        self.addFilesButton.setStyleSheet(self.disabled)
+        self.addFilesButton.clicked.connect(self.add_files)
+        self.addDirectoryButton = QPushButton(self.operationOptions)
+        self.addDirectoryButton.setObjectName("addDirectoryButton")
+        self.addDirectoryButton.setGeometry(QRect(214, 28, 86, 24))
+        self.addDirectoryButton.setEnabled(False)
+        self.addDirectoryButton.setStyleSheet(self.disabled)
+        self.addDirectoryButton.clicked.connect(self.add_directory)
         self.processButton = QPushButton(self.operationOptions)
         self.processButton.setObjectName("processButton")
-        self.processButton.setGeometry(QRect(10, 32, 80, 24))
+        self.processButton.setGeometry(QRect(10, 58, 86, 24))
         self.processButton.setEnabled(False)
         self.processButton.setStyleSheet(self.disabled)
         self.processButton.clicked.connect(
@@ -376,17 +389,32 @@ class UiDialog:
         self.processButton.setFont(self.text_font)
         self.stopButton = QPushButton(self.operationOptions)
         self.stopButton.setObjectName("stopButton")
-        self.stopButton.setGeometry(QRect(100, 32, 80, 24))
+        self.stopButton.setGeometry(QRect(112, 58, 86, 24))
         self.stopButton.setEnabled(False)
         self.stopButton.setStyleSheet(self.disabled)
         self.stopButton.clicked.connect(self._stop)
         self.stopButton.setFont(self.text_font)
         self.resetButton = QPushButton(self.operationOptions)
         self.resetButton.setObjectName("resetButton")
-        self.resetButton.setGeometry(QRect(190, 32, 80, 24))
+        self.resetButton.setGeometry(QRect(214, 58, 86, 24))
         self.resetButton.clicked.connect(self._reset)
         self.resetButton.setStyleSheet(self.stylesheet)
         self.resetButton.setFont(self.text_font)
+        self.processStatus = QGroupBox(self.centralwidget)
+        self.processStatus.setObjectName("processStatus")
+        self.processStatus.setGeometry(QRect(370, 10, 768, 280))
+        self.processStatus.setStyleSheet("background: #ffffff; color: black;")
+        self.processStatus.setFont(self.text_font)
+        self.docxOutput = QTextEdit(self.processStatus)
+        self.docxOutput.setObjectName("docxOutput")
+        self.docxOutput.setGeometry(QRect(16, 60, 737, 210))
+        self.docxOutput.setStyleSheet(self.scrollbar_sheet)
+        self.docxOutput.setReadOnly(True)
+        self.docxOutput.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
+        self.docxOutput.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
+        self.docxOutput.setFont(self.text_font)
         self.numOfFilesLabel = QLabel(self.processStatus)
         self.numOfFilesLabel.setObjectName("numOfFilesLabel")
         self.numOfFilesLabel.setGeometry(QRect(18, 28, 120, 26))
@@ -468,8 +496,8 @@ class UiDialog:
         self.menubar.addAction(self.menuHelp.menuAction())
         self.menuFile.addAction(self.actionSelect_Excel)
         self.menuFile.addSeparator()
-        self.menuFile.addAction(self.actionOpen_File)
-        self.menuFile.addAction(self.actionOpen_Directory)
+        self.menuFile.addAction(self.actionAdd_Files)
+        self.menuFile.addAction(self.actionAdd_Directory)
         self.menuFile.addSeparator()
         self.menuFile.addAction(self.actionExit)
         self.menuHelp.addAction(self.actionContents)
@@ -488,11 +516,11 @@ class UiDialog:
         self.actionSelect_Excel.setText(
             QCoreApplication.translate("MainWindow", "Select &Excel File ...", None)
         )
-        self.actionOpen_File.setText(
-            QCoreApplication.translate("MainWindow", "Open &Files ...", None)
+        self.actionAdd_Files.setText(
+            QCoreApplication.translate("MainWindow", "Add &Files ...", None)
         )
-        self.actionOpen_Directory.setText(
-            QCoreApplication.translate("MainWindow", "Open &Directory ...", None)
+        self.actionAdd_Directory.setText(
+            QCoreApplication.translate("MainWindow", "Add &Directory ...", None)
         )
         self.actionExit.setText(QCoreApplication.translate("MainWindow", "&Exit", None))
         self.actionAbout.setText(
@@ -533,6 +561,15 @@ class UiDialog:
         self.resetButton.setText(
             QCoreApplication.translate("MainWindow", "Reset", None)
         )
+        self.excelButton.setText(
+            QCoreApplication.translate("MainWindow", "Select Excel", None)
+        )
+        self.addFilesButton.setText(
+            QCoreApplication.translate("MainWindow", "Add Files", None)
+        )
+        self.addDirectoryButton.setText(
+            QCoreApplication.translate("MainWindow", "Add Directory", None)
+        )
         self.openButton.setText(
             QCoreApplication.translate("MainWindow", "Open Output Path", None)
         )
@@ -560,7 +597,7 @@ class UiDialog:
         self.menuFile.setTitle(QCoreApplication.translate("MainWindow", "File", None))
         self.menuHelp.setTitle(QCoreApplication.translate("MainWindow", "Help", None))
 
-    def open_directory(self):
+    def add_directory(self):
         update_status = self.update_status
         folder_path = QFileDialog.getExistingDirectory(
             self, "Select a directory ...", "", QFileDialog.Option.ShowDirsOnly
@@ -592,7 +629,7 @@ class UiDialog:
             else:
                 update_status("No files found. Please check your path and try again.")
 
-    def open_files(self):
+    def add_files(self):
         update_status = self.update_status
         all_files = []
         files, _ = QFileDialog.getOpenFileNames(
@@ -635,12 +672,16 @@ class UiDialog:
             if self.numOfFiles.toPlainText() != "0":
                 self.processButton.setEnabled(True)
                 self.processButton.setStyleSheet(self.stylesheet)
-            self.actionOpen_File.setVisible(True)
-            self.actionOpen_Directory.setVisible(True)
+            self.actionAdd_Files.setVisible(True)
+            self.actionAdd_Directory.setVisible(True)
             self.generalLogFile.setText(log_file)
             self.outputPath.setText(self.excel_path)
             self.openButton.setEnabled(True)
             self.openButton.setStyleSheet(self.stylesheet)
+            self.addFilesButton.setEnabled(True)
+            self.addFilesButton.setStyleSheet(self.stylesheet)
+            self.addDirectoryButton.setEnabled(True)
+            self.addDirectoryButton.setStyleSheet(self.stylesheet)
 
     def open_path(self):
         out_path = self.outputPath.toPlainText().strip()
@@ -649,7 +690,7 @@ class UiDialog:
 
     def _reset(self):
         global timestamp, log_file
-        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        timestamp = dt.now().strftime("%Y%m%d_%H%M%S")
         log_file = f"DOCx_Parser_Log_{timestamp}.log"
         self.excelFile.setText("File -> Select Excel File")
         self.generalLogFile.setText(log_file)
@@ -663,8 +704,8 @@ class UiDialog:
         self.processButton.setStyleSheet(self.disabled)
         self.openButton.setEnabled(False)
         self.openButton.setStyleSheet(self.disabled)
-        self.actionOpen_File.setVisible(False)
-        self.actionOpen_Directory.setVisible(False)
+        self.actionAdd_Files.setVisible(False)
+        self.actionAdd_Directory.setVisible(False)
         self.triageButton.setChecked(True)
         self.hashFiles.setChecked(False)
         self.stopButton.setEnabled(False)
@@ -699,12 +740,16 @@ class UiDialog:
     def update_status(self, msg, level="info", color=black):
         if level == "info":
             self.logger.info(msg)
+            self.docxOutput.setTextColor(color)
+            self.docxOutput.append(f"{dt.now().strftime(__dtfmt__)} - {msg}")
+            self.docxOutput.setTextColor(black)
         elif level == "error":
-            color = red
             self.logger.error(msg)
-        self.docxOutput.setTextColor(color)
-        self.docxOutput.append(f"{time.strftime('%Y-%m-%d %H:%M:%S')} - {msg}")
-        self.docxOutput.setTextColor(black)
+            self.docxOutput.setTextColor(color)
+            self.docxOutput.append(f"{dt.now().strftime(__dtfmt__)} - {msg}")
+            self.docxOutput.setTextColor(black)
+        elif level == "debug":
+            self.logger.debug(msg)
         QApplication.processEvents()
 
     def analyze_docs(self, files, triage_files, hash_files):
@@ -718,7 +763,7 @@ class UiDialog:
         self.processButton.setStyleSheet(self.disabled)
         docxErrorCount = 0
         update_status = self.update_status
-        script_start = time.strftime("%Y-%m-%d %H:%M:%S")
+        script_start = dt.now().strftime(__dtfmt__)
         update_status(f"Script executed: {script_start}")
         update_status("Summary of files parsed:")
         update_status(f'{"="*36}')
@@ -727,6 +772,8 @@ class UiDialog:
             if not self.running:
                 update_status("Processing stopped")
                 self.stopButton.setEnabled(False)
+                self.resetButton.setEnabled(True)
+                self.resetButton.setStyleSheet(self.stylesheet)
                 return
             try:
                 process_docx(Docx(f, triage_files, hash_files))
@@ -739,39 +786,74 @@ class UiDialog:
                 update_status(
                     f"Error trying to process {f}. Skipping. Error: {docxError}",
                     level="error",
+                    color=red,
                 )
             if remaining != 0:
                 remaining -= 1
             self.numRemaining.setText(str(remaining))
-        df_summary = pd.DataFrame(data=doc_summary_worksheet)
-        df_metadata = pd.DataFrame(data=metadata_worksheet)
-        df_comments = pd.DataFrame(data=comments_worksheet)
         with pd.ExcelWriter(
             path=self.excel_full_path, engine="xlsxwriter", mode="w"
         ) as writer:
-            df_summary.to_excel(
-                excel_writer=writer, sheet_name="Doc_Summary", index=False
-            )
-            update_status('"Doc_Summary" worksheet written to Excel.')
-            df_metadata.to_excel(
-                excel_writer=writer, sheet_name="Metadata", index=False
-            )
-            update_status('"Metadata" worksheet written to Excel.')
-            if not df_comments.empty:
-                df_comments.to_excel(
-                    excel_writer=writer, sheet_name="Comments", index=False
+            df_summary = chunk_list(doc_summary_worksheet, "Doc_Summary")
+            for chunk_dict, sheet_name in df_summary:
+                df_summary_chunk = pd.DataFrame(data=chunk_dict)
+                df_summary_chunk.to_excel(
+                    excel_writer=writer, sheet_name=sheet_name, index=False
                 )
-                update_status('"Comments" worksheet written to Excel.')
+                worksheet = writer.sheets[sheet_name]
+                (max_row, max_col) = df_summary_chunk.shape
+                worksheet.set_column(0, 1, 34)
+                worksheet.set_column(2, max_col - 1, 16)
+                worksheet.autofilter(0, 0, max_row, max_col - 1)
+                update_status(f'"{sheet_name}" worksheet written to Excel.')
+            df_metadata = chunk_list(metadata_worksheet, "Metadata")
+            for chunk_dict, sheet_name in df_metadata:
+                df_metadata_chunk = pd.DataFrame(data=chunk_dict)
+                df_metadata_chunk.to_excel(
+                    excel_writer=writer, sheet_name=sheet_name, index=False
+                )
+                worksheet = writer.sheets[sheet_name]
+                (max_row, max_col) = df_metadata_chunk.shape
+                worksheet.set_column(0, max_col - 1, 20)
+                worksheet.autofilter(0, 0, max_row, max_col - 1)
+                update_status(f'"{sheet_name}" worksheet written to Excel.')
+            df_comments = chunk_list(comments_worksheet, "Comments")
+            for chunk_dict, sheet_name in df_comments:
+                df_comments_chunk = pd.DataFrame(data=chunk_dict)
+                if not df_comments_chunk.empty:
+                    df_comments_chunk.to_excel(
+                        excel_writer=writer, sheet_name=sheet_name, index=False
+                    )
+                    worksheet = writer.sheets[sheet_name]
+                    (max_row, max_col) = df_comments_chunk.shape
+                    worksheet.set_column(0, max_col - 2, 20)
+                    worksheet.set_column(max_col - 1, max_col - 1, 140)
+                    worksheet.autofilter(0, 0, max_row, max_col - 1)
+                    update_status(f'"{sheet_name}" worksheet written to Excel.')
             if not triage_files:
-                df_archive = pd.DataFrame(data=archive_files_worksheet)
-                df_rsids = pd.DataFrame(data=rsids_worksheet)
-                df_archive.to_excel(
-                    excel_writer=writer, sheet_name="Archive Files", index=False
-                )
-                update_status('"Archive Files" worksheet written to Excel.')
-                df_rsids.to_excel(excel_writer=writer, sheet_name="RSIDs", index=False)
-                update_status('"RSIDs" worksheet written to Excel.')
-        script_end = time.strftime("%Y-%m-%d %H:%M:%S")
+                df_rsids = chunk_list(rsids_worksheet, "RSIDs")
+                for chunk_dict, sheet_name in df_rsids:
+                    df_rsids_chunk = pd.DataFrame(data=chunk_dict)
+                    df_rsids_chunk.to_excel(
+                        excel_writer=writer, sheet_name=sheet_name, index=False
+                    )
+                    worksheet = writer.sheets[sheet_name]
+                    (max_row, max_col) = df_rsids_chunk.shape
+                    worksheet.set_column(0, max_col - 1, 20)
+                    worksheet.autofilter(0, 0, max_row, max_col - 1)
+                    update_status(f'"{sheet_name}" worksheet written to Excel.')
+                df_archive = chunk_list(archive_files_worksheet, "Archive Files")
+                for chunk_dict, sheet_name in df_archive:
+                    df_archive_chunk = pd.DataFrame(data=chunk_dict)
+                    df_archive_chunk.to_excel(
+                        excel_writer=writer, sheet_name=sheet_name, index=False
+                    )
+                    worksheet = writer.sheets[sheet_name]
+                    (max_row, max_col) = df_archive_chunk.shape
+                    worksheet.set_column(0, max_col - 1, 35)
+                    worksheet.autofilter(0, 0, max_row, max_col - 1)
+                    update_status(f'"{sheet_name}" worksheet written to Excel.')
+        script_end = dt.now().strftime(__dtfmt__)
         update_status(f'{"="*24}')
         if docxErrorCount > 0:
             clr = red
@@ -788,6 +870,25 @@ class UiDialog:
         update_status(f"Script finished execution: {script_end}", color=green)
         self.resetButton.setEnabled(True)
         self.resetButton.setStyleSheet(self.stylesheet)
+
+
+def chunk_list(sheet_dict, sheet_name):
+    chunks = []
+    if "File Name" in sheet_dict and len(sheet_dict["File Name"]) > 1000000:
+        file_names = sheet_dict["File Name"]
+        list_len = len(file_names)
+        chunk_size = 1000000
+
+        for start in range(0, list_len, chunk_size):
+            end = min(start + chunk_size, list_len)
+            chunk_dict = {
+                key: value[start:end] if isinstance(value, list) else value
+                for key, value in sheet_dict.items()
+            }
+            chunks.append((chunk_dict, f"{sheet_name}_{len(chunks) + 1}"))
+    else:
+        chunks.append((sheet_dict, sheet_name))
+    return chunks
 
 
 class MsWordGui(QMainWindow, UiDialog):
@@ -892,6 +993,11 @@ class MsWordGui(QMainWindow, UiDialog):
     def __init__(self):
         """Call and setup the UI"""
         super().__init__()
+        style = self.style()
+        dialog_icon = style.standardIcon(
+            QStyle.StandardPixmap.SP_FileDialogDetailedView
+        )
+        self.setWindowIcon(dialog_icon)
         self.setupUi(self)
 
 
@@ -915,42 +1021,49 @@ class Docx:
         But if in triage mode, some of the variables will not get assigned any value, thus
         will affect any methods that rely on those variables having a value assigned to them.
         """
-
+        self.namespaces = {
+            "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
+            "w14": "http://schemas.microsoft.com/office/word/2010/wordml",
+            "w15": "http://schemas.microsoft.com/office/word/2012/wordml",
+            "w16": "http://schemas.microsoft.com/office/word/2018/wordml",
+            "wp": "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing",
+        }
         self.msword_file = msword_file
         self.hashing = hashing
         self.header_offsets, self.binary_content = self.__find_binary_string()
         self.extra_fields = self.__xml_extra_bytes()
         self.core_xml_file = "docProps/core.xml"
-        self.core_xml_content = self.__load_core_xml()
+        self.core_xml_content = self.__load_xml(self.core_xml_file)
         if self.core_xml_content == "":
             self.core_xml_file = "docProps\\core.xml"
-            self.core_xml_content = self.__load_core_xml()
+            self.core_xml_content = self.__load_xml(self.core_xml_file)
         self.app_xml_file = "docProps/app.xml"
-        self.app_xml_content = self.__load_app_xml()
+        self.app_xml_content = self.__load_xml(self.app_xml_file)
         if self.app_xml_content == "":
             self.app_xml_file = "docProps\\app.xml"
-            self.app_xml_content = self.__load_app_xml()
+            self.app_xml_content = self.__load_xml(self.app_xml_file)
         self.document_xml_file = "word/document.xml"
-        self.document_xml_content = self.__load_document_xml()
+        self.document_xml_content = self.__load_xml(self.document_xml_file)
         if self.document_xml_content == "":
             self.document_xml_file = "word\\document.xml"
-            self.document_xml_content = self.__load_document_xml()
+            self.document_xml_content = self.__load_xml(self.document_xml_file)
         self.has_comments = ""  # Flag to denote if there are comments in the document.
-        self.comments = "word/comments.xml"
-        self.comments_xml_content = self.__load_comments_xml()
+        self.comments_file = "word/comments.xml"
+        self.comments_xml_content = self.__load_xml(self.comments_file)
         if self.comments_xml_content == "":
-            self.comments = "word\\comments.xml"
-            self.comments_xml_content = self.__load_comments_xml()
+            self.comments_file = "word\\comments.xml"
+            self.comments_xml_content = self.__load_xml(self.comments_file)
         self.settings_xml_file = "word/settings.xml"
-        self.settings_xml_content = self.__load_settings_xml()
+        self.settings_xml_content = self.__load_xml(self.settings_xml_file)
         if self.settings_xml_content == "":
             self.settings_xml_file = "word\\settings.xml"
-            self.settings_xml_content = self.__load_settings_xml()
-        self.rsidRs = self.__extract_all_rsidr_from_summary_xml()
+            self.settings_xml_content = self.__load_xml(self.settings_xml_file)
+        self.rsidRs = self.__extract_all_rsids_from_settings_xml()
 
-        self.p_tags = re.findall(r"<w:p>|<w:p [^>]*/?>", self.document_xml_content)
-        self.r_tags = re.findall(r"<w:r>|<w:r [^>]*/?>", self.document_xml_content)
-        self.t_tags = re.findall(r"<w:t>|<w:t.? [^>]*/?>", self.document_xml_content)
+        x = ET.fromstring(self.document_xml_content)
+        self.p_tags = x.findall(".//w:p", self.namespaces)
+        self.r_tags = x.findall(".//w:r", self.namespaces)
+        self.t_tags = x.findall(".//w:t", self.namespaces)
 
         if not triage:  # if not run in triage mode, do full parsing
 
@@ -958,9 +1071,8 @@ class Docx:
             self.rsidRPr = self.__other_rsids_in_document_xml("rsidRPr")
             self.rsidP = self.__other_rsids_in_document_xml("rsidP")
             self.rsidRDefault = self.__other_rsids_in_document_xml("rsidRDefault")
-
-            self.para_id = self.__para_id_tags__()
-            self.text_id = self.__text_id_tags__()
+            self.para_id = self.__other_rsids_in_document_xml("paraId")
+            self.text_id = self.__other_rsids_in_document_xml("textId")
 
     def __find_binary_string(self):
 
@@ -1069,102 +1181,89 @@ class Docx:
 
         return extras
 
-    def __load_core_xml(self):
-        # load core.xml
+    def __load_xml(self, xml_file):
         if (
-            self.core_xml_file in self.xml_files()
+            xml_file in self.xml_files()
         ):  # if the file exists, read it and return its content
+            if "comments.xml" in xml_file:
+                self.has_comments = True
             with zipfile.ZipFile(self.msword_file, "r") as zipref:
-                with zipref.open(self.core_xml_file) as xmlFile:
-                    return xmlFile.read().decode("utf-8")
-        else:  # if it doesn't exist, return an empty string.
-            ms_word_form.update_status(
-                f'"{self.core_xml_file}" does not exist in "{self.msword_file}". '
-                f"Returning empty string."
-            )
-            return ""
-
-    def __load_app_xml(self):
-        # load app.xml
-        if (
-            self.app_xml_file in self.xml_files()
-        ):  # if the file exists, read it and return its content
-            with zipfile.ZipFile(self.msword_file, "r") as zipref:
-                with zipref.open(self.app_xml_file) as xmlFile:
-                    return xmlFile.read().decode("utf-8")
-        else:  # if it doesn't exist, return an empty string.
-            ms_word_form.update_status(
-                f'"{self.app_xml_file}" does not exist in "{self.msword_file}". '
-                f"Returning empty string."
-            )
-            return ""
-
-    def __load_document_xml(self):
-        # load document.xml
-        if (
-            self.document_xml_file in self.xml_files()
-        ):  # if the file exists, read it and return its content
-            with zipfile.ZipFile(self.msword_file, "r") as zipref:
-                with zipref.open(self.document_xml_file) as xmlFile:
-                    return xmlFile.read().decode("utf-8")
-        else:  # if it doesn't exist, return an empty string.
-            ms_word_form.update_status(
-                f'"{self.document_xml_file}" does not exist in "{self.msword_file}". '
-                f"Returning empty string."
-            )
-            return ""
-
-    def __load_settings_xml(self):
-        if (
-            self.settings_xml_file in self.xml_files()
-        ):  # if the file exists, read it and return its content
-            with zipfile.ZipFile(self.msword_file, "r") as zipref:
-                with zipref.open(self.settings_xml_file) as xmlFile:
+                with zipref.open(xml_file) as xmlFile:
                     return xmlFile.read().decode("utf-8")
         else:
+            if "comments.xml" in xml_file:
+                self.has_comments = False
             ms_word_form.update_status(
-                f'"{self.settings_xml_file}" does not exist in "{self.msword_file}". '
-                f"Returning empty string."
+                f'"{xml_file}" does not exist in "{self.msword_file}". '
+                f"Returning empty string.",
+                level="debug",
             )
             return ""
 
-    def __extract_all_rsidr_from_summary_xml(self):
-        """
-        function to extract all RSIDs at the beginning of the class. If you were to put this in the method,
-        it would have to do this every time you called the method.
+    def get_comments(self):
+        """ "
+        return the list all_comments that contains the following:
+            comment ID #,
+            Timestamp,
+            Author,
+            Initials,
+            Text
         :return:
         """
-        rsids_list = []
-        # Find all RSIDs, not rsidRoot. rsidRoot is repeated in rsids.
-        matches = re.findall(
-            r'<w:rsid w:val="[0-9A-F]{8}" ?/>', self.settings_xml_content
-        )
 
-        for match in matches:  # loops through all matches
-            # greps for rsid using a group to extract the actual RSID from the string.
-            rsid_match = re.search(r'<w:rsid w:val="([0-9A-F]{8})"', match)
-            if rsid_match:
-                rsids_list.append(rsid_match.group(1))  # Appends it to the list
-        return "" if len(rsids_list) == 0 else rsids_list
+        if not self.has_comments:  # There are no comments
+            return ["", "", "", "", ""]
+        xml = ET.fromstring(self.comments_xml_content)
+        # Find all comments
+        comments = xml.findall(".//w:comment", self.namespaces)
+        all_comments = []  # list to contain all comments
+        for comment in comments:
+            author = comment.get(f"{{{self.namespaces['w']}}}author")
+            date_time = comment.get(f"{{{self.namespaces['w']}}}date")
+            initials = comment.get(f"{{{self.namespaces['w']}}}initials")
+            comment_id = comment.get(f"{{{self.namespaces['w']}}}id")
+            text = "".join(
+                [t.text for t in comment.findall(".//w:t", self.namespaces) if t.text]
+            )
+            all_comments.append([comment_id, date_time, author, initials, text])
+        return all_comments
 
-    def __rsidr_in_document_xml(self):
+    def any_comments(self):
+        return self.has_comments
+
+    def __extract_all_rsids_from_settings_xml(self):
+        """
+        function to extract all RSIDs at the beginning of the class.
+        :return:
+        """
+        rsids = []
+        ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
+        x = ET.fromstring(self.settings_xml_content)
+        rsid_tags = x.findall(".//w:rsid", ns)
+        for tag in rsid_tags:
+            rsid_tag = tag.get(f"{{{ns['w']}}}val", None)
+            if rsid_tag:
+                rsids.append(rsid_tag)
+        return "" if not rsids else rsids
+
+    def __rsidr_in_document_xml(self):  ## Roll into __other_rsids_in_document
         """
         This function calculates the count of each rsidR in document.xml
         It searches the previously extracted tags rather than the full document.
         :return:
         """
         rsidr_count = {}
+        all_found = []
+        for entry in [self.p_tags, self.r_tags, self.t_tags]:
+            for item in entry:
+                rsid_found = item.get(
+                    "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}rsidR",
+                    None,
+                )
+                if rsid_found:
+                    all_found.append(rsid_found)
         for rsid in self.rsidRs:
-            pattern = re.compile(rf'w:rsidR="{rsid}"')
-
-            count_rsids = 0
-
-            count_rsids += len(re.findall(pattern, ",".join(self.p_tags)))
-            count_rsids += len(re.findall(pattern, ",".join(self.r_tags)))
-            count_rsids += len(re.findall(pattern, ",".join(self.t_tags)))
-
-            rsidr_count[rsid] = count_rsids
-
+            rsidr_count[rsid] = all_found.count(rsid)
         return rsidr_count
 
     def __other_rsids_in_document_xml(self, rsid):
@@ -1180,58 +1279,25 @@ class Docx:
         in document.xml
         """
         rsids = {}
-        pattern = re.compile("w:" + rsid + '="[0-9A-F]{8}"')
-        # Find all rsid types passed to the function (rsidRPr, rsidP, rsidRDefault in document.xml file
-
-        matches = re.findall(pattern, ",".join(self.p_tags))  # searches p_tags
-        matches += re.findall(pattern, ",".join(self.r_tags))  # searches r_tags
-        matches += re.findall(pattern, ",".join(self.t_tags))  # searches t_tags
-
-        for match in matches:  # loops through all matches
-            # greps for rsid using a group to extract the actual RSID from the string.
-            group_pattern = rf"w:" + rsid + '="([0-9A-F]{8})"'
-            rsid_match = re.search(group_pattern, match)
-            if rsid_match:
-                if rsid_match.group(1) in rsids:
-                    rsids[rsid_match.group(1)] += 1  # increment count by 1
-                else:
-                    rsids[rsid_match.group(1)] = 1  # Appends it to the list
+        all_rsids = []
+        ns_list = {
+            "rsidR": "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
+            "rsidRDefault": "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
+            "rsidRPr": "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
+            "rsidP": "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
+            "paraId": "http://schemas.microsoft.com/office/word/2010/wordml",
+            "textId": "http://schemas.microsoft.com/office/word/2010/wordml",
+        }
+        for entry in [self.p_tags, self.r_tags, self.t_tags]:
+            for item in entry:
+                other_rsid = item.get(f"{{{ns_list[rsid]}}}{rsid}", None)
+                if other_rsid:
+                    all_rsids.append(other_rsid)
+        unique_rsids = set(all_rsids)
+        for each_rsid in unique_rsids:
+            rsids[each_rsid] = all_rsids.count(each_rsid)
 
         return rsids
-
-    def __para_id_tags__(self):
-        """
-        :return: list of unique paraId tags and count in document.xml
-        """
-        pid_tags = {}  # empty dictionary to start
-
-        for pid_tag in self.p_tags:
-            pidtag = re.search(r'paraId="([0-9A-F]{8})"', pid_tag)
-            if pidtag is None:  # no paraId= tag in this <w:p> paragraph tag.
-                pass
-            elif pidtag.group(1) in pid_tags:
-                pid_tags[pidtag.group(1)] += 1  # increment count by 1
-            else:
-                pid_tags[pidtag.group(1)] = 1  # append to the list
-
-        return pid_tags
-
-    def __text_id_tags__(self):
-        """
-        :return: list of unique paraId tags and count in document.xml
-        """
-        text_tags = {}  # empty dictionary to start
-
-        for text_tag in self.p_tags:
-            texttag = re.search(r'textId="([0-9A-F]{8})"', text_tag)
-            if texttag is None:  # no paraId= tag in this <w:p> paragraph tag.
-                pass
-            elif texttag.group(1) in text_tags:
-                text_tags[texttag.group(1)] += 1  # increment count by 1
-            else:
-                text_tags[texttag.group(1)] = 1  # append to the list
-
-        return text_tags
 
     def filename(self):
         """
@@ -1263,20 +1329,6 @@ class Docx:
                         ZIP extra values (hex as text)
         }
         """
-        month = {
-            1: "Jan",
-            2: "Feb",
-            3: "Mar",
-            4: "Apr",
-            5: "May",
-            6: "Jun",
-            7: "Jul",
-            8: "Aug",
-            9: "Sep",
-            10: "Oct",
-            11: "Nov",
-            12: "Dec",
-        }
         with zipfile.ZipFile(self.msword_file, "r") as zip_file:
             # returns XML files in the DOCx
             xml_files = {}
@@ -1291,7 +1343,7 @@ class Docx:
                 if m_time in ((1980, 1, 1, 0, 0, 0), (1980, 0, 0, 0, 0, 0)):
                     modified_time = "nil"
                 else:
-                    modified_time = f"{m_time[0]}-{month[m_time[1]]}-{m_time[2]:02d} {m_time[3]:02d}:{m_time[4]:02d}:{m_time[5]:02d}"  ##TODO, fix timestamp formatting
+                    modified_time = dt(*m_time).strftime(__dtfmt__)
                 fname = file_info.filename
                 if fname not in self.extra_fields:
                     fname = fname.replace("/", "\\")
@@ -1311,16 +1363,16 @@ class Docx:
                 xml_files  # returns dictionary {xml_filename: [file size, file hash]}
             )
 
-    def xml_hash(self, xmlfile):
+    def xml_hash(self, xmlfile: str):
         """
-        :param xmlfile
+        :param: xmlfile
         :return: the hash of a specified XML file
         """
         return self.xml_files()[xmlfile][1]
 
-    def xml_size(self, xmlfile):
+    def xml_size(self, xmlfile: str):
         """
-        :param xmlfile
+        :param: xmlfile
         :return: the size of a specified XML file
         """
         return self.xml_files()[xmlfile][0]
@@ -1585,8 +1637,16 @@ class Docx:
         """
         :return: rsidRoot from settings.xml
         """
-        root = re.search(r'<w:rsidRoot w:val="([^"]*)"', self.settings_xml_content)
-        return "" if root is None else root.group(1)
+        x = ET.fromstring(self.settings_xml_content)
+        rsid_root_entry = x.findall(".//w:rsidRoot", self.namespaces)
+        root = None
+        for entry in [rsid_root_entry]:
+            for item in entry:
+                root = item.get(
+                    "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val",
+                    None,
+                )
+        return "" if root is None else root
 
     def rsidr(self):
         """
@@ -1633,59 +1693,6 @@ class Docx:
 
     def text_id_tags(self):
         return self.text_id
-
-    def __load_comments_xml(self):
-        # load comments.xml
-        if (
-            self.comments in self.xml_files()
-        ):  # if the file exists, read it and return its content
-            self.has_comments = True
-            with zipfile.ZipFile(self.msword_file, "r") as zipref:
-                with zipref.open(self.comments) as xmlFile:
-                    return xmlFile.read().decode("utf-8")
-        else:  # if it doesn't exist, return an empty string.
-            self.has_comments = False
-            return ""
-
-    def get_comments(self):
-        """ "
-        return the list all_comments that contains the following:
-            comment ID #,
-            Timestamp,
-            Author,
-            Initials,
-            Text
-        :return:
-        """
-
-        if not self.has_comments:  # There are no comments
-            return ["", "", "", "", ""]
-        xml = ET.fromstring(self.comments_xml_content)
-
-        namespaces = {
-            "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main",  # Main namespace
-            "w14": "http://schemas.microsoft.com/office/word/2010/wordml",  # Other used namespace
-            "wp": "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing",
-        }
-
-        # Find all comments
-        comments = xml.findall(".//w:comment", namespaces)
-
-        all_comments = []  # list to contain all comments
-
-        for comment in comments:
-            author = comment.get("{" + namespaces["w"] + "}" + "author")
-            date_time = comment.get("{" + namespaces["w"] + "}" + "date")
-            initials = comment.get("{" + namespaces["w"] + "}" + "initials")
-            comment_id = comment.get("{" + namespaces["w"] + "}" + "id")
-            text = "".join([t.text for t in comment.findall(".//w:t", namespaces)])
-
-            all_comments.append([comment_id, date_time, author, initials, text])
-
-        return all_comments
-
-    def any_comments(self):
-        return self.has_comments
 
     def details(self):
         """
@@ -1798,6 +1805,7 @@ def process_docx(filename):
         "Doc Security",
         "Category",
         "Content Status",
+        "RSID Root",
     ]
 
     if not bool(metadata_worksheet):  # if it's an empty dictionary, add headers to it.
@@ -1829,6 +1837,7 @@ def process_docx(filename):
     metadata_worksheet[headers[23]].append(filename.security())
     metadata_worksheet[headers[24]].append(filename.category())
     metadata_worksheet[headers[25]].append(filename.content_status())
+    metadata_worksheet[headers[26]].append(filename.rsid_root())
 
     update_status("    Extracted metadata artifacts")
 
@@ -1847,7 +1856,7 @@ def process_docx(filename):
             comments_worksheet = dict((k, []) for k in headers)
 
         for comment in filename.get_comments():
-            update_status(f"    Processing comment: {comment}")
+            update_status(f"    Processing comment: {comment}", level="debug")
             comments_worksheet[headers[0]].append(filename.filename())  # Filename
             comments_worksheet[headers[1]].append(comment[0])  # ID
             comments_worksheet[headers[2]].append(comment[1])  # Timestamp
@@ -1858,7 +1867,10 @@ def process_docx(filename):
         update_status("    Extracted comments artifacts")
 
     if not triage:  # will generate these spreadsheet if not triage
-        update_status(f'    Updating "Archive Files" worksheet in "{excel_file_path}"')
+        update_status(
+            f'    Updating "Archive Files" worksheet in {excel_file_path}',
+            level="debug",
+        )
         # Writing XML files to "Archive Files" worksheet
         headers = [
             "File Name",
@@ -1906,7 +1918,13 @@ def process_docx(filename):
 
         # Calculating count of rsidR, rsidRPr, rsidP, rsidRDefault, paraId, and textId in document.xml
         # and writing to "rsids" worksheet
-        headers = ["File Name", "RSID Type", "RSID Value", "Count in document.xml"]
+        headers = [
+            "File Name",
+            "RSID Type",
+            "RSID Value",
+            "Count in document.xml",
+            "RSID Root",
+        ]
 
         if not bool(rsids_worksheet):  # if it's an empty dictionary, add headers to it.
             rsids_worksheet = dict((k, []) for k in headers)
@@ -1917,6 +1935,7 @@ def process_docx(filename):
             rsids_worksheet[headers[1]].append("rsidR")
             rsids_worksheet[headers[2]].append(k)
             rsids_worksheet[headers[3]].append(v)
+            rsids_worksheet[headers[4]].append(filename.rsid_root())
 
         update_status("    Calculating rsidP count")
         for k, v in filename.rsidp_in_document_xml().items():
@@ -1924,6 +1943,7 @@ def process_docx(filename):
             rsids_worksheet[headers[1]].append("rsidP")
             rsids_worksheet[headers[2]].append(k)
             rsids_worksheet[headers[3]].append(v)
+            rsids_worksheet[headers[4]].append(filename.rsid_root())
 
         update_status("    Calculating rsidPr count")
         for k, v in filename.rsidrpr_in_document_xml().items():
@@ -1931,6 +1951,7 @@ def process_docx(filename):
             rsids_worksheet[headers[1]].append("rsidRPr")
             rsids_worksheet[headers[2]].append(k)
             rsids_worksheet[headers[3]].append(v)
+            rsids_worksheet[headers[4]].append(filename.rsid_root())
 
         update_status("    Calculating rsidRDefault count")
         for k, v in filename.rsidrdefault_in_document_xml().items():
@@ -1938,6 +1959,7 @@ def process_docx(filename):
             rsids_worksheet[headers[1]].append("rsidRDefault")
             rsids_worksheet[headers[2]].append(k)
             rsids_worksheet[headers[3]].append(v)
+            rsids_worksheet[headers[4]].append(filename.rsid_root())
 
         update_status("    Calculating paraID count")
         for k, v in filename.paragraph_id_tags().items():
@@ -1945,6 +1967,7 @@ def process_docx(filename):
             rsids_worksheet[headers[1]].append("paraID")
             rsids_worksheet[headers[2]].append(k)
             rsids_worksheet[headers[3]].append(v)
+            rsids_worksheet[headers[4]].append(filename.rsid_root())
 
         update_status("    Calculating textID count")
         for k, v in filename.text_id_tags().items():
@@ -1952,6 +1975,7 @@ def process_docx(filename):
             rsids_worksheet[headers[1]].append("textID")
             rsids_worksheet[headers[2]].append(k)
             rsids_worksheet[headers[3]].append(v)
+            rsids_worksheet[headers[4]].append(filename.rsid_root())
     update_status(f"Finished processing {filename.filename()}")
     update_status(f'{"-"*36}')
 
@@ -1959,7 +1983,6 @@ def process_docx(filename):
 def main():
     global ms_word_form
     ms_word_app = QApplication([__appname__, "windows:darkmode=2"])
-    # ms_word_app.setWindowIcon(QIcon("logo.ico"))
     ms_word_app.setStyle("Fusion")
     ms_word_form = MsWordGui()
     ms_word_form.show()

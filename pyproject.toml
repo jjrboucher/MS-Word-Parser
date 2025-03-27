@@ -10,7 +10,8 @@ name = "ms-word-parser"
 version = "2.0.0"
 dependencies = [
     "PyQt6",
-    "pandas"
+    "pandas",
+    "xlsxwriter"
 ]
 requires-python = ">=3.9"
 authors = [
