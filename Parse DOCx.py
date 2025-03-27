@@ -144,7 +144,7 @@ def process_docx(filename):
     # Corresponding values passed, resulting in a dictionary being passed called allMetadata
     # containing column headings and associated extracted metadata value.
 
-    headers = ["File Name", "Author", "Created Date", "Last Modified By", "Modified Date", "Last Printed Date",
+    headers = ["File Name", "RSID Root","Author", "Created Date", "Last Modified By", "Modified Date", "Last Printed Date",
                "Manager", "Company", "Revision", "Total Editing Time", "Pages", "Paragraphs", "Lines", "Words",
                "Characters", "Characters With Spaces", "Title", "Subject", "Keywords", "Description",
                "Application", "App Version", "Template", "Doc Security", "Category", "Content Status"]
@@ -153,31 +153,32 @@ def process_docx(filename):
         metadata_worksheet = dict((k, []) for k in headers)
 
     metadata_worksheet[headers[0]].append(filename.filename())
-    metadata_worksheet[headers[1]].append(filename.creator())
-    metadata_worksheet[headers[2]].append(filename.created())
-    metadata_worksheet[headers[3]].append(filename.last_modified_by())
-    metadata_worksheet[headers[4]].append(filename.modified())
-    metadata_worksheet[headers[5]].append(filename.last_printed())
-    metadata_worksheet[headers[6]].append(filename.manager())
-    metadata_worksheet[headers[7]].append(filename.company())
-    metadata_worksheet[headers[8]].append(filename.revision())
-    metadata_worksheet[headers[9]].append(filename.total_editing_time())
-    metadata_worksheet[headers[10]].append(filename.pages())
-    metadata_worksheet[headers[11]].append(filename.paragraphs())
-    metadata_worksheet[headers[12]].append(filename.lines())
-    metadata_worksheet[headers[13]].append(filename.words())
-    metadata_worksheet[headers[14]].append(filename.characters())
-    metadata_worksheet[headers[15]].append(filename.characters_with_spaces())
-    metadata_worksheet[headers[16]].append(filename.title())
-    metadata_worksheet[headers[17]].append(filename.subject())
-    metadata_worksheet[headers[18]].append(filename.keywords())
-    metadata_worksheet[headers[19]].append(filename.description())
-    metadata_worksheet[headers[20]].append(filename.application())
-    metadata_worksheet[headers[21]].append(filename.app_version())
-    metadata_worksheet[headers[22]].append(filename.template())
-    metadata_worksheet[headers[23]].append(filename.security())
-    metadata_worksheet[headers[24]].append(filename.category())
-    metadata_worksheet[headers[25]].append(filename.content_status())
+    metadata_worksheet[headers[1]].append(filename.rsid_root())
+    metadata_worksheet[headers[2]].append(filename.creator())
+    metadata_worksheet[headers[3]].append(filename.created())
+    metadata_worksheet[headers[4]].append(filename.last_modified_by())
+    metadata_worksheet[headers[5]].append(filename.modified())
+    metadata_worksheet[headers[6]].append(filename.last_printed())
+    metadata_worksheet[headers[7]].append(filename.manager())
+    metadata_worksheet[headers[8]].append(filename.company())
+    metadata_worksheet[headers[9]].append(filename.revision())
+    metadata_worksheet[headers[10]].append(filename.total_editing_time())
+    metadata_worksheet[headers[11]].append(filename.pages())
+    metadata_worksheet[headers[12]].append(filename.paragraphs())
+    metadata_worksheet[headers[13]].append(filename.lines())
+    metadata_worksheet[headers[14]].append(filename.words())
+    metadata_worksheet[headers[15]].append(filename.characters())
+    metadata_worksheet[headers[16]].append(filename.characters_with_spaces())
+    metadata_worksheet[headers[17]].append(filename.title())
+    metadata_worksheet[headers[18]].append(filename.subject())
+    metadata_worksheet[headers[19]].append(filename.keywords())
+    metadata_worksheet[headers[20]].append(filename.description())
+    metadata_worksheet[headers[21]].append(filename.application())
+    metadata_worksheet[headers[22]].append(filename.app_version())
+    metadata_worksheet[headers[23]].append(filename.template())
+    metadata_worksheet[headers[24]].append(filename.security())
+    metadata_worksheet[headers[25]].append(filename.category())
+    metadata_worksheet[headers[26]].append(filename.content_status())
 
     print(f'Extracted {green}metadata{white} artifacts')
 
