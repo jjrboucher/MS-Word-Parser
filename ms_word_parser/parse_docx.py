@@ -71,7 +71,6 @@ Processes that this script will do:
 
 
 import hashlib
-import re
 import os
 import zipfile
 import logging
@@ -132,7 +131,7 @@ black = QColor(0, 0, 0)
 __version__ = "2.0.0"
 __appname__ = f"MS Word Parser v{__version__}"
 __source__ = "https://github.com/jjrboucher/MS-Word-Parser"
-__date__ = "22 March 2025"
+__date__ = "28 March 2025"
 __author__ = (
     "Jacques Boucher - jjrboucher@gmail.com\nCorey Forman - corey@digitalsleuth.ca"
 )
@@ -803,7 +802,8 @@ class UiDialog:
                 worksheet = writer.sheets[sheet_name]
                 (max_row, max_col) = df_summary_chunk.shape
                 worksheet.set_column(0, 1, 34)
-                worksheet.set_column(2, max_col - 1, 16)
+                worksheet.set_column(2, max_col - 4, 16)
+                worksheet.set_column(max_col - 3, max_col - 1, 40)
                 worksheet.autofilter(0, 0, max_row, max_col - 1)
                 update_status(f'"{sheet_name}" worksheet written to Excel.')
             df_metadata = chunk_list(metadata_worksheet, "Metadata")
@@ -1022,11 +1022,19 @@ class Docx:
         will affect any methods that rely on those variables having a value assigned to them.
         """
         self.namespaces = {
+            "cp": "http://schemas.openxmlformats.org/package/2006/metadata/core-properties",
+            "dc": "http://purl.org/dc/elements/1.1/",
+            "dcterms": "http://purl.org/dc/terms/",
+            "dcmitype": "http://purl.org/dc/dcmitype/",
+            "default": "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties",
+            "r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+            "vt": "http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes",
             "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
             "w14": "http://schemas.microsoft.com/office/word/2010/wordml",
             "w15": "http://schemas.microsoft.com/office/word/2012/wordml",
             "w16": "http://schemas.microsoft.com/office/word/2018/wordml",
             "wp": "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing",
+            "xsi": "http://www.w3.org/2001/XMLSchema-instance",
         }
         self.msword_file = msword_file
         self.hashing = hashing
@@ -1222,8 +1230,16 @@ class Docx:
             date_time = comment.get(f"{{{self.namespaces['w']}}}date")
             initials = comment.get(f"{{{self.namespaces['w']}}}initials")
             comment_id = comment.get(f"{{{self.namespaces['w']}}}id")
-            text = "".join(
-                [t.text for t in comment.findall(".//w:t", self.namespaces) if t.text]
+            text = (
+                "".join(
+                    [
+                        t.text
+                        for t in comment.findall(".//w:t", self.namespaces)
+                        if t.text
+                    ]
+                )
+                .encode("latin-1", "ignore")
+                .decode()
             )
             all_comments.append([comment_id, date_time, author, initials, text])
         return all_comments
@@ -1298,6 +1314,21 @@ class Docx:
             rsids[each_rsid] = all_rsids.count(each_rsid)
 
         return rsids
+
+    def hyperlinks(self):  ## Add
+        """
+        :return: Hyperlink values in document.xml
+        """
+        doc_hyperlinks = []
+        doc = ET.fromstring(self.document_xml_content)
+        for hyperlink in doc.findall(f".//{{{self.namespaces['w']}}}hyperlink"):
+            link_text = hyperlink.findall(f".//{{{self.namespaces['w']}}}t")
+            hyperlinks = ",".join(link.text for link in link_text if link.text)
+            hyperlinks = hyperlinks.replace("http", "hxxp")
+            rel_id = hyperlink.get(f"{{{self.namespaces['r']}}}id", "")
+            doc_hyperlinks.append([hyperlinks, rel_id])
+        all_hyperlinks = " - ".join(f"{url}: {rel}" for url, rel in doc_hyperlinks)
+        return all_hyperlinks
 
     def filename(self):
         """
@@ -1381,129 +1412,146 @@ class Docx:
         """
         :return: the title metadata in core.xml
         """
-        doc_title = re.search(
-            r"<.{0,2}:?title>(.*?)</.{0,2}:?title>", self.core_xml_content
-        )
-        return "" if doc_title is None else doc_title.group(1)
+        core = ET.fromstring(self.core_xml_content)
+        core_ns = core.find(f"{{{self.namespaces['dc']}}}title")
+        doc_title = core_ns.text if core_ns is not None else ""
+        return doc_title
 
     def subject(self):
         """
         :return: the subject metadata from core.xml
         """
-        doc_subject = re.search(
-            r"<.{0,2}:?subject>(.*?)</.{0,2}:?subject>", self.core_xml_content
-        )
-        return "" if doc_subject is None else doc_subject.group(1)
+        core = ET.fromstring(self.core_xml_content)
+        core_ns = core.find(f"{{{self.namespaces['dc']}}}subject")
+        doc_subject = core_ns.text if core_ns is not None else ""
+        return doc_subject
 
     def creator(self):
         """
         :return: the creator metadata from core.xml
         """
-        doc_creator = re.search(
-            r"<.{0,2}:?creator>(.*?)</.{0,2}:?creator>", self.core_xml_content
-        )
-        return "" if doc_creator is None else doc_creator.group(1)
+        core = ET.fromstring(self.core_xml_content)
+        core_ns = core.find(f"{{{self.namespaces['dc']}}}creator")
+        doc_creator = core_ns.text if core_ns is not None else ""
+        return doc_creator
 
     def keywords(self):
         """
         :return: the keywords metadata from core.xml
         """
-        doc_keywords = re.search(
-            r"<.{0,2}:?keywords>(.*?)</.{0,2}:?keywords>", self.core_xml_content
-        )
-        return "" if doc_keywords is None else doc_keywords.group(1)
+        core = ET.fromstring(self.core_xml_content)
+        core_ns = core.find(f"{{{self.namespaces['cp']}}}keywords")
+        doc_keywords = core_ns.text if core_ns is not None else ""
+        return doc_keywords
 
     def description(self):
         """
         :return: the description metadata from core.xml
         """
-        doc_description = re.search(
-            r"<.{0,2}:?description>(.*?)</.{0,2}:?description>", self.core_xml_content
-        )
-        return "" if doc_description is None else doc_description.group(1)
+        core = ET.fromstring(self.core_xml_content)
+        core_ns = core.find(f"{{{self.namespaces['dc']}}}description")
+        doc_description = core_ns.text if core_ns is not None else ""
+        return doc_description
 
     def revision(self):
         """
         :return: the revision # metadata from core.xml
         """
-        doc_revision = re.search(
-            r"<.{0,2}:?revision>(.*?)</.{0,2}:?revision>", self.core_xml_content
-        )
-        return "" if doc_revision is None else doc_revision.group(1)
+        core = ET.fromstring(self.core_xml_content)
+        core_ns = core.find(f"{{{self.namespaces['cp']}}}revision")
+        doc_revision = core_ns.text if core_ns is not None else ""
+        return doc_revision
 
     def created(self):
         """
         :return: the created date metadata from core.xml
         """
-        doc_created = re.search(
-            r"<dcterms:created[^>].*?>(.*?)</dcterms:created>", self.core_xml_content
-        )
-        return "" if doc_created is None else doc_created.group(1)
+        core = ET.fromstring(self.core_xml_content)
+        core_ns = core.find(f"{{{self.namespaces['dcterms']}}}created")
+        doc_created = core_ns.text if core_ns is not None else ""
+        return doc_created
 
     def modified(self):
         """
         :return: the modified date metadata from core.xml
         """
-        doc_modified = re.search(
-            r"<dcterms:modified[^>].*?>(.*?)</dcterms:modified>", self.core_xml_content
-        )
-        return "" if doc_modified is None else doc_modified.group(1)
+        core = ET.fromstring(self.core_xml_content)
+        core_ns = core.find(f"{{{self.namespaces['dcterms']}}}modified")
+        doc_modified = core_ns.text if core_ns is not None else ""
+        return doc_modified
 
     def last_modified_by(self):
         """
         :return: the last modified by metadata from core.xml
         """
-        doc_lastmodifiedby = re.search(
-            r"<.{0,2}:?lastModifiedBy>(.*?)</.{0,2}:?lastModifiedBy>",
-            self.core_xml_content,
-        )
-        return "" if doc_lastmodifiedby is None else doc_lastmodifiedby.group(1)
+        core = ET.fromstring(self.core_xml_content)
+        core_ns = core.find(f"{{{self.namespaces['cp']}}}lastModifiedBy")
+        doc_lastmodifiedby = core_ns.text if core_ns is not None else ""
+        return doc_lastmodifiedby
 
     def last_printed(self):
         """
         :return: the last printed date metadata from core.xml
         """
-        doc_lastprinted = re.search(
-            r"<.{0,2}:?lastPrinted>(.*?)</.{0,2}:?lastPrinted>", self.core_xml_content
-        )
-        return "" if doc_lastprinted is None else doc_lastprinted.group(1)
+        core = ET.fromstring(self.core_xml_content)
+        core_ns = core.find(f"{{{self.namespaces['cp']}}}lastPrinted")
+        doc_lastprinted = core_ns.text if core_ns is not None else ""
+        return doc_lastprinted
 
     def category(self):
         """
         :return: the category metadata from core.xml
         """
-        doc_category = re.search(
-            r"<.{0,2}:?category>(.*?)</.{0,2}:?category>", self.core_xml_content
-        )
-        return "" if doc_category is None else doc_category.group(1)
+        core = ET.fromstring(self.core_xml_content)
+        core_ns = core.find(f"{{{self.namespaces['cp']}}}category")
+        doc_category = core_ns.text if core_ns is not None else ""
+        return doc_category
 
     def content_status(self):
         """
         :return: the content status metadata from core.xml
         """
-        doc_contentstatus = re.search(
-            r"<.{0,2}:?contentStatus>(.*?)</.{0,2}:?contentStatus>",
-            self.core_xml_content,
-        )
-        return "" if doc_contentstatus is None else doc_contentstatus.group(1)
+        core = ET.fromstring(self.core_xml_content)
+        core_ns = core.find(f"{{{self.namespaces['cp']}}}contentStatus")
+        doc_contentstatus = core_ns.text if core_ns is not None else ""
+        return doc_contentstatus
+
+    def language(self):
+        """
+        :return: The language of the document, found in the core.xml
+        """
+        core = ET.fromstring(self.core_xml_content)
+        core_ns = core.find(f"{{{self.namespaces['dc']}}}language")
+        doc_language = core_ns.text if core_ns is not None else ""
+        return doc_language
+
+    def version(self):
+        """
+        :return: The 'version' of the document, found in core.xml
+        The 'version' can be any value, not specifically a number.
+        """
+        core = ET.fromstring(self.core_xml_content)
+        core_ns = core.find(f"{{{self.namespaces['cp']}}}version")
+        doc_version = core_ns.text if core_ns is not None else ""
+        return doc_version
 
     def template(self):
         """
         :return: the template metadata from app.xml
         """
-        doc_template = re.search(
-            r"<.{0,2}:?Template>(.*?)</.{0,2}:?Template>", self.app_xml_content
-        )
-        return "" if doc_template is None else doc_template.group(1)
+        app = ET.fromstring(self.app_xml_content)
+        app_ns = app.find(f"{{{self.namespaces['default']}}}Template")
+        doc_template = app_ns.text if app_ns is not None else ""
+        return doc_template
 
     def total_editing_time(self):
         """
         :return: the total editing time in minutes metadata from app.xml
         """
-        doc_edit_time = re.search(
-            r"<.{0,2}:?TotalTime>(.*?)</.{0,2}:?TotalTime>", self.app_xml_content
-        )
-        return "" if doc_edit_time is None else doc_edit_time.group(1)
+        app = ET.fromstring(self.app_xml_content)
+        app_ns = app.find(f"{{{self.namespaces['default']}}}TotalTime")
+        doc_edit_time = app_ns.text if app_ns is not None else ""
+        return doc_edit_time
 
     def pages(self):
         """
@@ -1512,55 +1560,55 @@ class Docx:
         It is not an error in the script. It's an error in the metadata. Opening the document and allowing it to
         fully load and then saving it updates this. But of course, it changes other metadata as well if you do that.
         """
-        doc_pages = re.search(
-            r"<.{0,2}:?Pages>(.*?)</.{0,2}:?Pages>", self.app_xml_content
-        )
-        return "" if doc_pages is None else doc_pages.group(1)
+        app = ET.fromstring(self.app_xml_content)
+        app_ns = app.find(f"{{{self.namespaces['default']}}}Pages")
+        doc_pages = app_ns.text if app_ns is not None else ""
+        return doc_pages
 
     def words(self):
         """
         :return: the number of words in the document metadata from app.xml
         """
-        doc_words = re.search(
-            r"<.{0,2}:?Words>(.*?)</.{0,2}:?Words>", self.app_xml_content
-        )
-        return "" if doc_words is None else doc_words.group(1)
+        app = ET.fromstring(self.app_xml_content)
+        app_ns = app.find(f"{{{self.namespaces['default']}}}Words")
+        doc_words = app_ns.text if app_ns is not None else ""
+        return doc_words
 
     def characters(self):
         """
         :return: the number of characters in the document metadata from app.xml
         """
-        doc_characters = re.search(
-            r"<.{0,2}:?Characters>(.*?)</.{0,2}:?Characters>", self.app_xml_content
-        )
-        return "" if doc_characters is None else doc_characters.group(1)
+        app = ET.fromstring(self.app_xml_content)
+        app_ns = app.find(f"{{{self.namespaces['default']}}}Characters")
+        doc_characters = app_ns.text if app_ns is not None else ""
+        return doc_characters
 
     def application(self):
         """
         :return: the application name that created the document metadata from app.xml
         """
-        doc_application = re.search(
-            r"<.{0,2}:?Application>(.*?)</.{0,2}:?Application>", self.app_xml_content
-        )
-        return "" if doc_application is None else doc_application.group(1)
+        app = ET.fromstring(self.app_xml_content)
+        app_ns = app.find(f"{{{self.namespaces['default']}}}Application")
+        doc_application = app_ns.text if app_ns is not None else ""
+        return doc_application
 
     def security(self):
         """
         :return: the security metadata from app.xml
         """
-        doc_security = re.search(
-            r"<.{0,2}:?DocSecurity>(.*?)</.{0,2}:?DocSecurity>", self.app_xml_content
-        )
-        return "" if doc_security is None else doc_security.group(1)
+        app = ET.fromstring(self.app_xml_content)
+        app_ns = app.find(f"{{{self.namespaces['default']}}}DocSecurity")
+        doc_security = app_ns.text if app_ns is not None else ""
+        return doc_security
 
     def lines(self):
         """
         :return: the number of lines in the document metadata from app.xml
         """
-        doc_lines = re.search(
-            r"<.{0,2}:?Lines>(.*?)</.{0,2}:?Lines>", self.app_xml_content
-        )
-        return "" if doc_lines is None else doc_lines.group(1)
+        app = ET.fromstring(self.app_xml_content)
+        app_ns = app.find(f"{{{self.namespaces['default']}}}Lines")
+        doc_lines = app_ns.text if app_ns is not None else ""
+        return doc_lines
 
     def paragraphs(self):
         """
@@ -1569,51 +1617,64 @@ class Docx:
         the metadata for some reason. It's not an error in this program. It's an error with the metadata itself
         in the document.
         """
-        doc_paragraphs = re.search(
-            r"<.{0,2}:?Paragraphs>(.*?)</.{0,2}:?Paragraphs>", self.app_xml_content
-        )
-        return "" if doc_paragraphs is None else doc_paragraphs.group(1)
+        app = ET.fromstring(self.app_xml_content)
+        app_ns = app.find(f"{{{self.namespaces['default']}}}Paragraphs")
+        doc_paragraphs = app_ns.text if app_ns is not None else ""
+        return doc_paragraphs
 
     def characters_with_spaces(self):
         """
         :return: the total characters including spaces in the document metadatafrom app.xml
         """
-        doc_characters_with_spaces = re.search(
-            r"<.{0,2}:?CharactersWithSpaces>(.*?)</.{0,2}:?CharactersWithSpaces>",
-            self.app_xml_content,
-        )
-        return (
-            ""
-            if doc_characters_with_spaces is None
-            else doc_characters_with_spaces.group(1)
-        )
+        app = ET.fromstring(self.app_xml_content)
+        app_ns = app.find(f"{{{self.namespaces['default']}}}CharactersWithSpaces")
+        doc_characters_with_spaces = app_ns.text if app_ns is not None else ""
+        return doc_characters_with_spaces
 
     def app_version(self):
         """
         :return: the version of the app that created the document metadatafrom app.xml
         """
-        doc_app_version = re.search(
-            r"<.{0,2}:?AppVersion>(.*?)</.{0,2}:?AppVersion>", self.app_xml_content
-        )
-        return "" if doc_app_version is None else doc_app_version.group(1)
+        app = ET.fromstring(self.app_xml_content)
+        app_ns = app.find(f"{{{self.namespaces['default']}}}AppVersion")
+        doc_app_version = app_ns.text if app_ns is not None else ""
+        return doc_app_version
 
     def manager(self):
         """
         :return: the manager metadata from app.xml
         """
-        doc_manager = re.search(
-            r"<.{0,2}:?Manager>(.*?)</.{0,2}:?Manager>", self.app_xml_content
-        )
-        return "" if doc_manager is None else doc_manager.group(1)
+        app = ET.fromstring(self.app_xml_content)
+        app_ns = app.find(f"{{{self.namespaces['default']}}}Manager")
+        doc_manager = app_ns.text if app_ns is not None else ""
+        return doc_manager
 
     def company(self):
         """
         :return: the company metadata from app.xml
         """
-        doc_company = re.search(
-            r"<.{0,2}:?Company>(.*?)</.{0,2}:?Company>", self.app_xml_content
-        )
-        return "" if doc_company is None else doc_company.group(1)
+        app = ET.fromstring(self.app_xml_content)
+        app_ns = app.find(f"{{{self.namespaces['default']}}}Company")
+        doc_company = app_ns.text if app_ns is not None else ""
+        return doc_company
+
+    def shared_doc(self):
+        """
+        :return: String boolean value as to whether or not the doc is a SharedDoc
+        """
+        app = ET.fromstring(self.app_xml_content)
+        app_ns = app.find(f"{{{self.namespaces['default']}}}SharedDoc")
+        doc_shared = app_ns.text if app_ns is not None else ""
+        return doc_shared
+
+    def hyperlinks_changed(self):
+        """
+        :return: String boolean value as to whether or not the hyperlinks have changed in the doc
+        """
+        app = ET.fromstring(self.app_xml_content)
+        app_ns = app.find(f"{{{self.namespaces['default']}}}HyperlinksChanged")
+        doc_hyperlinks_changed = app_ns.text if app_ns is not None else ""
+        return doc_hyperlinks_changed
 
     def paragraph_tags(self):
         """
@@ -1647,6 +1708,31 @@ class Docx:
                     None,
                 )
         return "" if root is None else root
+
+    def doc_ids(self):
+        """
+        :return: the w14, w15, and w16 docId's from settings.xml
+        """
+        x = ET.fromstring(self.settings_xml_content)
+        w14_ns = x.find(f"{{{self.namespaces['w14']}}}docId")
+        w14_id = (
+            w14_ns.get(f"{{{self.namespaces['w14']}}}val", "")
+            if w14_ns is not None
+            else ""
+        )
+        w15_ns = x.find(f"{{{self.namespaces['w15']}}}docId")
+        w15_id = (
+            w15_ns.get(f"{{{self.namespaces['w15']}}}val", "")
+            if w15_ns is not None
+            else ""
+        )
+        w16_ns = x.find(f"{{{self.namespaces['w16']}}}docId")
+        w16_id = (
+            w16_ns.get(f"{{{self.namespaces['w16']}}}val", "")
+            if w16_ns is not None
+            else ""
+        )
+        return [w14_id, w15_id, w16_id]
 
     def rsidr(self):
         """
@@ -1753,13 +1839,17 @@ def process_docx(filename):
         "<w:p> tags",
         "<w:r> tags",
         "<w:t> tags",
+        "<w14:docId>",
+        "<w15:docId>",
+        "<w16:docId>",
+        "Hyperlinks",
     ]
 
     if not bool(
         doc_summary_worksheet
     ):  # if it's an empty dictionary, add headers to it.
         doc_summary_worksheet = dict((k, []) for k in headers)
-
+    w14_id, w15_id, w16_id = filename.doc_ids()
     doc_summary_worksheet[headers[0]].append(filename.filename())
     if hashing:
         doc_summary_worksheet[headers[1]].append(filename.hash())
@@ -1770,6 +1860,10 @@ def process_docx(filename):
     doc_summary_worksheet[headers[4]].append(filename.paragraph_tags())
     doc_summary_worksheet[headers[5]].append(filename.runs_tags())
     doc_summary_worksheet[headers[6]].append(filename.text_tags())
+    doc_summary_worksheet[headers[7]].append(w14_id)
+    doc_summary_worksheet[headers[8]].append(w15_id)
+    doc_summary_worksheet[headers[9]].append(w16_id)
+    doc_summary_worksheet[headers[10]].append(filename.hyperlinks())
 
     update_status("    Extracted Doc_Summary artifacts")
 
@@ -1806,6 +1900,10 @@ def process_docx(filename):
         "Category",
         "Content Status",
         "RSID Root",
+        "Language",
+        "Version",
+        "Shared Doc",
+        "Hyperlinks Changed",
     ]
 
     if not bool(metadata_worksheet):  # if it's an empty dictionary, add headers to it.
@@ -1838,6 +1936,10 @@ def process_docx(filename):
     metadata_worksheet[headers[24]].append(filename.category())
     metadata_worksheet[headers[25]].append(filename.content_status())
     metadata_worksheet[headers[26]].append(filename.rsid_root())
+    metadata_worksheet[headers[27]].append(filename.language())
+    metadata_worksheet[headers[28]].append(filename.version())
+    metadata_worksheet[headers[29]].append(filename.shared_doc())
+    metadata_worksheet[headers[30]].append(filename.hyperlinks_changed())
 
     update_status("    Extracted metadata artifacts")
 
