@@ -74,7 +74,8 @@ import hashlib
 import os
 import zipfile
 import logging
-from datetime import datetime as dt
+import subprocess
+from datetime import datetime as dt, timedelta
 from pathlib import Path
 import xml.etree.ElementTree as ET
 import warnings
@@ -92,7 +93,6 @@ from PyQt6.QtGui import (
     QColor,
     QDesktopServices,
     QFont,
-    QGuiApplication,
 )
 from PyQt6.QtWidgets import (
     QApplication,
@@ -180,8 +180,7 @@ class ContentsWindow(QWidget):
         self.text_edit.setStyleSheet("padding: 0px;")
         layout = QVBoxLayout()
         layout.addWidget(self.text_edit)
-        screen = QApplication.primaryScreen()
-        screen_geometry = screen.geometry()
+        screen_geometry = QApplication.primaryScreen().availableGeometry()
         x = (screen_geometry.width() - self.width()) // 2
         y = (screen_geometry.height() - self.height()) // 2
         self.move(x, y)
@@ -221,13 +220,10 @@ class UiDialog:
         MainWindow.setFixedWidth(self.d_width)
         MainWindow.setFixedHeight(self.d_height)
         MainWindow.setStyleSheet(self.stylesheet)
-        self.screen_layout = QGuiApplication.primaryScreen().availableGeometry()
-        self.scr_width, self.scr_height = (
-            self.screen_layout.width(),
-            self.screen_layout.height(),
-        )
-        self.center_x = (self.scr_width // 2) - (self.d_width // 2)
-        self.center_y = (self.scr_height // 2) - (self.d_height // 2)
+        screen_geometry = QApplication.primaryScreen().availableGeometry()
+        x = (screen_geometry.width() - self.width()) // 2
+        y = (screen_geometry.height() - self.height()) // 2
+        self.move(x, y)
         self.actionSelect_Excel = QAction(MainWindow)
         self.actionSelect_Excel.setObjectName("actionSelect_Excel")
         self.actionSelect_Excel.triggered.connect(self.open_excel)
@@ -270,16 +266,7 @@ class UiDialog:
         self.separator.setFrameShape(QFrame.Shape.Box)
         self.separator.setFrameShadow(QFrame.Shadow.Plain)
         self.separator.setGeometry(QRect(220, 20, 6, 60))
-        self.separator.setStyleSheet(
-            """
-            QFrame {
-                border-top: white;
-                border-bottom: white;
-                border-left: 1px solid #e4e4e4;
-                border-right: 1px solid #e4e4e4;
-            }
-        """
-        )
+        self.separator.setStyleSheet(self.separator_sheet)
         self.hashFiles = QCheckBox(self.parsingOptions)
         self.hashFiles.setObjectName("hashFiles")
         self.hashFiles.setGeometry(QRect(250, 30, 75, 20))
@@ -295,6 +282,7 @@ class UiDialog:
         self.excelFileLabel.setGeometry(QRect(10, 30, 80, 16))
         self.excelFileLabel.setStyleSheet("background: #fcfcfc; color: black;")
         self.excelFileLabel.setFont(self.text_font)
+        self.excelFileText = "File -> Select Excel File or click 'Select Excel'"
         self.excelFile = QTextEdit(self.outputFiles)
         self.excelFile.setObjectName("excelFile")
         self.excelFile.setGeometry(QRect(92, 26, 250, 26))
@@ -421,7 +409,7 @@ class UiDialog:
         self.numOfFilesLabel.setFont(self.text_font)
         self.numOfFiles = QTextEdit(self.processStatus)
         self.numOfFiles.setObjectName("numOfFiles")
-        self.numOfFiles.setGeometry(QRect(130, 28, 40, 26))
+        self.numOfFiles.setGeometry(QRect(85, 28, 40, 26))
         self.numOfFiles.setAlignment(
             Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft
         )
@@ -436,12 +424,12 @@ class UiDialog:
         self.numOfFiles.setFont(self.text_font)
         self.numOfErrorsLabel = QLabel(self.processStatus)
         self.numOfErrorsLabel.setObjectName("numOfErrorsLabel")
-        self.numOfErrorsLabel.setGeometry(QRect(180, 28, 80, 26))
+        self.numOfErrorsLabel.setGeometry(QRect(135, 28, 80, 26))
         self.numOfErrorsLabel.setStyleSheet("background: #fcfcfc; color: black;")
         self.numOfErrorsLabel.setFont(self.text_font)
         self.numOfErrors = QTextEdit(self.processStatus)
         self.numOfErrors.setObjectName("numOfErrors")
-        self.numOfErrors.setGeometry(QRect(252, 28, 40, 26))
+        self.numOfErrors.setGeometry(QRect(207, 28, 40, 26))
         self.numOfErrors.setAlignment(
             Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft
         )
@@ -456,12 +444,12 @@ class UiDialog:
         self.numOfErrors.setFont(self.text_font)
         self.numRemainingLabel = QLabel(self.processStatus)
         self.numRemainingLabel.setObjectName("numRemainingLabel")
-        self.numRemainingLabel.setGeometry(QRect(302, 28, 120, 26))
+        self.numRemainingLabel.setGeometry(QRect(257, 28, 120, 26))
         self.numRemainingLabel.setStyleSheet("background: #fcfcfc; color: black;")
         self.numRemainingLabel.setFont(self.text_font)
         self.numRemaining = QTextEdit(self.processStatus)
         self.numRemaining.setObjectName("numRemaining")
-        self.numRemaining.setGeometry(QRect(384, 28, 40, 26))
+        self.numRemaining.setGeometry(QRect(339, 28, 40, 26))
         self.numRemaining.setAlignment(
             Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft
         )
@@ -474,6 +462,22 @@ class UiDialog:
             Qt.ScrollBarPolicy.ScrollBarAlwaysOff
         )
         self.numRemaining.setFont(self.text_font)
+        self.openLogButton = QPushButton(self.processStatus)
+        self.openLogButton.setObjectName("openLogButton")
+        self.openLogButton.setGeometry(QRect(402, 29, 110, 24))
+        self.openLogButton.setFont(self.text_font)
+        self.openLogButton.setStyleSheet(self.disabled)
+        self.openLogButton.setEnabled(False)
+        self.openLogButton.clicked.connect(lambda: self.open_file(self.log_path))
+        self.openExcelButton = QPushButton(self.processStatus)
+        self.openExcelButton.setObjectName("openExcelButton")
+        self.openExcelButton.setGeometry(QRect(522, 29, 110, 24))
+        self.openExcelButton.setFont(self.text_font)
+        self.openExcelButton.setStyleSheet(self.disabled)
+        self.openExcelButton.setEnabled(False)
+        self.openExcelButton.clicked.connect(
+            lambda: self.open_file(self.excel_full_path)
+        )
         self.openButton = QPushButton(self.processStatus)
         self.openButton.setObjectName("openButton")
         self.openButton.setGeometry(QRect(642, 29, 110, 24))
@@ -542,7 +546,7 @@ class UiDialog:
             QCoreApplication.translate("MainWindow", "Output Files", None)
         )
         self.excelFile.setText(
-            QCoreApplication.translate("MainWindow", "File -> Select Excel File", None)
+            QCoreApplication.translate("MainWindow", self.excelFileText, None)
         )
         self.excelFileLabel.setText(
             QCoreApplication.translate("MainWindow", "Excel File:", None)
@@ -569,11 +573,17 @@ class UiDialog:
         self.addDirectoryButton.setText(
             QCoreApplication.translate("MainWindow", "Add Directory", None)
         )
+        self.openLogButton.setText(
+            QCoreApplication.translate("MainWindow", "Open Log File", None)
+        )
+        self.openExcelButton.setText(
+            QCoreApplication.translate("MainWindow", "Open Excel File", None)
+        )
         self.openButton.setText(
             QCoreApplication.translate("MainWindow", "Open Output Path", None)
         )
         self.numOfFilesLabel.setText(
-            QCoreApplication.translate("MainWindow", "# of Files Selected", None)
+            QCoreApplication.translate("MainWindow", "# of Files", None)
         )
         self.numOfFiles.setText(QCoreApplication.translate("MainWindow", "0", None))
         self.numOfErrorsLabel.setText(
@@ -610,18 +620,30 @@ class UiDialog:
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             )
             if response == QMessageBox.StandardButton.Yes:
-                recursive_list = list(folder_path.rglob("*.docx"))
+                recursive_list = (
+                    list(folder_path.rglob("*.docx"))
+                    + list(folder_path.rglob("*.dotx"))
+                    + list(folder_path.rglob("*.dotm"))
+                )
                 files = [str(file) for file in recursive_list]
             else:
-                non_recursive_list = list(folder_path.glob("*.docx"))
+                non_recursive_list = (
+                    list(folder_path.glob("*.docx"))
+                    + list(folder_path.glob("*.dotx"))
+                    + list(folder_path.glob("*.dotm"))
+                )
                 files = [str(file) for file in non_recursive_list]
             self.numOfFiles.setText(str(len(files)))
             self.numRemaining.setText(str(len(files)))
             if files:
                 update_status(f"The following {len(files)} files have been loaded:")
+                joiner = f"\n{dt.now().strftime(__dtfmt__)} -     "
+                logging_patch = []
                 for file in files:
-                    update_status(f"    {file}")
-                if self.excelFile.toPlainText() != "File -> Select Excel File":
+                    file = file.encode("utf-8", "ignore").decode()
+                    logging_patch.append(file)
+                update_status("    " + joiner.join(logging_patch))
+                if self.excelFile.toPlainText() != self.excelFileText:
                     self.processButton.setEnabled(True)
                     self.processButton.setStyleSheet(self.stylesheet)
                 self.files = files
@@ -632,7 +654,10 @@ class UiDialog:
         update_status = self.update_status
         all_files = []
         files, _ = QFileDialog.getOpenFileNames(
-            self, "Select files ...", "", "DOCX Files (*.docx)"
+            self,
+            "Select files ...",
+            "",
+            "docx, dotx, dotm Files (*.docx *.dotx *.dotm)",
         )
         if files:
             for file in files:
@@ -640,9 +665,13 @@ class UiDialog:
             self.numOfFiles.setText(str(len(all_files)))
             self.numRemaining.setText(str(len(all_files)))
             update_status(f"The following {len(all_files)} files have been loaded:")
+            joiner = f"\n{dt.now().strftime(__dtfmt__)} -     "
+            logging_patch = []
             for file in all_files:
-                update_status(f"    {file}")
-            if self.excelFile.toPlainText() != "File -> Select Excel File":
+                file = file.encode("utf-8", "ignore").decode()
+                logging_patch.append(file)
+            update_status("    " + joiner.join(logging_patch))
+            if self.excelFile.toPlainText() != self.excelFileText:
                 self.processButton.setEnabled(True)
                 self.processButton.setStyleSheet(self.stylesheet)
             self.files = all_files
@@ -687,11 +716,27 @@ class UiDialog:
         if out_path:
             QDesktopServices.openUrl(QUrl.fromLocalFile(out_path))
 
+    def open_file(self, file):
+        this_os = os.sys.platform
+        cmd = {
+            "win32": "start",
+            "darwin": "open",
+            "linux": "xdg-open",
+        }
+        launch = cmd[this_os]
+        try:
+            if this_os == "win32":
+                os.startfile(file)
+            else:
+                subprocess.Popen([launch, file])
+        except Exception as e:
+            self.update_status(f"Unable to open {file}: {e}", level="error")
+
     def _reset(self):
         global timestamp, log_file
         timestamp = dt.now().strftime("%Y%m%d_%H%M%S")
         log_file = f"DOCx_Parser_Log_{timestamp}.log"
-        self.excelFile.setText("File -> Select Excel File")
+        self.excelFile.setText(self.excelFileText)
         self.generalLogFile.setText(log_file)
         self.outputPath.clear()
         self.numOfFiles.setText("0")
@@ -701,6 +746,10 @@ class UiDialog:
         self.docxOutput.clear()
         self.processButton.setEnabled(False)
         self.processButton.setStyleSheet(self.disabled)
+        self.openLogButton.setEnabled(False)
+        self.openLogButton.setStyleSheet(self.disabled)
+        self.openExcelButton.setEnabled(False)
+        self.openExcelButton.setStyleSheet(self.disabled)
         self.openButton.setEnabled(False)
         self.openButton.setStyleSheet(self.disabled)
         self.actionAdd_Files.setVisible(False)
@@ -738,22 +787,29 @@ class UiDialog:
 
     def update_status(self, msg, level="info", color=black):
         if level == "info":
+            self.docxOutput.setTextColor(color)
+            self.docxOutput.append(f"{dt.now().strftime(__dtfmt__)} - {msg}")
+            self.docxOutput.setTextColor(black)
+            if not msg.isascii():
+                msg = msg.encode("latin-1", "ignore").decode()
             self.logger.info(msg)
-            self.docxOutput.setTextColor(color)
-            self.docxOutput.append(f"{dt.now().strftime(__dtfmt__)} - {msg}")
-            self.docxOutput.setTextColor(black)
         elif level == "error":
-            self.logger.error(msg)
             self.docxOutput.setTextColor(color)
             self.docxOutput.append(f"{dt.now().strftime(__dtfmt__)} - {msg}")
             self.docxOutput.setTextColor(black)
+            if not msg.isascii():
+                msg = msg.encode("latin-1", "ignore").decode()
+            self.logger.error(msg)
         elif level == "debug":
+            if not msg.isascii():
+                msg = msg.encode("latin-1", "ignore").decode()
             self.logger.debug(msg)
         QApplication.processEvents()
 
     def analyze_docs(self, files, triage_files, hash_files):
         if not self.running:
             self.running = True
+        start_time = dt.now().strftime(__dtfmt__)
         self.stopButton.setEnabled(True)
         self.stopButton.setStyleSheet(self.stylesheet)
         self.resetButton.setEnabled(False)
@@ -767,6 +823,7 @@ class UiDialog:
         update_status("Summary of files parsed:")
         update_status(f'{"="*36}')
         remaining = int(self.numRemaining.toPlainText())
+        errors_worksheet = {"File Name": [], "Error": []}
         for f in files:  # loop over the files selected, processing each.
             if not self.running:
                 update_status("Processing stopped")
@@ -787,6 +844,10 @@ class UiDialog:
                     level="error",
                     color=red,
                 )
+                errors_worksheet["File Name"].append(
+                    f
+                )  ## DEBUG - Prepare for Errors Worksheet
+                errors_worksheet["Error"].append(docxError)
             if remaining != 0:
                 remaining -= 1
             self.numRemaining.setText(str(remaining))
@@ -796,27 +857,29 @@ class UiDialog:
             df_summary = chunk_list(doc_summary_worksheet, "Doc_Summary")
             for chunk_dict, sheet_name in df_summary:
                 df_summary_chunk = pd.DataFrame(data=chunk_dict)
-                df_summary_chunk.to_excel(
-                    excel_writer=writer, sheet_name=sheet_name, index=False
-                )
-                worksheet = writer.sheets[sheet_name]
-                (max_row, max_col) = df_summary_chunk.shape
-                worksheet.set_column(0, 1, 34)
-                worksheet.set_column(2, max_col - 4, 16)
-                worksheet.set_column(max_col - 3, max_col - 1, 40)
-                worksheet.autofilter(0, 0, max_row, max_col - 1)
-                update_status(f'"{sheet_name}" worksheet written to Excel.')
+                if not df_summary_chunk.empty:
+                    df_summary_chunk.to_excel(
+                        excel_writer=writer, sheet_name=sheet_name, index=False
+                    )
+                    worksheet = writer.sheets[sheet_name]
+                    (max_row, max_col) = df_summary_chunk.shape
+                    worksheet.set_column(0, 1, 34)
+                    worksheet.set_column(2, max_col - 4, 16)
+                    worksheet.set_column(max_col - 3, max_col - 1, 40)
+                    worksheet.autofilter(0, 0, max_row, max_col - 1)
+                    update_status(f'"{sheet_name}" worksheet written to Excel.')
             df_metadata = chunk_list(metadata_worksheet, "Metadata")
             for chunk_dict, sheet_name in df_metadata:
                 df_metadata_chunk = pd.DataFrame(data=chunk_dict)
-                df_metadata_chunk.to_excel(
-                    excel_writer=writer, sheet_name=sheet_name, index=False
-                )
-                worksheet = writer.sheets[sheet_name]
-                (max_row, max_col) = df_metadata_chunk.shape
-                worksheet.set_column(0, max_col - 1, 20)
-                worksheet.autofilter(0, 0, max_row, max_col - 1)
-                update_status(f'"{sheet_name}" worksheet written to Excel.')
+                if not df_metadata_chunk.empty:
+                    df_metadata_chunk.to_excel(
+                        excel_writer=writer, sheet_name=sheet_name, index=False
+                    )
+                    worksheet = writer.sheets[sheet_name]
+                    (max_row, max_col) = df_metadata_chunk.shape
+                    worksheet.set_column(0, max_col - 1, 20)
+                    worksheet.autofilter(0, 0, max_row, max_col - 1)
+                    update_status(f'"{sheet_name}" worksheet written to Excel.')
             df_comments = chunk_list(comments_worksheet, "Comments")
             for chunk_dict, sheet_name in df_comments:
                 df_comments_chunk = pd.DataFrame(data=chunk_dict)
@@ -834,24 +897,37 @@ class UiDialog:
                 df_rsids = chunk_list(rsids_worksheet, "RSIDs")
                 for chunk_dict, sheet_name in df_rsids:
                     df_rsids_chunk = pd.DataFrame(data=chunk_dict)
-                    df_rsids_chunk.to_excel(
-                        excel_writer=writer, sheet_name=sheet_name, index=False
-                    )
-                    worksheet = writer.sheets[sheet_name]
-                    (max_row, max_col) = df_rsids_chunk.shape
-                    worksheet.set_column(0, max_col - 1, 20)
-                    worksheet.autofilter(0, 0, max_row, max_col - 1)
-                    update_status(f'"{sheet_name}" worksheet written to Excel.')
+                    if not df_rsids_chunk.empty:
+                        df_rsids_chunk.to_excel(
+                            excel_writer=writer, sheet_name=sheet_name, index=False
+                        )
+                        worksheet = writer.sheets[sheet_name]
+                        (max_row, max_col) = df_rsids_chunk.shape
+                        worksheet.set_column(0, max_col - 1, 20)
+                        worksheet.autofilter(0, 0, max_row, max_col - 1)
+                        update_status(f'"{sheet_name}" worksheet written to Excel.')
                 df_archive = chunk_list(archive_files_worksheet, "Archive Files")
                 for chunk_dict, sheet_name in df_archive:
                     df_archive_chunk = pd.DataFrame(data=chunk_dict)
-                    df_archive_chunk.to_excel(
+                    if not df_archive_chunk.empty:
+                        df_archive_chunk.to_excel(
+                            excel_writer=writer, sheet_name=sheet_name, index=False
+                        )
+                        worksheet = writer.sheets[sheet_name]
+                        (max_row, max_col) = df_archive_chunk.shape
+                        worksheet.set_column(0, max_col - 1, 35)
+                        worksheet.autofilter(0, 0, max_row, max_col - 1)
+                        update_status(f'"{sheet_name}" worksheet written to Excel.')
+            df_errors = chunk_list(errors_worksheet, "Errors")
+            for chunk_dict, sheet_name in df_errors:
+                df_errors_chunk = pd.DataFrame(data=chunk_dict)
+                if not df_errors_chunk.empty:
+                    df_errors_chunk.to_excel(
                         excel_writer=writer, sheet_name=sheet_name, index=False
                     )
                     worksheet = writer.sheets[sheet_name]
-                    (max_row, max_col) = df_archive_chunk.shape
-                    worksheet.set_column(0, max_col - 1, 35)
-                    worksheet.autofilter(0, 0, max_row, max_col - 1)
+                    (max_row, max_col) = df_errors_chunk.shape
+                    worksheet.set_column(0, max_col - 1, 34)
                     update_status(f'"{sheet_name}" worksheet written to Excel.')
         script_end = dt.now().strftime(__dtfmt__)
         update_status(f'{"="*24}')
@@ -864,12 +940,28 @@ class UiDialog:
             color=clr,
         )
         if docxErrorCount > 0:
-            update_status("The following files had errors:", "error")
+            update_status("The following files had errors:", "error", color=clr)
             for each_file in filesUnableToProcess:
-                update_status(f"  {each_file}", "error")
+                update_status(f"  {each_file}", "error", color=clr)
         update_status(f"Script finished execution: {script_end}", color=green)
+        end_time = dt.now().strftime(__dtfmt__)
+        run_time = str(
+            timedelta(
+                seconds=(
+                    dt.strptime(end_time, __dtfmt__)
+                    - dt.strptime(start_time, __dtfmt__)
+                ).seconds
+            )
+        )
+        update_status(f"Total processing time: {run_time}", color=green)
         self.resetButton.setEnabled(True)
         self.resetButton.setStyleSheet(self.stylesheet)
+        self.stopButton.setEnabled(False)
+        self.stopButton.setStyleSheet(self.disabled)
+        self.openLogButton.setEnabled(True)
+        self.openLogButton.setStyleSheet(self.stylesheet)
+        self.openExcelButton.setStyleSheet(self.stylesheet)
+        self.openExcelButton.setEnabled(True)
 
 
 def chunk_list(sheet_dict, sheet_name):
@@ -895,7 +987,7 @@ class MsWordGui(QMainWindow, UiDialog):
     """MS Word Parser GUI Class"""
 
     disabled = """
-            QPushButton {
+        QPushButton {
             background-color: white; border: 1px solid black; color: grey;
         }
         """
@@ -942,7 +1034,7 @@ class MsWordGui(QMainWindow, UiDialog):
         }
         """
     scrollbar_sheet = """
-    QScrollBar:vertical {
+        QScrollBar:vertical {
             border: 0px;
             background:white;
             width:7px;    
@@ -987,6 +1079,14 @@ class MsWordGui(QMainWindow, UiDialog):
             border: none;
             width: 7px;
             subcontrol-origin: margin;
+        }
+        """
+    separator_sheet = """
+        QFrame {
+            border-top: white;
+            border-bottom: white;
+            border-left: 1px solid #e4e4e4;
+            border-right: 1px solid #e4e4e4;
         }
         """
 
@@ -1055,7 +1155,7 @@ class Docx:
         if self.document_xml_content == "":
             self.document_xml_file = "word\\document.xml"
             self.document_xml_content = self.__load_xml(self.document_xml_file)
-        self.has_comments = ""  # Flag to denote if there are comments in the document.
+        self.has_comments = ""
         self.comments_file = "word/comments.xml"
         self.comments_xml_content = self.__load_xml(self.comments_file)
         if self.comments_xml_content == "":
@@ -1067,7 +1167,37 @@ class Docx:
             self.settings_xml_file = "word\\settings.xml"
             self.settings_xml_content = self.__load_xml(self.settings_xml_file)
         self.rsidRs = self.__extract_all_rsids_from_settings_xml()
-
+        self.ns_lookup = {
+            "title": [self.core_xml_content, "dc"],
+            "subject": [self.core_xml_content, "dc"],
+            "creator": [self.core_xml_content, "dc"],
+            "keywords": [self.core_xml_content, "cp"],
+            "description": [self.core_xml_content, "dc"],
+            "revision": [self.core_xml_content, "cp"],
+            "created": [self.core_xml_content, "dcterms"],
+            "modified": [self.core_xml_content, "dcterms"],
+            "lastModifiedBy": [self.core_xml_content, "cp"],
+            "lastPrinted": [self.core_xml_content, "cp"],
+            "category": [self.core_xml_content, "cp"],
+            "contentStatus": [self.core_xml_content, "cp"],
+            "language": [self.core_xml_content, "dc"],
+            "version": [self.core_xml_content, "cp"],
+            "Template": [self.app_xml_content, "default"],
+            "TotalTime": [self.app_xml_content, "default"],
+            "Pages": [self.app_xml_content, "default"],
+            "Words": [self.app_xml_content, "default"],
+            "Characters": [self.app_xml_content, "default"],
+            "Application": [self.app_xml_content, "default"],
+            "DocSecurity": [self.app_xml_content, "default"],
+            "Lines": [self.app_xml_content, "default"],
+            "Paragraphs": [self.app_xml_content, "default"],
+            "CharactersWithSpaces": [self.app_xml_content, "default"],
+            "AppVersion": [self.app_xml_content, "default"],
+            "Manager": [self.app_xml_content, "default"],
+            "Company": [self.app_xml_content, "default"],
+            "SharedDoc": [self.app_xml_content, "default"],
+            "HyperlinksChanged": [self.app_xml_content, "default"],
+        }
         x = ET.fromstring(self.document_xml_content)
         self.p_tags = x.findall(".//w:p", self.namespaces)
         self.r_tags = x.findall(".//w:r", self.namespaces)
@@ -1075,12 +1205,12 @@ class Docx:
 
         if not triage:  # if not run in triage mode, do full parsing
 
-            self.rsidR_in_document_xml = self.__rsidr_in_document_xml()
-            self.rsidRPr = self.__other_rsids_in_document_xml("rsidRPr")
-            self.rsidP = self.__other_rsids_in_document_xml("rsidP")
-            self.rsidRDefault = self.__other_rsids_in_document_xml("rsidRDefault")
-            self.para_id = self.__other_rsids_in_document_xml("paraId")
-            self.text_id = self.__other_rsids_in_document_xml("textId")
+            self.rsidR_in_document_xml = self.__rsids_in_document_xml("rsidR")
+            self.rsidRPr = self.__rsids_in_document_xml("rsidRPr")
+            self.rsidP = self.__rsids_in_document_xml("rsidP")
+            self.rsidRDefault = self.__rsids_in_document_xml("rsidRDefault")
+            self.para_id = self.__rsids_in_document_xml("paraId")
+            self.text_id = self.__rsids_in_document_xml("textId")
 
     def __find_binary_string(self):
 
@@ -1197,7 +1327,7 @@ class Docx:
                 self.has_comments = True
             with zipfile.ZipFile(self.msword_file, "r") as zipref:
                 with zipref.open(xml_file) as xmlFile:
-                    return xmlFile.read().decode("utf-8")
+                    return xmlFile.read()
         else:
             if "comments.xml" in xml_file:
                 self.has_comments = False
@@ -1208,8 +1338,24 @@ class Docx:
             )
             return ""
 
+    def get_metadata(self, attrib):
+        """
+        :param: xmlcontent (self.core_xml_content or self.app_xml_content)
+        :param: attrib (the attribute in the content to get)
+        :return:
+        """
+        xmlcontent = self.ns_lookup[attrib][0]
+        ns = self.namespaces[self.ns_lookup[attrib][1]]
+        if xmlcontent:
+            content = ET.fromstring(xmlcontent)
+            ns_extract = content.find(f"{{{ns}}}{attrib}")
+            meta_content = ns_extract.text if ns_extract is not None else ""
+        else:
+            return ""
+        return meta_content
+
     def get_comments(self):
-        """ "
+        """
         return the list all_comments that contains the following:
             comment ID #,
             Timestamp,
@@ -1253,36 +1399,15 @@ class Docx:
         :return:
         """
         rsids = []
-        ns = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
         x = ET.fromstring(self.settings_xml_content)
-        rsid_tags = x.findall(".//w:rsid", ns)
+        rsid_tags = x.findall(".//w:rsid", self.namespaces)
         for tag in rsid_tags:
-            rsid_tag = tag.get(f"{{{ns['w']}}}val", None)
+            rsid_tag = tag.get(f"{{{self.namespaces['w']}}}val", None)
             if rsid_tag:
                 rsids.append(rsid_tag)
         return "" if not rsids else rsids
 
-    def __rsidr_in_document_xml(self):  ## Roll into __other_rsids_in_document
-        """
-        This function calculates the count of each rsidR in document.xml
-        It searches the previously extracted tags rather than the full document.
-        :return:
-        """
-        rsidr_count = {}
-        all_found = []
-        for entry in [self.p_tags, self.r_tags, self.t_tags]:
-            for item in entry:
-                rsid_found = item.get(
-                    "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}rsidR",
-                    None,
-                )
-                if rsid_found:
-                    all_found.append(rsid_found)
-        for rsid in self.rsidRs:
-            rsidr_count[rsid] = all_found.count(rsid)
-        return rsidr_count
-
-    def __other_rsids_in_document_xml(self, rsid):
+    def __rsids_in_document_xml(self, rsid):
         """
         :param rsid tag name (e.g. "rsidRPr", "rsidP", "rsidRDefault")
         The function accepts an rsid tag name as a parameter (e.g. rsidRPr, rsidP, rsidDefault).
@@ -1297,12 +1422,12 @@ class Docx:
         rsids = {}
         all_rsids = []
         ns_list = {
-            "rsidR": "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
-            "rsidRDefault": "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
-            "rsidRPr": "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
-            "rsidP": "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
-            "paraId": "http://schemas.microsoft.com/office/word/2010/wordml",
-            "textId": "http://schemas.microsoft.com/office/word/2010/wordml",
+            "rsidR": self.namespaces["w"],
+            "rsidRDefault": self.namespaces["w"],
+            "rsidRPr": self.namespaces["w"],
+            "rsidP": self.namespaces["w"],
+            "paraId": self.namespaces["w14"],
+            "textId": self.namespaces["w14"],
         }
         for entry in [self.p_tags, self.r_tags, self.t_tags]:
             for item in entry:
@@ -1310,12 +1435,15 @@ class Docx:
                 if other_rsid:
                     all_rsids.append(other_rsid)
         unique_rsids = set(all_rsids)
-        for each_rsid in unique_rsids:
-            rsids[each_rsid] = all_rsids.count(each_rsid)
-
+        if rsid == "rsidR":
+            for each in self.rsidRs:
+                rsids[each] = all_rsids.count(each)
+        else:
+            for each_rsid in unique_rsids:
+                rsids[each_rsid] = all_rsids.count(each_rsid)
         return rsids
 
-    def hyperlinks(self):  ## Add
+    def hyperlinks(self):
         """
         :return: Hyperlink values in document.xml
         """
@@ -1327,7 +1455,7 @@ class Docx:
             hyperlinks = hyperlinks.replace("http", "hxxp")
             rel_id = hyperlink.get(f"{{{self.namespaces['r']}}}id", "")
             doc_hyperlinks.append([hyperlinks, rel_id])
-        all_hyperlinks = " - ".join(f"{url}: {rel}" for url, rel in doc_hyperlinks)
+        all_hyperlinks = "|".join(f"{url}: {rel}" for url, rel in doc_hyperlinks)
         return all_hyperlinks
 
     def filename(self):
@@ -1408,274 +1536,6 @@ class Docx:
         """
         return self.xml_files()[xmlfile][0]
 
-    def title(self):
-        """
-        :return: the title metadata in core.xml
-        """
-        core = ET.fromstring(self.core_xml_content)
-        core_ns = core.find(f"{{{self.namespaces['dc']}}}title")
-        doc_title = core_ns.text if core_ns is not None else ""
-        return doc_title
-
-    def subject(self):
-        """
-        :return: the subject metadata from core.xml
-        """
-        core = ET.fromstring(self.core_xml_content)
-        core_ns = core.find(f"{{{self.namespaces['dc']}}}subject")
-        doc_subject = core_ns.text if core_ns is not None else ""
-        return doc_subject
-
-    def creator(self):
-        """
-        :return: the creator metadata from core.xml
-        """
-        core = ET.fromstring(self.core_xml_content)
-        core_ns = core.find(f"{{{self.namespaces['dc']}}}creator")
-        doc_creator = core_ns.text if core_ns is not None else ""
-        return doc_creator
-
-    def keywords(self):
-        """
-        :return: the keywords metadata from core.xml
-        """
-        core = ET.fromstring(self.core_xml_content)
-        core_ns = core.find(f"{{{self.namespaces['cp']}}}keywords")
-        doc_keywords = core_ns.text if core_ns is not None else ""
-        return doc_keywords
-
-    def description(self):
-        """
-        :return: the description metadata from core.xml
-        """
-        core = ET.fromstring(self.core_xml_content)
-        core_ns = core.find(f"{{{self.namespaces['dc']}}}description")
-        doc_description = core_ns.text if core_ns is not None else ""
-        return doc_description
-
-    def revision(self):
-        """
-        :return: the revision # metadata from core.xml
-        """
-        core = ET.fromstring(self.core_xml_content)
-        core_ns = core.find(f"{{{self.namespaces['cp']}}}revision")
-        doc_revision = core_ns.text if core_ns is not None else ""
-        return doc_revision
-
-    def created(self):
-        """
-        :return: the created date metadata from core.xml
-        """
-        core = ET.fromstring(self.core_xml_content)
-        core_ns = core.find(f"{{{self.namespaces['dcterms']}}}created")
-        doc_created = core_ns.text if core_ns is not None else ""
-        return doc_created
-
-    def modified(self):
-        """
-        :return: the modified date metadata from core.xml
-        """
-        core = ET.fromstring(self.core_xml_content)
-        core_ns = core.find(f"{{{self.namespaces['dcterms']}}}modified")
-        doc_modified = core_ns.text if core_ns is not None else ""
-        return doc_modified
-
-    def last_modified_by(self):
-        """
-        :return: the last modified by metadata from core.xml
-        """
-        core = ET.fromstring(self.core_xml_content)
-        core_ns = core.find(f"{{{self.namespaces['cp']}}}lastModifiedBy")
-        doc_lastmodifiedby = core_ns.text if core_ns is not None else ""
-        return doc_lastmodifiedby
-
-    def last_printed(self):
-        """
-        :return: the last printed date metadata from core.xml
-        """
-        core = ET.fromstring(self.core_xml_content)
-        core_ns = core.find(f"{{{self.namespaces['cp']}}}lastPrinted")
-        doc_lastprinted = core_ns.text if core_ns is not None else ""
-        return doc_lastprinted
-
-    def category(self):
-        """
-        :return: the category metadata from core.xml
-        """
-        core = ET.fromstring(self.core_xml_content)
-        core_ns = core.find(f"{{{self.namespaces['cp']}}}category")
-        doc_category = core_ns.text if core_ns is not None else ""
-        return doc_category
-
-    def content_status(self):
-        """
-        :return: the content status metadata from core.xml
-        """
-        core = ET.fromstring(self.core_xml_content)
-        core_ns = core.find(f"{{{self.namespaces['cp']}}}contentStatus")
-        doc_contentstatus = core_ns.text if core_ns is not None else ""
-        return doc_contentstatus
-
-    def language(self):
-        """
-        :return: The language of the document, found in the core.xml
-        """
-        core = ET.fromstring(self.core_xml_content)
-        core_ns = core.find(f"{{{self.namespaces['dc']}}}language")
-        doc_language = core_ns.text if core_ns is not None else ""
-        return doc_language
-
-    def version(self):
-        """
-        :return: The 'version' of the document, found in core.xml
-        The 'version' can be any value, not specifically a number.
-        """
-        core = ET.fromstring(self.core_xml_content)
-        core_ns = core.find(f"{{{self.namespaces['cp']}}}version")
-        doc_version = core_ns.text if core_ns is not None else ""
-        return doc_version
-
-    def template(self):
-        """
-        :return: the template metadata from app.xml
-        """
-        app = ET.fromstring(self.app_xml_content)
-        app_ns = app.find(f"{{{self.namespaces['default']}}}Template")
-        doc_template = app_ns.text if app_ns is not None else ""
-        return doc_template
-
-    def total_editing_time(self):
-        """
-        :return: the total editing time in minutes metadata from app.xml
-        """
-        app = ET.fromstring(self.app_xml_content)
-        app_ns = app.find(f"{{{self.namespaces['default']}}}TotalTime")
-        doc_edit_time = app_ns.text if app_ns is not None else ""
-        return doc_edit_time
-
-    def pages(self):
-        """
-        :return: the # of pages in the document metadata from app.xml
-        Note: the author has observed that in some cases, this is not properly updated within the XML file itself.
-        It is not an error in the script. It's an error in the metadata. Opening the document and allowing it to
-        fully load and then saving it updates this. But of course, it changes other metadata as well if you do that.
-        """
-        app = ET.fromstring(self.app_xml_content)
-        app_ns = app.find(f"{{{self.namespaces['default']}}}Pages")
-        doc_pages = app_ns.text if app_ns is not None else ""
-        return doc_pages
-
-    def words(self):
-        """
-        :return: the number of words in the document metadata from app.xml
-        """
-        app = ET.fromstring(self.app_xml_content)
-        app_ns = app.find(f"{{{self.namespaces['default']}}}Words")
-        doc_words = app_ns.text if app_ns is not None else ""
-        return doc_words
-
-    def characters(self):
-        """
-        :return: the number of characters in the document metadata from app.xml
-        """
-        app = ET.fromstring(self.app_xml_content)
-        app_ns = app.find(f"{{{self.namespaces['default']}}}Characters")
-        doc_characters = app_ns.text if app_ns is not None else ""
-        return doc_characters
-
-    def application(self):
-        """
-        :return: the application name that created the document metadata from app.xml
-        """
-        app = ET.fromstring(self.app_xml_content)
-        app_ns = app.find(f"{{{self.namespaces['default']}}}Application")
-        doc_application = app_ns.text if app_ns is not None else ""
-        return doc_application
-
-    def security(self):
-        """
-        :return: the security metadata from app.xml
-        """
-        app = ET.fromstring(self.app_xml_content)
-        app_ns = app.find(f"{{{self.namespaces['default']}}}DocSecurity")
-        doc_security = app_ns.text if app_ns is not None else ""
-        return doc_security
-
-    def lines(self):
-        """
-        :return: the number of lines in the document metadata from app.xml
-        """
-        app = ET.fromstring(self.app_xml_content)
-        app_ns = app.find(f"{{{self.namespaces['default']}}}Lines")
-        doc_lines = app_ns.text if app_ns is not None else ""
-        return doc_lines
-
-    def paragraphs(self):
-        """
-        :return: the number of paragraphs in the document metadata from app.xml
-        Note: similar to # of pages, the author has noted in testing that sometimes, this may not be accurate in
-        the metadata for some reason. It's not an error in this program. It's an error with the metadata itself
-        in the document.
-        """
-        app = ET.fromstring(self.app_xml_content)
-        app_ns = app.find(f"{{{self.namespaces['default']}}}Paragraphs")
-        doc_paragraphs = app_ns.text if app_ns is not None else ""
-        return doc_paragraphs
-
-    def characters_with_spaces(self):
-        """
-        :return: the total characters including spaces in the document metadatafrom app.xml
-        """
-        app = ET.fromstring(self.app_xml_content)
-        app_ns = app.find(f"{{{self.namespaces['default']}}}CharactersWithSpaces")
-        doc_characters_with_spaces = app_ns.text if app_ns is not None else ""
-        return doc_characters_with_spaces
-
-    def app_version(self):
-        """
-        :return: the version of the app that created the document metadatafrom app.xml
-        """
-        app = ET.fromstring(self.app_xml_content)
-        app_ns = app.find(f"{{{self.namespaces['default']}}}AppVersion")
-        doc_app_version = app_ns.text if app_ns is not None else ""
-        return doc_app_version
-
-    def manager(self):
-        """
-        :return: the manager metadata from app.xml
-        """
-        app = ET.fromstring(self.app_xml_content)
-        app_ns = app.find(f"{{{self.namespaces['default']}}}Manager")
-        doc_manager = app_ns.text if app_ns is not None else ""
-        return doc_manager
-
-    def company(self):
-        """
-        :return: the company metadata from app.xml
-        """
-        app = ET.fromstring(self.app_xml_content)
-        app_ns = app.find(f"{{{self.namespaces['default']}}}Company")
-        doc_company = app_ns.text if app_ns is not None else ""
-        return doc_company
-
-    def shared_doc(self):
-        """
-        :return: String boolean value as to whether or not the doc is a SharedDoc
-        """
-        app = ET.fromstring(self.app_xml_content)
-        app_ns = app.find(f"{{{self.namespaces['default']}}}SharedDoc")
-        doc_shared = app_ns.text if app_ns is not None else ""
-        return doc_shared
-
-    def hyperlinks_changed(self):
-        """
-        :return: String boolean value as to whether or not the hyperlinks have changed in the doc
-        """
-        app = ET.fromstring(self.app_xml_content)
-        app_ns = app.find(f"{{{self.namespaces['default']}}}HyperlinksChanged")
-        doc_hyperlinks_changed = app_ns.text if app_ns is not None else ""
-        return doc_hyperlinks_changed
-
     def paragraph_tags(self):
         """
         :return: the total number of paragraph tags in document.xml
@@ -1704,7 +1564,7 @@ class Docx:
         for entry in [rsid_root_entry]:
             for item in entry:
                 root = item.get(
-                    "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}val",
+                    f"{{{self.namespaces['w']}}}val",
                     None,
                 )
         return "" if root is None else root
@@ -1786,19 +1646,19 @@ class Docx:
         This can be edited to suit your needs. You can naturally accomplish the same results by calling each of
         the methods in your print statement in the main script.
         """
-        if self.last_printed() == "":
+        if self.get_metadata("lastPrinted") == "":
             printed = "Document was never printed"
         else:
-            printed = f"Printed: {self.last_printed()}"
+            printed = f"Printed: {self.get_metadata('lastPrinted')}"
         return (
             f"Document: {self.filename()}\n"
-            f"Created by: {self.creator()}\n"
-            f"Created date: {self.created()}\n"
-            f"Last edited by: {self.last_modified_by()}\n"
-            f"Edited date: {self.modified()}\n"
+            f"Created by: {self.get_metadata('creator')}\n"
+            f"Created date: {self.get_metadata('created')}\n"
+            f"Last edited by: {self.get_metadata('lastModifiedBy')}\n"
+            f"Edited date: {self.get_metadata('modified')}\n"
             f"{printed}\n"
-            f"Total pages: {self.pages()}\n"
-            f"Total editing time: {self.total_editing_time()} minute(s)."
+            f"Total pages: {self.get_metadata('Pages')}\n"
+            f"Total editing time: {self.get_metadata('TotalTime')} minute(s)."
         )
 
 
@@ -1844,26 +1704,25 @@ def process_docx(filename):
         "<w16:docId>",
         "Hyperlinks",
     ]
-
+    if not hashing:
+        headers.pop(1)
     if not bool(
         doc_summary_worksheet
     ):  # if it's an empty dictionary, add headers to it.
         doc_summary_worksheet = dict((k, []) for k in headers)
     w14_id, w15_id, w16_id = filename.doc_ids()
-    doc_summary_worksheet[headers[0]].append(filename.filename())
+    doc_summary_worksheet["File Name"].append(filename.filename())
     if hashing:
-        doc_summary_worksheet[headers[1]].append(filename.hash())
-    else:
-        doc_summary_worksheet[headers[1]].append("Option Not Selected")
-    doc_summary_worksheet[headers[2]].append(len(filename.rsidr()))
-    doc_summary_worksheet[headers[3]].append(filename.rsid_root())
-    doc_summary_worksheet[headers[4]].append(filename.paragraph_tags())
-    doc_summary_worksheet[headers[5]].append(filename.runs_tags())
-    doc_summary_worksheet[headers[6]].append(filename.text_tags())
-    doc_summary_worksheet[headers[7]].append(w14_id)
-    doc_summary_worksheet[headers[8]].append(w15_id)
-    doc_summary_worksheet[headers[9]].append(w16_id)
-    doc_summary_worksheet[headers[10]].append(filename.hyperlinks())
+        doc_summary_worksheet["MD5 Hash"].append(filename.hash())
+    doc_summary_worksheet["Unique rsidR"].append(len(filename.rsidr()))
+    doc_summary_worksheet["RSID Root"].append(filename.rsid_root())
+    doc_summary_worksheet["<w:p> tags"].append(filename.paragraph_tags())
+    doc_summary_worksheet["<w:r> tags"].append(filename.runs_tags())
+    doc_summary_worksheet["<w:t> tags"].append(filename.text_tags())
+    doc_summary_worksheet["<w14:docId>"].append(w14_id)
+    doc_summary_worksheet["<w15:docId>"].append(w15_id)
+    doc_summary_worksheet["<w16:docId>"].append(w16_id)
+    doc_summary_worksheet["Hyperlinks"].append(filename.hyperlinks())
 
     update_status("    Extracted Doc_Summary artifacts")
 
@@ -1910,36 +1769,38 @@ def process_docx(filename):
         metadata_worksheet = dict((k, []) for k in headers)
 
     metadata_worksheet[headers[0]].append(filename.filename())
-    metadata_worksheet[headers[1]].append(filename.creator())
-    metadata_worksheet[headers[2]].append(filename.created())
-    metadata_worksheet[headers[3]].append(filename.last_modified_by())
-    metadata_worksheet[headers[4]].append(filename.modified())
-    metadata_worksheet[headers[5]].append(filename.last_printed())
-    metadata_worksheet[headers[6]].append(filename.manager())
-    metadata_worksheet[headers[7]].append(filename.company())
-    metadata_worksheet[headers[8]].append(filename.revision())
-    metadata_worksheet[headers[9]].append(filename.total_editing_time())
-    metadata_worksheet[headers[10]].append(filename.pages())
-    metadata_worksheet[headers[11]].append(filename.paragraphs())
-    metadata_worksheet[headers[12]].append(filename.lines())
-    metadata_worksheet[headers[13]].append(filename.words())
-    metadata_worksheet[headers[14]].append(filename.characters())
-    metadata_worksheet[headers[15]].append(filename.characters_with_spaces())
-    metadata_worksheet[headers[16]].append(filename.title())
-    metadata_worksheet[headers[17]].append(filename.subject())
-    metadata_worksheet[headers[18]].append(filename.keywords())
-    metadata_worksheet[headers[19]].append(filename.description())
-    metadata_worksheet[headers[20]].append(filename.application())
-    metadata_worksheet[headers[21]].append(filename.app_version())
-    metadata_worksheet[headers[22]].append(filename.template())
-    metadata_worksheet[headers[23]].append(filename.security())
-    metadata_worksheet[headers[24]].append(filename.category())
-    metadata_worksheet[headers[25]].append(filename.content_status())
+    metadata_worksheet[headers[1]].append(filename.get_metadata("creator"))
+    metadata_worksheet[headers[2]].append(filename.get_metadata("created"))
+    metadata_worksheet[headers[3]].append(filename.get_metadata("lastModifiedBy"))
+    metadata_worksheet[headers[4]].append(filename.get_metadata("modified"))
+    metadata_worksheet[headers[5]].append(filename.get_metadata("lastPrinted"))
+    metadata_worksheet[headers[6]].append(filename.get_metadata("Manager"))
+    metadata_worksheet[headers[7]].append(filename.get_metadata("Company"))
+    metadata_worksheet[headers[8]].append(filename.get_metadata("revision"))
+    metadata_worksheet[headers[9]].append(filename.get_metadata("TotalTime"))
+    metadata_worksheet[headers[10]].append(filename.get_metadata("Pages"))
+    metadata_worksheet[headers[11]].append(filename.get_metadata("Paragraphs"))
+    metadata_worksheet[headers[12]].append(filename.get_metadata("Lines"))
+    metadata_worksheet[headers[13]].append(filename.get_metadata("Words"))
+    metadata_worksheet[headers[14]].append(filename.get_metadata("Characters"))
+    metadata_worksheet[headers[15]].append(
+        filename.get_metadata("CharactersWithSpaces")
+    )
+    metadata_worksheet[headers[16]].append(filename.get_metadata("title"))
+    metadata_worksheet[headers[17]].append(filename.get_metadata("subject"))
+    metadata_worksheet[headers[18]].append(filename.get_metadata("keywords"))
+    metadata_worksheet[headers[19]].append(filename.get_metadata("description"))
+    metadata_worksheet[headers[20]].append(filename.get_metadata("Application"))
+    metadata_worksheet[headers[21]].append(filename.get_metadata("AppVersion"))
+    metadata_worksheet[headers[22]].append(filename.get_metadata("Template"))
+    metadata_worksheet[headers[23]].append(filename.get_metadata("DocSecurity"))
+    metadata_worksheet[headers[24]].append(filename.get_metadata("category"))
+    metadata_worksheet[headers[25]].append(filename.get_metadata("contentStatus"))
     metadata_worksheet[headers[26]].append(filename.rsid_root())
-    metadata_worksheet[headers[27]].append(filename.language())
-    metadata_worksheet[headers[28]].append(filename.version())
-    metadata_worksheet[headers[29]].append(filename.shared_doc())
-    metadata_worksheet[headers[30]].append(filename.hyperlinks_changed())
+    metadata_worksheet[headers[27]].append(filename.get_metadata("language"))
+    metadata_worksheet[headers[28]].append(filename.get_metadata("version"))
+    metadata_worksheet[headers[29]].append(filename.get_metadata("SharedDoc"))
+    metadata_worksheet[headers[30]].append(filename.get_metadata("HyperlinksChanged"))
 
     update_status("    Extracted metadata artifacts")
 
@@ -1977,10 +1838,10 @@ def process_docx(filename):
         headers = [
             "File Name",
             "Archive File",
-            "MD5Hash",
+            "MD5 Hash",
             "Modified Time (local/UTC/Redmond, Washington)",
             # expressed local time if Mac/iOS Pages exported to MS Word
-            # expressed in UTC if created by LibreOffice on Windows exportinug to MS Word.
+            # expressed in UTC if created by LibreOffice on Windows exporting to MS Word.
             # expressed Redmond, Washington time zone when edited with MS Word online.
             "Size (bytes)",
             "ZIP Compression Type",
