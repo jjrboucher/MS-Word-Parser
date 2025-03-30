@@ -69,10 +69,10 @@ Processes that this script will do:
     "App Version", "Template", "Doc Security", "Category", "contentStatus" """
 # ********** Possible future enhancements **********
 
-
 import hashlib
 import os
 import zipfile
+from zipfile import BadZipFile
 import logging
 import subprocess
 from datetime import datetime as dt, timedelta
@@ -204,7 +204,7 @@ class UiDialog:
         self.log_path = ""
         self.log_handler = None
         self.logger = logging.getLogger("ms-word-parser")
-        self.logger.setLevel(logging.DEBUG)
+        self.logger.setLevel(logging.INFO)
         self.log_fmt = logging.Formatter(
             "%(asctime)s | %(levelname)-8s | %(message)s",
             datefmt=__dtfmt__,
@@ -638,11 +638,7 @@ class UiDialog:
             if files:
                 update_status(f"The following {len(files)} files have been loaded:")
                 joiner = f"\n{dt.now().strftime(__dtfmt__)} -     "
-                logging_patch = []
-                for file in files:
-                    file = file.encode("utf-8", "ignore").decode()
-                    logging_patch.append(file)
-                update_status("    " + joiner.join(logging_patch))
+                update_status("    " + joiner.join(files))
                 if self.excelFile.toPlainText() != self.excelFileText:
                     self.processButton.setEnabled(True)
                     self.processButton.setStyleSheet(self.stylesheet)
@@ -666,11 +662,7 @@ class UiDialog:
             self.numRemaining.setText(str(len(all_files)))
             update_status(f"The following {len(all_files)} files have been loaded:")
             joiner = f"\n{dt.now().strftime(__dtfmt__)} -     "
-            logging_patch = []
-            for file in all_files:
-                file = file.encode("utf-8", "ignore").decode()
-                logging_patch.append(file)
-            update_status("    " + joiner.join(logging_patch))
+            update_status("    " + joiner.join(all_files))
             if self.excelFile.toPlainText() != self.excelFileText:
                 self.processButton.setEnabled(True)
                 self.processButton.setStyleSheet(self.stylesheet)
@@ -683,7 +675,7 @@ class UiDialog:
         if excel_full_path:
             self.excel_path = os.path.normpath(os.path.dirname(excel_full_path))
             self.log_path = os.path.normpath(f"{self.excel_path}{os.sep}{log_file}")
-            self.log_handler = logging.FileHandler(self.log_path)
+            self.log_handler = logging.FileHandler(self.log_path, "w", "utf-8")
             self.log_handler.setFormatter(self.log_fmt)
             self.logger.addHandler(self.log_handler)
             update_status = self.update_status
@@ -790,19 +782,13 @@ class UiDialog:
             self.docxOutput.setTextColor(color)
             self.docxOutput.append(f"{dt.now().strftime(__dtfmt__)} - {msg}")
             self.docxOutput.setTextColor(black)
-            if not msg.isascii():
-                msg = msg.encode("latin-1", "ignore").decode()
             self.logger.info(msg)
         elif level == "error":
             self.docxOutput.setTextColor(color)
             self.docxOutput.append(f"{dt.now().strftime(__dtfmt__)} - {msg}")
             self.docxOutput.setTextColor(black)
-            if not msg.isascii():
-                msg = msg.encode("latin-1", "ignore").decode()
             self.logger.error(msg)
         elif level == "debug":
-            if not msg.isascii():
-                msg = msg.encode("latin-1", "ignore").decode()
             self.logger.debug(msg)
         QApplication.processEvents()
 
@@ -833,6 +819,8 @@ class UiDialog:
                 return
             try:
                 process_docx(Docx(f, triage_files, hash_files))
+            # except BadZipFile:
+            #    pass
             except Exception as docxError:
                 # If processing a DOCx file raises an error, let the user know, and write it
                 # to the error log.
@@ -844,9 +832,7 @@ class UiDialog:
                     level="error",
                     color=red,
                 )
-                errors_worksheet["File Name"].append(
-                    f
-                )  ## DEBUG - Prepare for Errors Worksheet
+                errors_worksheet["File Name"].append(f)
                 errors_worksheet["Error"].append(docxError)
             if remaining != 0:
                 remaining -= 1
@@ -1493,11 +1479,14 @@ class Docx:
             xml_files = {}
             for file_info in zip_file.infolist():
                 with zipfile.ZipFile(self.msword_file, "r") as zip_ref:
-                    with zip_ref.open(file_info.filename) as xml_file:
-                        if self.hashing:  # if hashing option selected
-                            md5hash = hashlib.md5(xml_file.read()).hexdigest()
-                        else:
-                            md5hash = "Option Not Selected"  # else return blank for hash value.
+                    try:
+                        with zip_ref.open(file_info.filename) as xml_file:
+                            if self.hashing:  # if hashing option selected
+                                md5hash = hashlib.md5(xml_file.read()).hexdigest()
+                            else:
+                                md5hash = "Option Not Selected"  # else return blank for hash value.
+                    except BadZipFile:
+                        pass
                 m_time = file_info.date_time
                 if m_time in ((1980, 1, 1, 0, 0, 0), (1980, 0, 0, 0, 0, 0)):
                     modified_time = "nil"
@@ -1675,6 +1664,12 @@ def process_docx(filename):
     global doc_summary_worksheet, metadata_worksheet, archive_files_worksheet, rsids_worksheet, comments_worksheet
     update_status(f"Processing {filename.msword_file}")
     file_details = filename.details()
+    third_party_paths = [
+        "word\\settings.xml",
+        "docProps\\core.xml",
+        "docProps\\app.xml",
+    ]
+    third_party = False
     for line in file_details.split("\n"):
         update_status(f"    {line.rstrip()}")
     for checkFile in (
@@ -1687,7 +1682,13 @@ def process_docx(filename):
     ):  # checks if xml files being parsed
         # are present and notes same in the log file.
         xml_exists = checkFile in filename.xml_files().keys()
+        if xml_exists and checkFile in third_party_paths:
+            third_party = True
         update_status(f"    {checkFile} exists: {xml_exists}")
+        if third_party:
+            update_status(
+                f"    {filename.msword_file} may have been created using something other than MS Word"
+            )
 
     # Writing document summary worksheet.
 
