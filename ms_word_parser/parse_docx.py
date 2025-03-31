@@ -819,8 +819,6 @@ class UiDialog:
                 return
             try:
                 process_docx(Docx(f, triage_files, hash_files))
-            # except BadZipFile:
-            #    pass
             except Exception as docxError:
                 # If processing a DOCx file raises an error, let the user know, and write it
                 # to the error log.
@@ -1188,6 +1186,7 @@ class Docx:
         self.p_tags = x.findall(".//w:p", self.namespaces)
         self.r_tags = x.findall(".//w:r", self.namespaces)
         self.t_tags = x.findall(".//w:t", self.namespaces)
+        self.tr_tags = x.findall(".//w:tr", self.namespaces)
 
         if not triage:  # if not run in triage mode, do full parsing
 
@@ -1195,6 +1194,7 @@ class Docx:
             self.rsidRPr = self.__rsids_in_document_xml("rsidRPr")
             self.rsidP = self.__rsids_in_document_xml("rsidP")
             self.rsidRDefault = self.__rsids_in_document_xml("rsidRDefault")
+            self.rsidTr = self.__rsids_in_document_xml("rsidTr")
             self.para_id = self.__rsids_in_document_xml("paraId")
             self.text_id = self.__rsids_in_document_xml("textId")
 
@@ -1412,10 +1412,11 @@ class Docx:
             "rsidRDefault": self.namespaces["w"],
             "rsidRPr": self.namespaces["w"],
             "rsidP": self.namespaces["w"],
+            "rsidTr": self.namespaces["w"],
             "paraId": self.namespaces["w14"],
             "textId": self.namespaces["w14"],
         }
-        for entry in [self.p_tags, self.r_tags, self.t_tags]:
+        for entry in [self.p_tags, self.r_tags, self.t_tags, self.tr_tags]:
             for item in entry:
                 other_rsid = item.get(f"{{{ns_list[rsid]}}}{rsid}", None)
                 if other_rsid:
@@ -1543,6 +1544,12 @@ class Docx:
         """
         return len(self.t_tags)
 
+    def table_row_tags(self):
+        """
+        :return: the total number of table row tags in document.xml
+        """
+        return len(self.tr_tags)
+
     def rsid_root(self):
         """
         :return: rsidRoot from settings.xml
@@ -1623,6 +1630,13 @@ class Docx:
         """
         return self.rsidRDefault
 
+    def rsidtr_in_document_xml(self):
+        """
+        return dictionary with unique rsidTr and count of how many times it is found in document.xml
+        :return:
+        """
+        return self.rsidTr
+
     def paragraph_id_tags(self):
         return self.para_id
 
@@ -1658,11 +1672,13 @@ def process_docx(filename):
     then loop through them, calling this function for each DOCx file.
     """
     update_status = ms_word_form.update_status
-    excel_file_path = ms_word_form.excel_full_path
     triage = ms_word_form.triageButton.isChecked()
     hashing = ms_word_form.hashFiles.isChecked()
     global doc_summary_worksheet, metadata_worksheet, archive_files_worksheet, rsids_worksheet, comments_worksheet
-    update_status(f"Processing {filename.msword_file}")
+    this_file = filename.msword_file
+    this_rsid_root = filename.rsid_root()
+    xml_files = filename.xml_files()
+    update_status(f"Processing {this_file}")
     file_details = filename.details()
     third_party_paths = [
         "word\\settings.xml",
@@ -1681,13 +1697,13 @@ def process_docx(filename):
         "docProps\\app.xml",
     ):  # checks if xml files being parsed
         # are present and notes same in the log file.
-        xml_exists = checkFile in filename.xml_files().keys()
+        xml_exists = checkFile in xml_files.keys()
         if xml_exists and checkFile in third_party_paths:
             third_party = True
         update_status(f"    {checkFile} exists: {xml_exists}")
         if third_party:
             update_status(
-                f"    {filename.msword_file} may have been created using something other than MS Word"
+                f"    {this_file} may have been created using something other than MS Word"
             )
 
     # Writing document summary worksheet.
@@ -1700,6 +1716,7 @@ def process_docx(filename):
         "<w:p> tags",
         "<w:r> tags",
         "<w:t> tags",
+        "<w:tr> tags",
         "<w14:docId>",
         "<w15:docId>",
         "<w16:docId>",
@@ -1707,19 +1724,19 @@ def process_docx(filename):
     ]
     if not hashing:
         headers.pop(1)
-    if not bool(
-        doc_summary_worksheet
-    ):  # if it's an empty dictionary, add headers to it.
-        doc_summary_worksheet = dict((k, []) for k in headers)
+    doc_summary_worksheet = (
+        {k: [] for k in headers} if not doc_summary_worksheet else doc_summary_worksheet
+    )
     w14_id, w15_id, w16_id = filename.doc_ids()
-    doc_summary_worksheet["File Name"].append(filename.filename())
+    doc_summary_worksheet["File Name"].append(this_file)
     if hashing:
         doc_summary_worksheet["MD5 Hash"].append(filename.hash())
     doc_summary_worksheet["Unique rsidR"].append(len(filename.rsidr()))
-    doc_summary_worksheet["RSID Root"].append(filename.rsid_root())
+    doc_summary_worksheet["RSID Root"].append(this_rsid_root)
     doc_summary_worksheet["<w:p> tags"].append(filename.paragraph_tags())
     doc_summary_worksheet["<w:r> tags"].append(filename.runs_tags())
     doc_summary_worksheet["<w:t> tags"].append(filename.text_tags())
+    doc_summary_worksheet["<w:tr> tags"].append(filename.table_row_tags())
     doc_summary_worksheet["<w14:docId>"].append(w14_id)
     doc_summary_worksheet["<w15:docId>"].append(w15_id)
     doc_summary_worksheet["<w16:docId>"].append(w16_id)
@@ -1765,11 +1782,10 @@ def process_docx(filename):
         "Shared Doc",
         "Hyperlinks Changed",
     ]
-
-    if not bool(metadata_worksheet):  # if it's an empty dictionary, add headers to it.
-        metadata_worksheet = dict((k, []) for k in headers)
-
-    metadata_worksheet[headers[0]].append(filename.filename())
+    metadata_worksheet = (
+        {k: [] for k in headers} if not metadata_worksheet else metadata_worksheet
+    )
+    metadata_worksheet[headers[0]].append(this_file)
     metadata_worksheet[headers[1]].append(filename.get_metadata("creator"))
     metadata_worksheet[headers[2]].append(filename.get_metadata("created"))
     metadata_worksheet[headers[3]].append(filename.get_metadata("lastModifiedBy"))
@@ -1797,7 +1813,7 @@ def process_docx(filename):
     metadata_worksheet[headers[23]].append(filename.get_metadata("DocSecurity"))
     metadata_worksheet[headers[24]].append(filename.get_metadata("category"))
     metadata_worksheet[headers[25]].append(filename.get_metadata("contentStatus"))
-    metadata_worksheet[headers[26]].append(filename.rsid_root())
+    metadata_worksheet[headers[26]].append(this_rsid_root)
     metadata_worksheet[headers[27]].append(filename.get_metadata("language"))
     metadata_worksheet[headers[28]].append(filename.get_metadata("version"))
     metadata_worksheet[headers[29]].append(filename.get_metadata("SharedDoc"))
@@ -1814,14 +1830,12 @@ def process_docx(filename):
             "Initials",
             "Comment",
         ]
-        if not bool(
-            comments_worksheet
-        ):  # if it's an empty dictionary, add headers to it.
-            comments_worksheet = dict((k, []) for k in headers)
-
+        comments_worksheet = (
+            {k: [] for k in headers} if not comments_worksheet else comments_worksheet
+        )
         for comment in filename.get_comments():
             update_status(f"    Processing comment: {comment}", level="debug")
-            comments_worksheet[headers[0]].append(filename.filename())  # Filename
+            comments_worksheet[headers[0]].append(this_file)  # Filename
             comments_worksheet[headers[1]].append(comment[0])  # ID
             comments_worksheet[headers[2]].append(comment[1])  # Timestamp
             comments_worksheet[headers[3]].append(comment[2])  # Author
@@ -1830,12 +1844,7 @@ def process_docx(filename):
 
         update_status("    Extracted comments artifacts")
 
-    if not triage:  # will generate these spreadsheet if not triage
-        update_status(
-            f'    Updating "Archive Files" worksheet in {excel_file_path}',
-            level="debug",
-        )
-        # Writing XML files to "Archive Files" worksheet
+    if not triage:  # will generate these spreadsheets if not triage
         headers = [
             "File Name",
             "Archive File",
@@ -1853,34 +1862,40 @@ def process_docx(filename):
             "ZIP Extra Flag (len)",
             "ZIP Extra Characters (truncated)",
         ]
-
-        if not bool(
-            archive_files_worksheet
-        ):  # if it's an empty dictionary, add headers to it.
-            archive_files_worksheet = dict((k, []) for k in headers)
-
-        for xml, xml_info in filename.xml_files().items():
+        if not hashing:
+            headers.pop(2)
+        archive_files_worksheet = (
+            {k: [] for k in headers}
+            if not archive_files_worksheet
+            else archive_files_worksheet
+        )
+        for xml, xml_info in xml_files.items():
             extra_characters = (
                 xml_info[9] if xml_info[8] == 0 else ",".join(xml_info[9])
             )  # If no extra characters,
             # leave assigned value as "nil". Otherwise, join.
 
-            archive_files_worksheet[headers[0]].append(filename.filename())
-            archive_files_worksheet[headers[1]].append(xml)
-            archive_files_worksheet[headers[2]].append(xml_info[0])
-            archive_files_worksheet[headers[3]].append(xml_info[1])
-            archive_files_worksheet[headers[4]].append(xml_info[2])
-            archive_files_worksheet[headers[5]].append(xml_info[3])
-            archive_files_worksheet[headers[6]].append(xml_info[4])
-            archive_files_worksheet[headers[7]].append(xml_info[5])
-            archive_files_worksheet[headers[8]].append(xml_info[6])
-            archive_files_worksheet[headers[9]].append(xml_info[7])
-            archive_files_worksheet[headers[10]].append(xml_info[8])
-            archive_files_worksheet[headers[11]].append(extra_characters)
+            archive_files_worksheet["File Name"].append(this_file)
+            archive_files_worksheet["Archive File"].append(xml)
+            if hashing:
+                archive_files_worksheet["MD5 Hash"].append(xml_info[0])
+            archive_files_worksheet[
+                "Modified Time (local/UTC/Redmond, Washington)"
+            ].append(xml_info[1])
+            archive_files_worksheet["Size (bytes)"].append(xml_info[2])
+            archive_files_worksheet["ZIP Compression Type"].append(xml_info[3])
+            archive_files_worksheet["ZIP Create System"].append(xml_info[4])
+            archive_files_worksheet["ZIP Created Version"].append(xml_info[5])
+            archive_files_worksheet["ZIP Extract Version"].append(xml_info[6])
+            archive_files_worksheet["ZIP Flag Bits (hex)"].append(xml_info[7])
+            archive_files_worksheet["ZIP Extra Flag (len)"].append(xml_info[8])
+            archive_files_worksheet["ZIP Extra Characters (truncated)"].append(
+                extra_characters
+            )
 
         update_status("    Extracted archive files artifacts")
 
-        # Calculating count of rsidR, rsidRPr, rsidP, rsidRDefault, paraId, and textId in document.xml
+        # Calculating count of rsidR, rsidRPr, rsidP, rsidRDefault, rsidTr, paraId, and textId in document.xml
         # and writing to "rsids" worksheet
         headers = [
             "File Name",
@@ -1889,58 +1904,65 @@ def process_docx(filename):
             "Count in document.xml",
             "RSID Root",
         ]
-
-        if not bool(rsids_worksheet):  # if it's an empty dictionary, add headers to it.
-            rsids_worksheet = dict((k, []) for k in headers)
-
+        rsids_worksheet = (
+            {k: [] for k in headers} if not rsids_worksheet else rsids_worksheet
+        )
         update_status("    Calculating rsidR count")
         for k, v in filename.rsidr_in_document_xml().items():
-            rsids_worksheet[headers[0]].append(filename.filename())
+            rsids_worksheet[headers[0]].append(this_file)
             rsids_worksheet[headers[1]].append("rsidR")
             rsids_worksheet[headers[2]].append(k)
             rsids_worksheet[headers[3]].append(v)
-            rsids_worksheet[headers[4]].append(filename.rsid_root())
+            rsids_worksheet[headers[4]].append(this_rsid_root)
 
         update_status("    Calculating rsidP count")
         for k, v in filename.rsidp_in_document_xml().items():
-            rsids_worksheet[headers[0]].append(filename.filename())
+            rsids_worksheet[headers[0]].append(this_file)
             rsids_worksheet[headers[1]].append("rsidP")
             rsids_worksheet[headers[2]].append(k)
             rsids_worksheet[headers[3]].append(v)
-            rsids_worksheet[headers[4]].append(filename.rsid_root())
+            rsids_worksheet[headers[4]].append(this_rsid_root)
 
-        update_status("    Calculating rsidPr count")
+        update_status("    Calculating rsidRPr count")
         for k, v in filename.rsidrpr_in_document_xml().items():
-            rsids_worksheet[headers[0]].append(filename.filename())
+            rsids_worksheet[headers[0]].append(this_file)
             rsids_worksheet[headers[1]].append("rsidRPr")
             rsids_worksheet[headers[2]].append(k)
             rsids_worksheet[headers[3]].append(v)
-            rsids_worksheet[headers[4]].append(filename.rsid_root())
+            rsids_worksheet[headers[4]].append(this_rsid_root)
 
         update_status("    Calculating rsidRDefault count")
         for k, v in filename.rsidrdefault_in_document_xml().items():
-            rsids_worksheet[headers[0]].append(filename.filename())
+            rsids_worksheet[headers[0]].append(this_file)
             rsids_worksheet[headers[1]].append("rsidRDefault")
             rsids_worksheet[headers[2]].append(k)
             rsids_worksheet[headers[3]].append(v)
-            rsids_worksheet[headers[4]].append(filename.rsid_root())
+            rsids_worksheet[headers[4]].append(this_rsid_root)
+
+        update_status("    Calculating rsidTr count")
+        for k, v in filename.rsidtr_in_document_xml().items():
+            rsids_worksheet[headers[0]].append(this_file)
+            rsids_worksheet[headers[1]].append("rsidTr")
+            rsids_worksheet[headers[2]].append(k)
+            rsids_worksheet[headers[3]].append(v)
+            rsids_worksheet[headers[4]].append(this_rsid_root)
 
         update_status("    Calculating paraID count")
         for k, v in filename.paragraph_id_tags().items():
-            rsids_worksheet[headers[0]].append(filename.filename())
+            rsids_worksheet[headers[0]].append(this_file)
             rsids_worksheet[headers[1]].append("paraID")
             rsids_worksheet[headers[2]].append(k)
             rsids_worksheet[headers[3]].append(v)
-            rsids_worksheet[headers[4]].append(filename.rsid_root())
+            rsids_worksheet[headers[4]].append(this_rsid_root)
 
         update_status("    Calculating textID count")
         for k, v in filename.text_id_tags().items():
-            rsids_worksheet[headers[0]].append(filename.filename())
+            rsids_worksheet[headers[0]].append(this_file)
             rsids_worksheet[headers[1]].append("textID")
             rsids_worksheet[headers[2]].append(k)
             rsids_worksheet[headers[3]].append(v)
-            rsids_worksheet[headers[4]].append(filename.rsid_root())
-    update_status(f"Finished processing {filename.filename()}")
+            rsids_worksheet[headers[4]].append(this_rsid_root)
+    update_status(f"Finished processing {this_file}")
     update_status(f'{"-"*36}')
 
 
