@@ -71,10 +71,12 @@ Processes that this script will do:
 
 import hashlib
 import os
+import sys
 import zipfile
 from zipfile import BadZipFile
 import logging
 import subprocess
+import argparse
 from datetime import datetime as dt, timedelta
 from pathlib import Path
 import xml.etree.ElementTree as ET
@@ -131,7 +133,7 @@ black = QColor(0, 0, 0)
 __version__ = "2.0.0"
 __appname__ = f"MS Word Parser v{__version__}"
 __source__ = "https://github.com/jjrboucher/MS-Word-Parser"
-__date__ = "28 March 2025"
+__date__ = "31 March 2025"
 __author__ = (
     "Jacques Boucher - jjrboucher@gmail.com\nCorey Forman - corey@digitalsleuth.ca"
 )
@@ -144,6 +146,13 @@ class AboutWindow(QWidget):
     def __init__(self):
         super().__init__()
         layout = QGridLayout()
+        self.text_font = QFont()
+        if os.sys.platform == "win32":
+            self.text_font.setPointSize(9)
+        elif os.sys.platform == "linux":
+            self.text_font.setPointSize(8)
+        elif os.sys.platform == "darwin":
+            self.text_font.setPointSize(12)
         self.aboutLabel = QLabel()
         self.urlLabel = QLabel()
         self.logoLabel = QLabel()
@@ -172,11 +181,19 @@ class ContentsWindow(QWidget):
 
     def __init__(self):
         super().__init__()
+        self.text_font = QFont()
+        if os.sys.platform == "win32":
+            self.text_font.setPointSize(9)
+        elif os.sys.platform == "linux":
+            self.text_font.setPointSize(8)
+        elif os.sys.platform == "darwin":
+            self.text_font.setPointSize(12)
         self.setWindowTitle("Contents")
         self.setFixedSize(600, 800)
         self.text_edit = QPlainTextEdit()
         self.text_edit.setReadOnly(True)
         self.text_edit.setPlainText(__doc__)
+        self.text_edit.setFont(self.text_font)
         self.text_edit.setStyleSheet("padding: 0px;")
         layout = QVBoxLayout()
         layout.addWidget(self.text_edit)
@@ -210,7 +227,13 @@ class UiDialog:
             datefmt=__dtfmt__,
         )
         self.text_font = QFont()
-        self.text_font.setPointSize(9)
+        if os.sys.platform == "win32":
+            self.text_font.setPointSize(9)
+        elif os.sys.platform == "linux":
+            self.text_font.setPointSize(8)
+        elif os.sys.platform == "darwin":
+            self.text_font.setPointSize(12)
+
         self.running = False
 
     def setupUi(self, MainWindow):
@@ -265,7 +288,10 @@ class UiDialog:
         self.separator = QFrame(self.parsingOptions)
         self.separator.setFrameShape(QFrame.Shape.Box)
         self.separator.setFrameShadow(QFrame.Shadow.Plain)
-        self.separator.setGeometry(QRect(220, 20, 6, 60))
+        if os.sys.platform in ("win32", "darwin"):
+            self.separator.setGeometry(QRect(220, 20, 6, 60))
+        elif os.sys.platform == "linux":
+            self.separator.setGeometry(QRect(220, 15, 6, 60))
         self.separator.setStyleSheet(self.separator_sheet)
         self.hashFiles = QCheckBox(self.parsingOptions)
         self.hashFiles.setObjectName("hashFiles")
@@ -282,7 +308,7 @@ class UiDialog:
         self.excelFileLabel.setGeometry(QRect(10, 30, 80, 16))
         self.excelFileLabel.setStyleSheet("background: #fcfcfc; color: black;")
         self.excelFileLabel.setFont(self.text_font)
-        self.excelFileText = "File -> Select Excel File or click 'Select Excel'"
+        self.excelFileText = "File -> Select Excel or click 'Select Excel'"
         self.excelFile = QTextEdit(self.outputFiles)
         self.excelFile.setObjectName("excelFile")
         self.excelFile.setGeometry(QRect(92, 26, 250, 26))
@@ -349,18 +375,21 @@ class UiDialog:
         self.excelButton.setGeometry(QRect(10, 28, 86, 24))
         self.excelButton.setStyleSheet(self.stylesheet)
         self.excelButton.clicked.connect(self.open_excel)
+        self.excelButton.setFont(self.text_font)
         self.addFilesButton = QPushButton(self.operationOptions)
         self.addFilesButton.setObjectName("addFilesButton")
         self.addFilesButton.setGeometry(QRect(112, 28, 86, 24))
         self.addFilesButton.setEnabled(False)
         self.addFilesButton.setStyleSheet(self.disabled)
         self.addFilesButton.clicked.connect(self.add_files)
+        self.addFilesButton.setFont(self.text_font)
         self.addDirectoryButton = QPushButton(self.operationOptions)
         self.addDirectoryButton.setObjectName("addDirectoryButton")
         self.addDirectoryButton.setGeometry(QRect(214, 28, 86, 24))
         self.addDirectoryButton.setEnabled(False)
         self.addDirectoryButton.setStyleSheet(self.disabled)
         self.addDirectoryButton.clicked.connect(self.add_directory)
+        self.addDirectoryButton.setFont(self.text_font)
         self.processButton = QPushButton(self.operationOptions)
         self.processButton.setObjectName("processButton")
         self.processButton.setGeometry(QRect(10, 58, 86, 24))
@@ -489,10 +518,13 @@ class UiDialog:
         self.menubar = QMenuBar(MainWindow)
         self.menubar.setObjectName("menubar")
         self.menubar.setGeometry(QRect(0, 0, 1192, 22))
+        self.menubar.setFont(self.text_font)
         self.menuFile = QMenu(self.menubar)
         self.menuFile.setObjectName("menuFile")
+        self.menuFile.setFont(self.text_font)
         self.menuHelp = QMenu(self.menubar)
         self.menuHelp.setObjectName("menuHelp")
+        self.menuHelp.setFont(self.text_font)
         MainWindow.setMenuBar(self.menubar)
 
         self.menubar.addAction(self.menuFile.menuAction())
@@ -517,7 +549,7 @@ class UiDialog:
             QCoreApplication.translate("MainWindow", __appname__, None)
         )
         self.actionSelect_Excel.setText(
-            QCoreApplication.translate("MainWindow", "Select &Excel File ...", None)
+            QCoreApplication.translate("MainWindow", "Select &Excel ...", None)
         )
         self.actionAdd_Files.setText(
             QCoreApplication.translate("MainWindow", "Add &Files ...", None)
@@ -768,6 +800,8 @@ class UiDialog:
         )
         self.aboutWindow.urlLabel.setOpenExternalLinks(True)
         self.aboutWindow.urlLabel.setText(githubLink)
+        self.aboutWindow.aboutLabel.setFont(self.text_font)
+        self.aboutWindow.urlLabel.setFont(self.text_font)
         self.aboutWindow.show()
 
     def _contents(self):
@@ -1973,6 +2007,48 @@ def main():
     ms_word_form = MsWordGui()
     ms_word_form.show()
     ms_word_app.exec()
+
+
+def gui():
+    global ms_word_form
+    ms_word_app = QApplication([__appname__, "windows:darkmode=2"])
+    ms_word_app.setStyle("Fusion")
+    ms_word_form = MsWordGui()
+    ms_word_form.show()
+    ms_word_app.exec()
+
+
+def cli():
+    arg_parse = argparse.ArgumentParser(description=f"MS Word Parser {__version__}")
+    arg_parse.add_argument(
+        "-e", "--excel", help="output path and filename for the Excel output"
+    )
+    arg_parse.add_argument("-g", "--gui", action="store_true", help="launch the gui")
+    arg_parse.add_argument(
+        "--hash", action="store_true", help="hash the doc zip contents"
+    )
+    arg_parse.add_argument(
+        "-r",
+        "--recurse",
+        action="store_true",
+        help="recursively process files in directory",
+    )
+    file_source = arg_parse.add_mutually_exclusive_group(required=False)
+    file_source.add_argument("--dir", help="directory to process")
+    file_source.add_argument(
+        "--files", help="individual files to be processed", nargs="*"
+    )
+    process_mode = arg_parse.add_mutually_exclusive_group(required=False)
+    process_mode.add_argument("-t", "--triage", action="store_true", help="triage mode")
+    process_mode.add_argument("-f", "--full", action="store_true", help="full mode")
+
+    if len(sys.argv[1:]) == 0:
+        arg_parse.print_help()
+        arg_parse.exit()
+
+    args = arg_parse.parse_args()
+    if args.gui:
+        gui()
 
 
 if __name__ == "__main__":
