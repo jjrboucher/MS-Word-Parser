@@ -1,3 +1,4 @@
+@eaDir
 *.egg-info
 binaries
 build
