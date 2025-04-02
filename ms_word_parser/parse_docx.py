@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
 
-# Written by Jacques Boucher
-# jjrboucher@gmail.com
-#
-# ********** Description **********
 """The script does not attempt to validate the loaded file.
 A docx file is nothing more than a ZIP file, hence why this script uses the zipfile library.
 
@@ -126,10 +122,15 @@ rsids_worksheet = {}  # contains the RSID artifacts extracted from each file pro
 comments_worksheet = {}  # contains the comments within each file processed
 timestamp = dt.now().strftime("%Y%m%d_%H%M%S")
 log_file = f"DOCx_Parser_Log_{timestamp}.log"
-ms_word_form = None
+ms_word_gui = None
 green = QColor(86, 208, 50)
 red = QColor(204, 0, 0)
 black = QColor(0, 0, 0)
+__red__ = "\033[1;31m"
+__green__ = "\033[1;32m"
+__clr__ = "\033[1;m"
+color_fmt = None
+logger = None
 __version__ = "2.0.0"
 __appname__ = f"MS Word Parser v{__version__}"
 __source__ = "https://github.com/jjrboucher/MS-Word-Parser"
@@ -189,7 +190,7 @@ class ContentsWindow(QWidget):
         elif os.sys.platform == "darwin":
             self.text_font.setPointSize(12)
         self.setWindowTitle("Contents")
-        self.setFixedSize(600, 800)
+        self.setFixedSize(700, 800)
         self.text_edit = QPlainTextEdit()
         self.text_edit.setReadOnly(True)
         self.text_edit.setPlainText(__doc__)
@@ -752,7 +753,7 @@ class UiDialog:
             if this_os == "win32":
                 os.startfile(file)
             else:
-                subprocess.Popen([launch, file])
+                subprocess.Popen([launch, file], start_new_session=True)
         except Exception as e:
             self.update_status(f"Unable to open {file}: {e}", level="error")
 
@@ -812,18 +813,14 @@ class UiDialog:
         self.contentsWindow.show()
 
     def update_status(self, msg, level="info", color=black):
-        if level == "info":
-            self.docxOutput.setTextColor(color)
-            self.docxOutput.append(f"{dt.now().strftime(__dtfmt__)} - {msg}")
-            self.docxOutput.setTextColor(black)
-            self.logger.info(msg)
-        elif level == "error":
-            self.docxOutput.setTextColor(color)
-            self.docxOutput.append(f"{dt.now().strftime(__dtfmt__)} - {msg}")
-            self.docxOutput.setTextColor(black)
-            self.logger.error(msg)
-        elif level == "debug":
-            self.logger.debug(msg)
+        levels = {"info": logging.INFO, "error": logging.ERROR, "debug": logging.DEBUG}
+        log_level = levels[level]
+        if level in ("info", "error"):
+            if ms_word_gui:
+                self.docxOutput.setTextColor(color)
+                self.docxOutput.append(f"{dt.now().strftime(__dtfmt__)} - {msg}")
+                self.docxOutput.setTextColor(black)
+        self.logger.log(log_level, msg)
         QApplication.processEvents()
 
     def analyze_docs(self, files, triage_files, hash_files):
@@ -852,7 +849,9 @@ class UiDialog:
                 self.resetButton.setStyleSheet(self.stylesheet)
                 return
             try:
-                process_docx(Docx(f, triage_files, hash_files))
+                process_docx(
+                    Docx(f, triage_files, hash_files), triage_files, hash_files
+                )
             except Exception as docxError:
                 # If processing a DOCx file raises an error, let the user know, and write it
                 # to the error log.
@@ -869,84 +868,7 @@ class UiDialog:
             if remaining != 0:
                 remaining -= 1
             self.numRemaining.setText(str(remaining))
-        with pd.ExcelWriter(
-            path=self.excel_full_path, engine="xlsxwriter", mode="w"
-        ) as writer:
-            df_summary = chunk_list(doc_summary_worksheet, "Doc_Summary")
-            for chunk_dict, sheet_name in df_summary:
-                df_summary_chunk = pd.DataFrame(data=chunk_dict)
-                if not df_summary_chunk.empty:
-                    df_summary_chunk.to_excel(
-                        excel_writer=writer, sheet_name=sheet_name, index=False
-                    )
-                    worksheet = writer.sheets[sheet_name]
-                    (max_row, max_col) = df_summary_chunk.shape
-                    worksheet.set_column(0, 1, 34)
-                    worksheet.set_column(2, max_col - 4, 16)
-                    worksheet.set_column(max_col - 3, max_col - 1, 40)
-                    worksheet.autofilter(0, 0, max_row, max_col - 1)
-                    update_status(f'"{sheet_name}" worksheet written to Excel.')
-            df_metadata = chunk_list(metadata_worksheet, "Metadata")
-            for chunk_dict, sheet_name in df_metadata:
-                df_metadata_chunk = pd.DataFrame(data=chunk_dict)
-                if not df_metadata_chunk.empty:
-                    df_metadata_chunk.to_excel(
-                        excel_writer=writer, sheet_name=sheet_name, index=False
-                    )
-                    worksheet = writer.sheets[sheet_name]
-                    (max_row, max_col) = df_metadata_chunk.shape
-                    worksheet.set_column(0, max_col - 1, 20)
-                    worksheet.autofilter(0, 0, max_row, max_col - 1)
-                    update_status(f'"{sheet_name}" worksheet written to Excel.')
-            df_comments = chunk_list(comments_worksheet, "Comments")
-            for chunk_dict, sheet_name in df_comments:
-                df_comments_chunk = pd.DataFrame(data=chunk_dict)
-                if not df_comments_chunk.empty:
-                    df_comments_chunk.to_excel(
-                        excel_writer=writer, sheet_name=sheet_name, index=False
-                    )
-                    worksheet = writer.sheets[sheet_name]
-                    (max_row, max_col) = df_comments_chunk.shape
-                    worksheet.set_column(0, max_col - 2, 20)
-                    worksheet.set_column(max_col - 1, max_col - 1, 140)
-                    worksheet.autofilter(0, 0, max_row, max_col - 1)
-                    update_status(f'"{sheet_name}" worksheet written to Excel.')
-            if not triage_files:
-                df_rsids = chunk_list(rsids_worksheet, "RSIDs")
-                for chunk_dict, sheet_name in df_rsids:
-                    df_rsids_chunk = pd.DataFrame(data=chunk_dict)
-                    if not df_rsids_chunk.empty:
-                        df_rsids_chunk.to_excel(
-                            excel_writer=writer, sheet_name=sheet_name, index=False
-                        )
-                        worksheet = writer.sheets[sheet_name]
-                        (max_row, max_col) = df_rsids_chunk.shape
-                        worksheet.set_column(0, max_col - 1, 20)
-                        worksheet.autofilter(0, 0, max_row, max_col - 1)
-                        update_status(f'"{sheet_name}" worksheet written to Excel.')
-                df_archive = chunk_list(archive_files_worksheet, "Archive Files")
-                for chunk_dict, sheet_name in df_archive:
-                    df_archive_chunk = pd.DataFrame(data=chunk_dict)
-                    if not df_archive_chunk.empty:
-                        df_archive_chunk.to_excel(
-                            excel_writer=writer, sheet_name=sheet_name, index=False
-                        )
-                        worksheet = writer.sheets[sheet_name]
-                        (max_row, max_col) = df_archive_chunk.shape
-                        worksheet.set_column(0, max_col - 1, 35)
-                        worksheet.autofilter(0, 0, max_row, max_col - 1)
-                        update_status(f'"{sheet_name}" worksheet written to Excel.')
-            df_errors = chunk_list(errors_worksheet, "Errors")
-            for chunk_dict, sheet_name in df_errors:
-                df_errors_chunk = pd.DataFrame(data=chunk_dict)
-                if not df_errors_chunk.empty:
-                    df_errors_chunk.to_excel(
-                        excel_writer=writer, sheet_name=sheet_name, index=False
-                    )
-                    worksheet = writer.sheets[sheet_name]
-                    (max_row, max_col) = df_errors_chunk.shape
-                    worksheet.set_column(0, max_col - 1, 34)
-                    update_status(f'"{sheet_name}" worksheet written to Excel.')
+        write_to_excel(self.excel_full_path, triage_files, errors_worksheet)
         script_end = dt.now().strftime(__dtfmt__)
         update_status(f'{"="*24}')
         if docxErrorCount > 0:
@@ -1139,6 +1061,11 @@ class Docx:
         But if in triage mode, some of the variables will not get assigned any value, thus
         will affect any methods that rely on those variables having a value assigned to them.
         """
+        if ms_word_gui:
+            update_status = ms_word_gui.update_status
+        else:
+            update_status = update_cli
+        self.update_status = update_status
         self.namespaces = {
             "cp": "http://schemas.openxmlformats.org/package/2006/metadata/core-properties",
             "dc": "http://purl.org/dc/elements/1.1/",
@@ -1351,7 +1278,7 @@ class Docx:
         else:
             if "comments.xml" in xml_file:
                 self.has_comments = False
-            ms_word_form.update_status(
+            self.update_status(
                 f'"{xml_file}" does not exist in "{self.msword_file}". '
                 f"Returning empty string.",
                 level="debug",
@@ -1699,15 +1626,16 @@ class Docx:
         )
 
 
-def process_docx(filename):
+def process_docx(filename, triage, hashing):
     """
     This function accepts a filename of type Docx and processes it.
     By placing this in a function, it allows the main part of the script to accept multiple file names and
     then loop through them, calling this function for each DOCx file.
     """
-    update_status = ms_word_form.update_status
-    triage = ms_word_form.triageButton.isChecked()
-    hashing = ms_word_form.hashFiles.isChecked()
+    if ms_word_gui:
+        update_status = ms_word_gui.update_status
+    else:
+        update_status = update_cli
     global doc_summary_worksheet, metadata_worksheet, archive_files_worksheet, rsids_worksheet, comments_worksheet
     this_file = filename.msword_file
     this_rsid_root = filename.rsid_root()
@@ -2000,25 +1928,201 @@ def process_docx(filename):
     update_status(f'{"-"*36}')
 
 
+def write_to_excel(excel_file, triage_files, errors_worksheet):
+    if ms_word_gui:
+        update_status = ms_word_gui.update_status
+    else:
+        update_status = update_cli
+    with pd.ExcelWriter(path=excel_file, engine="xlsxwriter", mode="w") as writer:
+        df_summary = chunk_list(doc_summary_worksheet, "Doc_Summary")
+        for chunk_dict, sheet_name in df_summary:
+            df_summary_chunk = pd.DataFrame(data=chunk_dict)
+            if not df_summary_chunk.empty:
+                df_summary_chunk.to_excel(
+                    excel_writer=writer, sheet_name=sheet_name, index=False
+                )
+                worksheet = writer.sheets[sheet_name]
+                (max_row, max_col) = df_summary_chunk.shape
+                worksheet.set_column(0, 1, 34)
+                worksheet.set_column(2, max_col - 4, 16)
+                worksheet.set_column(max_col - 3, max_col - 1, 40)
+                worksheet.autofilter(0, 0, max_row, max_col - 1)
+                update_status(f'"{sheet_name}" worksheet written to Excel.')
+        df_metadata = chunk_list(metadata_worksheet, "Metadata")
+        for chunk_dict, sheet_name in df_metadata:
+            df_metadata_chunk = pd.DataFrame(data=chunk_dict)
+            if not df_metadata_chunk.empty:
+                df_metadata_chunk.to_excel(
+                    excel_writer=writer, sheet_name=sheet_name, index=False
+                )
+                worksheet = writer.sheets[sheet_name]
+                (max_row, max_col) = df_metadata_chunk.shape
+                worksheet.set_column(0, max_col - 1, 20)
+                worksheet.autofilter(0, 0, max_row, max_col - 1)
+                update_status(f'"{sheet_name}" worksheet written to Excel.')
+        df_comments = chunk_list(comments_worksheet, "Comments")
+        for chunk_dict, sheet_name in df_comments:
+            df_comments_chunk = pd.DataFrame(data=chunk_dict)
+            if not df_comments_chunk.empty:
+                df_comments_chunk.to_excel(
+                    excel_writer=writer, sheet_name=sheet_name, index=False
+                )
+                worksheet = writer.sheets[sheet_name]
+                (max_row, max_col) = df_comments_chunk.shape
+                worksheet.set_column(0, max_col - 2, 20)
+                worksheet.set_column(max_col - 1, max_col - 1, 140)
+                worksheet.autofilter(0, 0, max_row, max_col - 1)
+                update_status(f'"{sheet_name}" worksheet written to Excel.')
+        if not triage_files:
+            df_rsids = chunk_list(rsids_worksheet, "RSIDs")
+            for chunk_dict, sheet_name in df_rsids:
+                df_rsids_chunk = pd.DataFrame(data=chunk_dict)
+                if not df_rsids_chunk.empty:
+                    df_rsids_chunk.to_excel(
+                        excel_writer=writer, sheet_name=sheet_name, index=False
+                    )
+                    worksheet = writer.sheets[sheet_name]
+                    (max_row, max_col) = df_rsids_chunk.shape
+                    worksheet.set_column(0, max_col - 1, 20)
+                    worksheet.autofilter(0, 0, max_row, max_col - 1)
+                    update_status(f'"{sheet_name}" worksheet written to Excel.')
+            df_archive = chunk_list(archive_files_worksheet, "Archive Files")
+            for chunk_dict, sheet_name in df_archive:
+                df_archive_chunk = pd.DataFrame(data=chunk_dict)
+                if not df_archive_chunk.empty:
+                    df_archive_chunk.to_excel(
+                        excel_writer=writer, sheet_name=sheet_name, index=False
+                    )
+                    worksheet = writer.sheets[sheet_name]
+                    (max_row, max_col) = df_archive_chunk.shape
+                    worksheet.set_column(0, max_col - 1, 35)
+                    worksheet.autofilter(0, 0, max_row, max_col - 1)
+                    update_status(f'"{sheet_name}" worksheet written to Excel.')
+        df_errors = chunk_list(errors_worksheet, "Errors")
+        for chunk_dict, sheet_name in df_errors:
+            df_errors_chunk = pd.DataFrame(data=chunk_dict)
+            if not df_errors_chunk.empty:
+                df_errors_chunk.to_excel(
+                    excel_writer=writer, sheet_name=sheet_name, index=False
+                )
+                worksheet = writer.sheets[sheet_name]
+                (max_row, max_col) = df_errors_chunk.shape
+                worksheet.set_column(0, max_col - 1, 34)
+                update_status(f'"{sheet_name}" worksheet written to Excel.')
+
+
+def process_cli(files, triage_files, hash_files, excel_file):
+    docxErrorCount = 0
+    start_time = dt.now().strftime(__dtfmt__)
+    update_cli(f"Script executed: {start_time}")
+    update_cli("Summary of files parsed:")
+    update_cli(f'{"="*36}')
+    remaining = len(files)
+    errors_worksheet = {"File Name": [], "Error": []}
+    for f in files:
+        try:
+            process_docx(Docx(f, triage_files, hash_files), triage_files, hash_files)
+        except Exception as docxError:
+            # If processing a DOCx file raises an error, let the user know, and write it
+            # to the error log.
+            docxErrorCount += 1  # increment error count by 1.
+            filesUnableToProcess.append(f)
+            update_cli(
+                f"Error trying to process {f}. Skipping. Error: {docxError}",
+                level="error",
+                color=__red__,
+            )
+            errors_worksheet["File Name"].append(f)
+            errors_worksheet["Error"].append(docxError)
+        if remaining != 0:
+            remaining -= 1
+    write_to_excel(excel_file, triage_files, errors_worksheet)
+    update_cli(f'{"="*24}')
+    if docxErrorCount > 0:
+        clr = __red__
+    else:
+        clr = __clr__
+    update_cli(
+        f"Processing finished for all files. Errors detected: {docxErrorCount}",
+        color=clr,
+    )
+    if docxErrorCount > 0:
+        update_cli("The following files had errors:", "error", color=clr)
+        for each_file in filesUnableToProcess:
+            update_cli(f"  {each_file}", "error", color=clr)
+    end_time = dt.now().strftime(__dtfmt__)
+    update_cli(f"Script finished execution: {end_time}", color=__green__)
+    run_time = str(
+        timedelta(
+            seconds=(
+                dt.strptime(end_time, __dtfmt__) - dt.strptime(start_time, __dtfmt__)
+            ).seconds
+        )
+    )
+    update_cli(f"Total processing time: {run_time}", color=__green__)
+
+
+class ColorFormatter(logging.Formatter):
+    def __init__(self, fmt=None, datefmt=None, style="%"):
+        super().__init__(fmt, datefmt, style)
+        self.color = ""
+        self.reset = __clr__
+
+    def set_color(self, color):
+        self.color = color
+
+    def format(self, record):
+        formatter = logging.Formatter(
+            f"{self.color}%(asctime)s | %(levelname)-8s | %(message)s{self.reset}",
+            datefmt=__dtfmt__,
+        )
+        return formatter.format(record)
+
+
+def cli_log(excel_path, verbose=False):
+    global color_fmt
+    log = logging.getLogger("ms-word-parser")
+    log.setLevel(logging.DEBUG)
+    log_fmt = logging.Formatter(
+        "%(asctime)s | %(levelname)-8s | %(message)s",
+        datefmt=__dtfmt__,
+    )
+    log_path = os.path.normpath(f"{excel_path}{os.sep}{log_file}")
+    file_handler = logging.FileHandler(log_path, "w", "utf-8")
+    file_handler.setFormatter(log_fmt)
+    log.addHandler(file_handler)
+    if verbose:
+        color_fmt = ColorFormatter()
+        stream_handler = logging.StreamHandler(stream=sys.stdout)
+        stream_handler.setLevel(logging.INFO)
+        stream_handler.setFormatter(color_fmt)
+        log.addHandler(stream_handler)
+
+    return log
+
+
+def update_cli(msg, level="info", color=__clr__):
+    levels = {"info": logging.INFO, "error": logging.ERROR, "debug": logging.DEBUG}
+    log_level = levels[level]
+    if isinstance(color_fmt, ColorFormatter):
+        color_fmt.set_color(color)
+        logger.log(log_level, msg)
+        color_fmt.set_color("")
+        return
+    logger.log(log_level, msg)
+
+
 def main():
-    global ms_word_form
+    global ms_word_gui
     ms_word_app = QApplication([__appname__, "windows:darkmode=2"])
     ms_word_app.setStyle("Fusion")
-    ms_word_form = MsWordGui()
-    ms_word_form.show()
-    ms_word_app.exec()
-
-
-def gui():
-    global ms_word_form
-    ms_word_app = QApplication([__appname__, "windows:darkmode=2"])
-    ms_word_app.setStyle("Fusion")
-    ms_word_form = MsWordGui()
-    ms_word_form.show()
+    ms_word_gui = MsWordGui()
+    ms_word_gui.show()
     ms_word_app.exec()
 
 
 def cli():
+    global logger
     arg_parse = argparse.ArgumentParser(description=f"MS Word Parser {__version__}")
     arg_parse.add_argument(
         "-e", "--excel", help="output path and filename for the Excel output"
@@ -2032,6 +2136,13 @@ def cli():
         "--recurse",
         action="store_true",
         help="recursively process files in directory",
+    )
+    arg_parse.add_argument(
+        "-V",
+        "--verbose",
+        action="store_true",
+        help="Output to STDOUT as well as log",
+        default=False,
     )
     file_source = arg_parse.add_mutually_exclusive_group(required=False)
     file_source.add_argument("--dir", help="directory to process")
@@ -2049,6 +2160,62 @@ def cli():
     args = arg_parse.parse_args()
     if args.gui:
         gui()
+
+    if not args.gui:
+        if not (args.dir or args.files):
+            arg_parse.error(
+                "One of --files or --dir is required, unless running in GUI mode"
+            )
+        if not (args.triage or args.full):
+            arg_parse.error(
+                "One of --triage or --full is required, unless running in GUI mode"
+            )
+        if not args.excel:
+            arg_parse.error(
+                "You must supply -e / --excel as a path and file name for the output Excel content"
+            )
+        if args.excel:
+            if not os.path.exists(os.path.dirname(args.excel)):
+                arg_parse.error(
+                    f"The path {os.path.dirname(args.excel)} does not exist. Please check your path and try again."
+                )
+            logger = cli_log(os.path.dirname(args.excel), args.verbose)
+        if args.files:
+            file_list = args.files
+            try:
+                process_cli(file_list, args.triage, args.hash, args.excel)
+            except Exception as e:
+                update_cli(
+                    f"Error trying to process files - {e}",
+                    level="error",
+                    color=__red__,
+                )
+        if args.dir:
+            if not os.path.exists(args.dir) or not os.path.isdir(args.dir):
+                arg_parse.error(
+                    f"The path {args.dir} does not exist. Please check your path and try again."
+                )
+            folder_path = Path(args.dir)
+            if args.recurse:
+                file_list = (
+                    list(folder_path.rglob("*.docx"))
+                    + list(folder_path.rglob("*.dotx"))
+                    + list(folder_path.rglob("*.dotm"))
+                )
+            else:
+                file_list = (
+                    list(folder_path.glob("*.docx"))
+                    + list(folder_path.glob("*.dotx"))
+                    + list(folder_path.glob("*.dotm"))
+                )
+            try:
+                process_cli(file_list, args.triage, args.hash, args.excel)
+            except Exception as e:
+                update_cli(
+                    f"Error trying to process directory - {e}",
+                    level="error",
+                    color=__red__,
+                )
 
 
 if __name__ == "__main__":
