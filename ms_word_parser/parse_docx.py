@@ -13,19 +13,19 @@ Usage:
 
 - First, click File - Select Excel File. This will be the file containing the output. If it exists,
   it will be overwritten. If not, it will be created.
-  
+
 - Second, click File - Open Files ... or Open Directory ..., depending on what you'd like to do.
   Again, if you select a directory, you will be asked if you'd like to recursively load all files.
-  
+
 - Third, choose your processing options: Triage or Full.
   Triage will give cursory information about the document and the metadata contained within, as well as any
   comments.
   Full will do a full analysis of the document, including looking at RSID's and determining uniqueness,
   and examining w:p, w:r, and w:t tags.
-  
-  You also have the option to Hash the file and the contents of the file (ie: the files in the zip). 
+
+  You also have the option to Hash the file and the contents of the file (ie: the files in the zip).
   This will generate an MD5 Hash for each value.
-  
+
 - Fourth, click Process at the bottom left of the Window. The output will be placed both in the Processing
   Status window on the right, and in a log file named DOCx_Parser_Log_<date_time>.log in the same path
   as the Excel document. The date_time value, and subsequently the log name, are determined at launch,
@@ -49,7 +49,7 @@ Processes that this script will do:
 
 3 - It will extract all the unique RSIDs from the file word/settings.xml and write it to a worksheet
     called RSIDs, along with a count of how many times that RSID is in document.xml
-    It will also search document.xml for all unique rsidRPr, rsidP, and rsidRDefault values and count 
+    It will also search document.xml for all unique rsidRPr, rsidP, and rsidRDefault values and count
     of how many are in document.xml.
     It also extracts the unique paraId and textId tags from the <w:p> tag and saves the values and count
     of how many are in document.xml.
@@ -75,6 +75,7 @@ import subprocess
 import argparse
 from datetime import datetime as dt, timedelta
 from pathlib import Path
+import struct
 import xml.etree.ElementTree as ET
 import warnings
 import pandas as pd
@@ -114,27 +115,25 @@ from PyQt6.QtWidgets import (
 )
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
-filesUnableToProcess = []  # list of files that produced an error
 doc_summary_worksheet = {}  # contains summary data parsed from each file processed
 metadata_worksheet = {}  # contains the metadata parsed from each file processed
 archive_files_worksheet = {}  # contains the archive files data from each file processed
 rsids_worksheet = {}  # contains the RSID artifacts extracted from each file processed
 comments_worksheet = {}  # contains the comments within each file processed
+errors_worksheet = {"File Name": [], "Error": []}
 timestamp = dt.now().strftime("%Y%m%d_%H%M%S")
 log_file = f"DOCx_Parser_Log_{timestamp}.log"
-ms_word_gui = None
+ms_word_gui, start_time, color_fmt, logger = (None,) * 4
 green = QColor(86, 208, 50)
 red = QColor(204, 0, 0)
 black = QColor(0, 0, 0)
 __red__ = "\033[1;31m"
 __green__ = "\033[1;32m"
 __clr__ = "\033[1;m"
-color_fmt = None
-logger = None
 __version__ = "2.0.0"
 __appname__ = f"MS Word Parser v{__version__}"
 __source__ = "https://github.com/jjrboucher/MS-Word-Parser"
-__date__ = "31 March 2025"
+__date__ = "5 April 2025"
 __author__ = (
     "Jacques Boucher - jjrboucher@gmail.com\nCorey Forman - corey@digitalsleuth.ca"
 )
@@ -289,7 +288,7 @@ class UiDialog:
         self.separator = QFrame(self.parsingOptions)
         self.separator.setFrameShape(QFrame.Shape.Box)
         self.separator.setFrameShadow(QFrame.Shadow.Plain)
-        if os.sys.platform in ("win32", "darwin"):
+        if os.sys.platform in {"win32", "darwin"}:
             self.separator.setGeometry(QRect(220, 20, 6, 60))
         elif os.sys.platform == "linux":
             self.separator.setGeometry(QRect(220, 15, 6, 60))
@@ -758,9 +757,7 @@ class UiDialog:
             self.update_status(f"Unable to open {file}: {e}", level="error")
 
     def _reset(self):
-        global timestamp, log_file
-        timestamp = dt.now().strftime("%Y%m%d_%H%M%S")
-        log_file = f"DOCx_Parser_Log_{timestamp}.log"
+        reset_vars()
         self.excelFile.setText(self.excelFileText)
         self.generalLogFile.setText(log_file)
         self.outputPath.clear()
@@ -780,6 +777,10 @@ class UiDialog:
         self.actionAdd_Files.setVisible(False)
         self.actionAdd_Directory.setVisible(False)
         self.triageButton.setChecked(True)
+        self.addFilesButton.setEnabled(False)
+        self.addFilesButton.setStyleSheet(self.disabled)
+        self.addDirectoryButton.setEnabled(False)
+        self.addDirectoryButton.setStyleSheet(self.disabled)
         self.hashFiles.setChecked(False)
         self.stopButton.setEnabled(False)
         self.stopButton.setStyleSheet(self.disabled)
@@ -788,6 +789,10 @@ class UiDialog:
         self.running = False
         self.stopButton.setStyleSheet(self.disabled)
         self.stopButton.setEnabled(False)
+        self.addFilesButton.setEnabled(False)
+        self.addFilesButton.setStyleSheet(self.disabled)
+        self.addDirectoryButton.setEnabled(False)
+        self.addDirectoryButton.setStyleSheet(self.disabled)
 
     def _about(self):
         self.aboutWindow = AboutWindow()
@@ -815,15 +820,19 @@ class UiDialog:
     def update_status(self, msg, level="info", color=black):
         levels = {"info": logging.INFO, "error": logging.ERROR, "debug": logging.DEBUG}
         log_level = levels[level]
-        if level in ("info", "error"):
+        if level in {"info", "error"}:
             if ms_word_gui:
                 self.docxOutput.setTextColor(color)
                 self.docxOutput.append(f"{dt.now().strftime(__dtfmt__)} - {msg}")
                 self.docxOutput.setTextColor(black)
-        self.logger.log(log_level, msg)
+        try:
+            self.logger.log(log_level, msg)
+        except (UnicodeDecodeError, UnicodeEncodeError):
+            self.logger.log(log_level, msg.encode("utf-8", errors="surrogatepass"))
         QApplication.processEvents()
 
     def analyze_docs(self, files, triage_files, hash_files):
+        global start_time
         if not self.running:
             self.running = True
         start_time = dt.now().strftime(__dtfmt__)
@@ -840,13 +849,46 @@ class UiDialog:
         update_status("Summary of files parsed:")
         update_status(f'{"="*36}')
         remaining = int(self.numRemaining.toPlainText())
-        errors_worksheet = {"File Name": [], "Error": []}
-        for f in files:  # loop over the files selected, processing each.
+        for f in files:
             if not self.running:
                 update_status("Processing stopped")
                 self.stopButton.setEnabled(False)
                 self.resetButton.setEnabled(True)
                 self.resetButton.setStyleSheet(self.stylesheet)
+                update_status("Attempting to write current results to Excel")
+                try:
+                    write_to_excel(self.excel_full_path, triage_files)
+                    if docxErrorCount > 0:
+                        clr = red
+                    else:
+                        clr = black
+                    update_status(
+                        f"Finished writing to Excel. Errors detected: {docxErrorCount}",
+                        color=clr,
+                    )
+                    if docxErrorCount > 0:
+                        update_status(
+                            "The following files had errors:", "error", color=clr
+                        )
+                        for each_file in errors_worksheet["File Name"]:
+                            update_status(f"  {each_file}", "error", color=clr)
+                    end_time = dt.now().strftime(__dtfmt__)
+                    update_status(f"Script finished execution: {end_time}", color=green)
+                    run_time = str(
+                        timedelta(
+                            seconds=(
+                                dt.strptime(end_time, __dtfmt__)
+                                - dt.strptime(start_time, __dtfmt__)
+                            ).seconds
+                        )
+                    )
+                    update_status(f"Total processing time: {run_time}", color=green)
+                    self.openLogButton.setEnabled(True)
+                    self.openLogButton.setStyleSheet(self.stylesheet)
+                    self.openExcelButton.setStyleSheet(self.stylesheet)
+                    self.openExcelButton.setEnabled(True)
+                except Exception as e:
+                    update_status(f"Unable to write results to Excel: {e}")
                 return
             try:
                 process_docx(
@@ -857,7 +899,6 @@ class UiDialog:
                 # to the error log.
                 docxErrorCount += 1  # increment error count by 1.
                 self.numOfErrors.setText(str(docxErrorCount))
-                filesUnableToProcess.append(f)
                 update_status(
                     f"Error trying to process {f}. Skipping. Error: {docxError}",
                     level="error",
@@ -868,8 +909,8 @@ class UiDialog:
             if remaining != 0:
                 remaining -= 1
             self.numRemaining.setText(str(remaining))
-        write_to_excel(self.excel_full_path, triage_files, errors_worksheet)
-        script_end = dt.now().strftime(__dtfmt__)
+        write_to_excel(self.excel_full_path, triage_files)
+
         update_status(f'{"="*24}')
         if docxErrorCount > 0:
             clr = red
@@ -881,10 +922,10 @@ class UiDialog:
         )
         if docxErrorCount > 0:
             update_status("The following files had errors:", "error", color=clr)
-            for each_file in filesUnableToProcess:
+            for each_file in errors_worksheet["File Name"]:
                 update_status(f"  {each_file}", "error", color=clr)
-        update_status(f"Script finished execution: {script_end}", color=green)
         end_time = dt.now().strftime(__dtfmt__)
+        update_status(f"Script finished execution: {end_time}", color=green)
         run_time = str(
             timedelta(
                 seconds=(
@@ -977,10 +1018,10 @@ class MsWordGui(QMainWindow, UiDialog):
         QScrollBar:vertical {
             border: 0px;
             background:white;
-            width:7px;    
+            width:7px;
             margin: 0px 0px 0px 0px;
         }
-        QScrollBar::handle:vertical {         
+        QScrollBar::handle:vertical {
             min-height: 30px;
             border: 0px;
             border-radius: 3px;
@@ -989,7 +1030,7 @@ class MsWordGui(QMainWindow, UiDialog):
         QScrollBar::handle:vertical:hover {
             background: #808080;
         }
-        QScrollBar::add-line:vertical {       
+        QScrollBar::add-line:vertical {
             height: 0px;
             subcontrol-position: bottom;
             subcontrol-origin: margin;
@@ -1186,78 +1227,56 @@ class Docx:
         return: list [xml file name, # of bytes in extra field, truncated bytes]
         """
         filename = ""
-        zip_header = {
-            "signature": [0, 4],  # byte 0 for 4 bytes
-            "extract version": [4, 2],  # byte 4 for 2 bytes
-            "bitflag": [6, 2],  # byte 6 for 2 bytes
-            "compression": [8, 2],  # byte 8 for 2 bytes
-            "modification time": [10, 2],  # byte 10 for 2 bytes
-            "modification date": [12, 2],  # byte 12 for 2 bytes
-            "CRC-32": [14, 4],  # byte 14 for 4 bytes
-            "compressed size": [18, 4],  # byte 18 for 4 bytes
-            "uncompressed size": [22, 4],  # byte 22 for 4 bytes
-            "filename length": [26, 2],  # byte 26 for 2 bytes
-            "extra field length": [28, 2],  # byte 28 for 2 bytes
-        }
-        # filename is at offset 30 for n where n is "filename length". Extra field is at offset 30
-        # + filename length for z bytes where z is "extra field length
-
-        extras = {}  # empty dictionary where values will be stored.
-
+        # zip_header = {
+        # "signature": [0, 4],  # byte 0 for 4 bytes
+        # "extract version": [4, 2],  # byte 4 for 2 bytes
+        # "bitflag": [6, 2],  # byte 6 for 2 bytes
+        # "compression": [8, 2],  # byte 8 for 2 bytes
+        # "modification time": [10, 2],  # byte 10 for 2 bytes
+        # "modification date": [12, 2],  # byte 12 for 2 bytes
+        # "CRC-32": [14, 4],  # byte 14 for 4 bytes
+        # "compressed size": [18, 4],  # byte 18 for 4 bytes
+        # "uncompressed size": [22, 4],  # byte 22 for 4 bytes
+        # "filename length": [26, 2],  # byte 26 for 2 bytes
+        # "extra field length": [28, 2],  # byte 28 for 2 bytes
+        # }
+        extras = {}
         truncate_extra_field = 20  # extra field can be several hundred bytes, mostly 0x00. Grab display first 10
 
         for offset in self.header_offsets:
-
-            filename_len = int.from_bytes(
-                self.binary_content[
-                    zip_header["filename length"][0]
-                    + offset : zip_header["filename length"][1]
-                    + offset
-                    + zip_header["filename length"][0]
-                ],
-                "little",
-            )
-
+            (
+                filename_len,
+                extrafield_len,
+            ) = struct.unpack("<2H", self.binary_content[offset + 26 : offset + 30])
             filename_start = offset + 30
             filename_end = offset + 30 + filename_len
-
             if filename_end - filename_start < 256:
                 # some DOCx files somehow produce false positives of
                 # excessively long filenames and results in an error. This avoids that error.
                 filename = self.binary_content[filename_start:filename_end].decode(
                     "ascii"
                 )
-            extrafield_len = int.from_bytes(
-                self.binary_content[
-                    zip_header["extra field length"][0]
-                    + offset : zip_header["extra field length"][1]
-                    + offset
-                    + zip_header["extra field length"][0]
-                ],
-                "little",
-            )  # getting binary value, little endien
-
             extrafield_start = filename_end
             extrafield_end = extrafield_start + extrafield_len
-
             extrafield = self.binary_content[extrafield_start:extrafield_end]
-
             extrafield_hex_as_text = []
-            # List that will contain the extra characters represented as text.
 
             for h in extrafield:
-                extrafield_hex_as_text.append(str(hex(h)))
+                extrafield_hex_as_text.append(f"{h:02x}")
 
-            if extrafield_len == 0:  # many are 0 bytes, so skipping those.
+            if not extrafield:
                 extras[filename] = [extrafield_len, "nil"]
             elif (
                 extrafield_len <= truncate_extra_field
             ):  # field size larger than truncate value
-                extras[filename] = [extrafield_len, extrafield_hex_as_text]
+                extras[filename] = [
+                    extrafield_len,
+                    f"0x{''.join(extrafield_hex_as_text)}",
+                ]
             else:
                 extras[filename] = [
                     extrafield_len,
-                    extrafield_hex_as_text[0:truncate_extra_field],
+                    f"0x{''.join(extrafield_hex_as_text[0:truncate_extra_field])}",
                 ]  # adds only
                 # the select # of characters as specified in the variable truncate_extra_field. This is so that
                 # we don't end up with hundreds of characters in a cell in Excel, as some extra fields can be
@@ -1331,7 +1350,7 @@ class Docx:
                         if t.text
                     ]
                 )
-                .encode("latin-1", "ignore")
+                .encode("utf-8", "surrogatepass")
                 .decode()
             )
             all_comments.append([comment_id, date_time, author, initials, text])
@@ -1436,6 +1455,7 @@ class Docx:
                         ZIP extra values (hex as text)
         }
         """
+        compression_types = {0: "Store (None)", 8: "DEFLATE"}
         with zipfile.ZipFile(self.msword_file, "r") as zip_file:
             # returns XML files in the DOCx
             xml_files = {}
@@ -1461,7 +1481,7 @@ class Docx:
                     md5hash,
                     modified_time,
                     file_info.file_size,
-                    file_info.compress_type,
+                    compression_types[file_info.compress_type],
                     file_info.create_system,
                     file_info.create_version,
                     file_info.extract_version,
@@ -1815,7 +1835,7 @@ def process_docx(filename, triage, hashing):
             # expressed local time if Mac/iOS Pages exported to MS Word
             # expressed in UTC if created by LibreOffice on Windows exporting to MS Word.
             # expressed Redmond, Washington time zone when edited with MS Word online.
-            "Size (bytes)",
+            "Uncompressed Size (bytes)",
             "ZIP Compression Type",
             "ZIP Create System",
             "ZIP Created Version",
@@ -1832,11 +1852,7 @@ def process_docx(filename, triage, hashing):
             else archive_files_worksheet
         )
         for xml, xml_info in xml_files.items():
-            extra_characters = (
-                xml_info[9] if xml_info[8] == 0 else ",".join(xml_info[9])
-            )  # If no extra characters,
-            # leave assigned value as "nil". Otherwise, join.
-
+            extra_characters = xml_info[9]
             archive_files_worksheet["File Name"].append(this_file)
             archive_files_worksheet["Archive File"].append(xml)
             if hashing:
@@ -1844,7 +1860,7 @@ def process_docx(filename, triage, hashing):
             archive_files_worksheet[
                 "Modified Time (local/UTC/Redmond, Washington)"
             ].append(xml_info[1])
-            archive_files_worksheet["Size (bytes)"].append(xml_info[2])
+            archive_files_worksheet["Uncompressed Size (bytes)"].append(xml_info[2])
             archive_files_worksheet["ZIP Compression Type"].append(xml_info[3])
             archive_files_worksheet["ZIP Create System"].append(xml_info[4])
             archive_files_worksheet["ZIP Created Version"].append(xml_info[5])
@@ -1928,7 +1944,7 @@ def process_docx(filename, triage, hashing):
     update_status(f'{"-"*36}')
 
 
-def write_to_excel(excel_file, triage_files, errors_worksheet):
+def write_to_excel(excel_file, triage_files):
     if ms_word_gui:
         update_status = ms_word_gui.update_status
     else:
@@ -2009,16 +2025,17 @@ def write_to_excel(excel_file, triage_files, errors_worksheet):
                 (max_row, max_col) = df_errors_chunk.shape
                 worksheet.set_column(0, max_col - 1, 34)
                 update_status(f'"{sheet_name}" worksheet written to Excel.')
+    reset_vars()
 
 
 def process_cli(files, triage_files, hash_files, excel_file):
+    global start_time
     docxErrorCount = 0
     start_time = dt.now().strftime(__dtfmt__)
     update_cli(f"Script executed: {start_time}")
     update_cli("Summary of files parsed:")
     update_cli(f'{"="*36}')
     remaining = len(files)
-    errors_worksheet = {"File Name": [], "Error": []}
     for f in files:
         try:
             process_docx(Docx(f, triage_files, hash_files), triage_files, hash_files)
@@ -2026,7 +2043,6 @@ def process_cli(files, triage_files, hash_files, excel_file):
             # If processing a DOCx file raises an error, let the user know, and write it
             # to the error log.
             docxErrorCount += 1  # increment error count by 1.
-            filesUnableToProcess.append(f)
             update_cli(
                 f"Error trying to process {f}. Skipping. Error: {docxError}",
                 level="error",
@@ -2036,7 +2052,7 @@ def process_cli(files, triage_files, hash_files, excel_file):
             errors_worksheet["Error"].append(docxError)
         if remaining != 0:
             remaining -= 1
-    write_to_excel(excel_file, triage_files, errors_worksheet)
+    write_to_excel(excel_file, triage_files)
     update_cli(f'{"="*24}')
     if docxErrorCount > 0:
         clr = __red__
@@ -2048,7 +2064,7 @@ def process_cli(files, triage_files, hash_files, excel_file):
     )
     if docxErrorCount > 0:
         update_cli("The following files had errors:", "error", color=clr)
-        for each_file in filesUnableToProcess:
+        for each_file in errors_worksheet["File Name"]:
             update_cli(f"  {each_file}", "error", color=clr)
     end_time = dt.now().strftime(__dtfmt__)
     update_cli(f"Script finished execution: {end_time}", color=__green__)
@@ -2112,7 +2128,55 @@ def update_cli(msg, level="info", color=__clr__):
     logger.log(log_level, msg)
 
 
-def main():
+def stop_cli(triage_files, excel_file):
+    update_cli("Processing stopped")
+    update_cli("Attempting to write current results to Excel")
+    docxErrorCount = len(errors_worksheet["Error"])
+    try:
+        write_to_excel(excel_file, triage_files)
+        if docxErrorCount > 0:
+            clr = __red__
+        else:
+            clr = __clr__
+        update_cli(
+            f"Finished writing to Excel. Errors detected: {docxErrorCount}",
+            color=clr,
+        )
+        if docxErrorCount > 0:
+            update_cli("The following files had errors:", "error", color=clr)
+            for each_file in errors_worksheet["File Name"]:
+                update_cli(f"  {each_file}", "error", color=clr)
+        end_time = dt.now().strftime(__dtfmt__)
+        update_cli(f"Script finished execution: {end_time}", color=__green__)
+        run_time = str(
+            timedelta(
+                seconds=(
+                    dt.strptime(end_time, __dtfmt__)
+                    - dt.strptime(start_time, __dtfmt__)
+                ).seconds
+            )
+        )
+        update_cli(f"Total processing time: {run_time}", color=__green__)
+        return
+    except Exception as e:
+        update_cli(f"Unable to write results to Excel: {e}")
+
+
+def reset_vars():
+    global timestamp, log_file, doc_summary_worksheet, metadata_worksheet, archive_files_worksheet, rsids_worksheet, comments_worksheet, errors_worksheet
+    (
+        doc_summary_worksheet,
+        metadata_worksheet,
+        archive_files_worksheet,
+        rsids_worksheet,
+        comments_worksheet,
+    ) = ({},) * 5
+    errors_worksheet = {"File Name": [], "Error": []}
+    timestamp = dt.now().strftime("%Y%m%d_%H%M%S")
+    log_file = f"DOCx_Parser_Log_{timestamp}.log"
+
+
+def gui():
     global ms_word_gui
     ms_word_app = QApplication([__appname__, "windows:darkmode=2"])
     ms_word_app.setStyle("Fusion")
@@ -2121,7 +2185,7 @@ def main():
     ms_word_app.exec()
 
 
-def cli():
+def main():
     global logger
     arg_parse = argparse.ArgumentParser(description=f"MS Word Parser {__version__}")
     arg_parse.add_argument(
@@ -2184,6 +2248,8 @@ def cli():
             file_list = args.files
             try:
                 process_cli(file_list, args.triage, args.hash, args.excel)
+            except KeyboardInterrupt:
+                stop_cli(args.triage, args.excel)
             except Exception as e:
                 update_cli(
                     f"Error trying to process files - {e}",
@@ -2210,6 +2276,8 @@ def cli():
                 )
             try:
                 process_cli(file_list, args.triage, args.hash, args.excel)
+            except KeyboardInterrupt:
+                stop_cli(args.triage, args.excel)
             except Exception as e:
                 update_cli(
                     f"Error trying to process directory - {e}",
