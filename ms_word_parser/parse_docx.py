@@ -63,7 +63,6 @@ Processes that this script will do:
     "Manager", "Company", "Revision", "Total Editing Time", "Pages", "Paragraphs", "Lines", "Words",
     "Characters", "Characters With Spaces", "Title", "Subject", "Keywords", "Description", "Application",
     "App Version", "Template", "Doc Security", "Category", "contentStatus" """
-# ********** Possible future enhancements **********
 
 import hashlib
 import os
@@ -113,6 +112,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from tips import sameRsidRoot, numDocumentsEachRsidRoot, docsCreatedBySameWindowsUser
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 doc_summary_worksheet = {}  # contains summary data parsed from each file processed
@@ -2025,7 +2025,28 @@ def write_to_excel(excel_file, triage_files):
                 (max_row, max_col) = df_errors_chunk.shape
                 worksheet.set_column(0, max_col - 1, 34)
                 update_status(f'"{sheet_name}" worksheet written to Excel.')
+        write_tips(writer)
     reset_vars()
+
+
+def write_tips(writer):
+    workbook = writer.book
+    tips_ws = workbook.add_worksheet("Excel Tips")
+    writer.sheets["Excel Tips"] = tips_ws
+    tip_nums = {1: ["A1", [510, 180]], 2: ["I1", [890, 550]], 3: ["W1", [1000, 810]]}
+    tip_num = 1
+    for tip in (sameRsidRoot, numDocumentsEachRsidRoot, docsCreatedBySameWindowsUser):
+        text = f"{tip['Title']}\n\n{tip['Text']}"
+        options = {
+            "width": tip_nums[tip_num][1][0],
+            "height": tip_nums[tip_num][1][1],
+            "x_offset": 1,
+            "y_offset": 1,
+            "align": {"vertical": "top", "horizontal": "center"},
+            "line": {"color": "black", "width": 2},
+        }
+        tips_ws.insert_textbox(tip_nums[tip_num][0], text, options)
+        tip_num += 1
 
 
 def process_cli(files, triage_files, hash_files, excel_file):
