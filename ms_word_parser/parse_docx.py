@@ -112,7 +112,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from tips import sameRsidRoot, numDocumentsEachRsidRoot, docsCreatedBySameWindowsUser
+from tips import *
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 doc_summary_worksheet = {}  # contains summary data parsed from each file processed
@@ -133,7 +133,7 @@ __clr__ = "\033[1;m"
 __version__ = "2.0.0"
 __appname__ = f"MS Word Parser v{__version__}"
 __source__ = "https://github.com/jjrboucher/MS-Word-Parser"
-__date__ = "5 April 2025"
+__date__ = "8 April 2025"
 __author__ = (
     "Jacques Boucher - jjrboucher@gmail.com\nCorey Forman - corey@digitalsleuth.ca"
 )
