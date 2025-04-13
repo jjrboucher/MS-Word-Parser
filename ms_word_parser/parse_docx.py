@@ -48,15 +48,27 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from tips import (
-    tip_sameRsidRoot,
-    tip_numDocumentsEachRsidRoot,
-    tip_docsCreatedBySameWindowsUser,
-    tip_scriptOverview,
-    tip_excelWorksheets,
-    tip_processingOptions,
-    tip_guiWorkFlow,
-)
+
+try:
+    from tips import (
+        tip_sameRsidRoot,
+        tip_numDocumentsEachRsidRoot,
+        tip_docsCreatedBySameWindowsUser,
+        tip_scriptOverview,
+        tip_excelWorksheets,
+        tip_processingOptions,
+        tip_guiWorkFlow,
+    )
+except ModuleNotFoundError:
+    from ms_word_parser.tips import (
+        tip_sameRsidRoot,
+        tip_numDocumentsEachRsidRoot,
+        tip_docsCreatedBySameWindowsUser,
+        tip_scriptOverview,
+        tip_excelWorksheets,
+        tip_processingOptions,
+        tip_guiWorkFlow,
+    )
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 doc_summary_worksheet = {}  # contains summary data parsed from each file processed
