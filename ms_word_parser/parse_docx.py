@@ -1,69 +1,5 @@
 #!/usr/bin/env python3
 
-"""The script does not attempt to validate the loaded file.
-A docx file is nothing more than a ZIP file, hence why this script uses the zipfile library.
-
-It will extract the results to an Excel file in a location, and with a name, both defined by you.
-If the file does not exist, it creates it. If the file does exist, it will overwrite it.
-You will have the option to load a single file, or load a directory. If you select directory,
-you will be prompted to decide if you'd like the script to recursively load all files from that path.
-This allows you to run this against many DOCx files at once for an investigation and compare results.
-
-Usage:
-
-- First, click File - Select Excel File. This will be the file containing the output. If it exists,
-  it will be overwritten. If not, it will be created.
-
-- Second, click File - Open Files ... or Open Directory ..., depending on what you'd like to do.
-  Again, if you select a directory, you will be asked if you'd like to recursively load all files.
-
-- Third, choose your processing options: Triage or Full.
-  Triage will give cursory information about the document and the metadata contained within, as well as any
-  comments.
-  Full will do a full analysis of the document, including looking at RSID's and determining uniqueness,
-  and examining w:p, w:r, and w:t tags.
-
-  You also have the option to Hash the file and the contents of the file (ie: the files in the zip).
-  This will generate an MD5 Hash for each value.
-
-- Fourth, click Process at the bottom left of the Window. The output will be placed both in the Processing
-  Status window on the right, and in a log file named DOCx_Parser_Log_<date_time>.log in the same path
-  as the Excel document. The date_time value, and subsequently the log name, are determined at launch,
-  but the log file will only be created once an Excel document is chosen and files are selected, even
-  if the Process button is not selected.
-
-Processes that this script will do:
-
-1 - It will extract a list of all the files within the zip file and save it to a worksheet called XML_files.
-    In this worksheet, it will save the following information to a row:
-    "File Name", "XML", "Size (bytes)", "MD5Hash"
-
-2 - It will extract all the unique RSIDs from the file word/settings.xml and write it to a worksheet
-    called doc_summary.
-    In this worksheet, it will save the following information to a row:
-    "File Name", "Unique rsidR", "RSID Root", "<w:p> tags", "<w:r> tags", "<w:t> tags"
-    Where "Unique RSID" is a numerical count of the of RSIDs in the file settings.xml.
-
-    What is an RSID (Revision Save ID)?
-    See https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.rsid?view=openxml-2.8.1
-
-3 - It will extract all the unique RSIDs from the file word/settings.xml and write it to a worksheet
-    called RSIDs, along with a count of how many times that RSID is in document.xml
-    It will also search document.xml for all unique rsidRPr, rsidP, and rsidRDefault values and count
-    of how many are in document.xml.
-    It also extracts the unique paraId and textId tags from the <w:p> tag and saves the values and count
-    of how many are in document.xml.
-    In this worksheet, it will save the following information to rows (one for each unique RSID):
-    "File Name", "RSID Type", "RSID Value", "Count in document.xml"
-
-4 - It will extract all known relevant metadata from the files docProps/app.xml and docProps/core.xml
-    and write it to a worksheet called metadata.
-    In this worksheet, it will save the following information to a row:
-    "File Name", "Author", "Created Date", "Last Modified By", "Modified Date", "Last Printed Date",
-    "Manager", "Company", "Revision", "Total Editing Time", "Pages", "Paragraphs", "Lines", "Words",
-    "Characters", "Characters With Spaces", "Title", "Subject", "Keywords", "Description", "Application",
-    "App Version", "Template", "Doc Security", "Category", "contentStatus" """
-
 import hashlib
 import os
 import sys
@@ -112,7 +48,15 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from tips import *
+from tips import (
+    tip_sameRsidRoot,
+    tip_numDocumentsEachRsidRoot,
+    tip_docsCreatedBySameWindowsUser,
+    tip_scriptOverview,
+    tip_excelWorksheets,
+    tip_processingOptions,
+    tip_guiWorkFlow,
+)
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 doc_summary_worksheet = {}  # contains summary data parsed from each file processed
@@ -133,7 +77,7 @@ __clr__ = "\033[1;m"
 __version__ = "2.0.0"
 __appname__ = f"MS Word Parser v{__version__}"
 __source__ = "https://github.com/jjrboucher/MS-Word-Parser"
-__date__ = "8 April 2025"
+__date__ = "13 April 2025"
 __author__ = (
     "Jacques Boucher - jjrboucher@gmail.com\nCorey Forman - corey@digitalsleuth.ca"
 )
@@ -190,9 +134,15 @@ class ContentsWindow(QWidget):
             self.text_font.setPointSize(12)
         self.setWindowTitle("Contents")
         self.setFixedSize(700, 800)
+        window_text = (
+            f"{tip_scriptOverview['Title']}\n{tip_scriptOverview['Text']}\n"
+            f"{tip_excelWorksheets['Title']}\n{tip_excelWorksheets['Text']}\n"
+            f"{tip_processingOptions['Title']}\n{tip_processingOptions['Text']}\n"
+            f"{tip_guiWorkFlow['Title']}\n{tip_guiWorkFlow['Text']}"
+        )
         self.text_edit = QPlainTextEdit()
         self.text_edit.setReadOnly(True)
-        self.text_edit.setPlainText(__doc__)
+        self.text_edit.setPlainText(window_text)
         self.text_edit.setFont(self.text_font)
         self.text_edit.setStyleSheet("padding: 0px;")
         layout = QVBoxLayout()
@@ -2035,7 +1985,11 @@ def write_tips(writer):
     writer.sheets["Excel Tips"] = tips_ws
     tip_nums = {1: ["A1", [510, 180]], 2: ["I1", [890, 550]], 3: ["W1", [1000, 810]]}
     tip_num = 1
-    for tip in (sameRsidRoot, numDocumentsEachRsidRoot, docsCreatedBySameWindowsUser):
+    for tip in (
+        tip_sameRsidRoot,
+        tip_numDocumentsEachRsidRoot,
+        tip_docsCreatedBySameWindowsUser,
+    ):
         text = f"{tip['Title']}\n\n{tip['Text']}"
         options = {
             "width": tip_nums[tip_num][1][0],
