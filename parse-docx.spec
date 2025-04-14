@@ -3,7 +3,7 @@
 __version__ = '2.0.0'
 
 a = Analysis(
-    ['parse-docx.py'],
+    ['ms_word_parser/parse_docx.py'],
     pathex=[],
     binaries=[],
     datas=[],
@@ -13,7 +13,6 @@ a = Analysis(
     runtime_hooks=[],
     excludes=[],
     noarchive=False,
-    optimize=1,
 )
 pyz = PYZ(a.pure)
 
@@ -23,7 +22,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='parse-docx',
+    name=f'parse-docx-v{__version__}',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -37,4 +36,5 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     version='version.txt',
+    icon=['icons/logo.ico'],
 )
