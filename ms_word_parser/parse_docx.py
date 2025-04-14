@@ -257,7 +257,7 @@ class UiDialog:
         self.separator.setStyleSheet(self.separator_sheet)
         self.hashFiles = QCheckBox(self.parsingOptions)
         self.hashFiles.setObjectName("hashFiles")
-        self.hashFiles.setGeometry(QRect(250, 30, 75, 20))
+        self.hashFiles.setGeometry(QRect(250, 30, 80, 20))
         self.hashFiles.setStyleSheet(self.stylesheet)
         self.hashFiles.setFont(self.text_font)
         self.outputFiles = QGroupBox(self.centralwidget)
