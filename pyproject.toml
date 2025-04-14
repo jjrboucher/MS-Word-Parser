@@ -7,7 +7,7 @@ exclude = ["debian*", "binaries*", "build*", "dist*", "archive*"]
 
 [project]
 name = "ms-word-parser"
-version = "2.0.0"
+version = "2.0.0-rc1"
 dependencies = [
     "PyQt6",
     "pandas",
@@ -22,7 +22,6 @@ maintainers = [
 ]
 description = "MS Word DOCx Parsing Tool"
 readme = "README.md"
-license-files = ["LICENSE"]
 keywords = ["digital forensics", "dfir", "word", "docx", "parse"]
 classifiers = [
   "Development Status :: 5 - Production/Stable",
