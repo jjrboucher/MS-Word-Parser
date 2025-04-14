@@ -39,9 +39,9 @@ tip_guiWorkFlow = {
     "Text": """When you launch the application in GUI mode, you’ll need to select your parsing option (Triage or Full), and if you wish, check off the option to hash the files.\n
 You will need to select the Excel file where you wish to save the processing results, as well as select either a list of files within a single folder, or select a folder that you wish to process recursively.
 The Processing Status window will identify how many files were passed to the script for parsing, the number of files that produced a processing error, and the # of files remaining to be processed. Within this window you will see output from the script as it’s processing the files.\n
-STOP: If you click on the stop button, it will stop processing. The Excel file will not be written, but the log file will.
-RESET: If you want to run the script again, you can click on the Reset button and select a new output file and new files to process.
-Open Log File: Opens the log file.
-Open Excel File: Opens the Excel file.
+Stop: If you click on the stop button, it will stop processing. The Excel file will be written up to the last file to be processed. The log file will also be written.\n
+Reset: If you want to run the script again, you can click on the Reset button and select a new output file and new files to process.\n
+Open Log File: Opens the log file.\n
+Open Excel File: Opens the Excel file.\n
 Open Output Path: Open the output path folder.""",
 }
