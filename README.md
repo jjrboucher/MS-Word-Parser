@@ -37,7 +37,7 @@ options:
 To use the Graphical User Interface (GUI), simply run:
 `parse-docx -g`
 
-![v2 0 0-screenshot](https://github.com/jjrboucher/MS-Word-Parser/blob/develop/.assets/v2.0.0-screenshot.png)
+![v2 0 0-screenshot](https://github.com/jjrboucher/MS-Word-Parser/blob/master/.assets/v2.0.0-screenshot.png)
 
 ### Input
 You can select one or more MS Word files within a folder or alternatively select a root folder and the script will recursively add all MS Word files it finds from that point in the hierarchy.
