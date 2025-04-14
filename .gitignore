@@ -1,0 +1,7 @@
+@eaDir
+*.egg-info
+binaries
+build
+dist
+__pycache__
+archive
