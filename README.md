@@ -1,4 +1,5 @@
 # MS Word Parser
+![PyPI - Version](https://img.shields.io/pypi/v/ms_word_parser?logo=python&label=Latest%20pypi%20Release&labelColor=white)
 
 ## Overview
 #### Purpose
