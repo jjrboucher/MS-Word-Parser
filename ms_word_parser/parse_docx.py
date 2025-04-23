@@ -71,11 +71,11 @@ except ModuleNotFoundError:
     )
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
-doc_summary_worksheet = {}  # contains summary data parsed from each file processed
-metadata_worksheet = {}  # contains the metadata parsed from each file processed
-archive_files_worksheet = {}  # contains the archive files data from each file processed
-rsids_worksheet = {}  # contains the RSID artifacts extracted from each file processed
-comments_worksheet = {}  # contains the comments within each file processed
+doc_summary_worksheet = {}
+metadata_worksheet = {}
+archive_files_worksheet = {}
+rsids_worksheet = {}
+comments_worksheet = {}
 errors_worksheet = {"File Name": [], "Error": []}
 timestamp = dt.now().strftime("%Y%m%d_%H%M%S")
 log_file = f"DOCx_Parser_Log_{timestamp}.log"
@@ -86,10 +86,10 @@ black = QColor(0, 0, 0)
 __red__ = "\033[1;31m"
 __green__ = "\033[1;32m"
 __clr__ = "\033[1;m"
-__version__ = "2.0.0"
+__version__ = "2.0.1"
 __appname__ = f"MS Word Parser v{__version__}"
 __source__ = "https://github.com/jjrboucher/MS-Word-Parser"
-__date__ = "13 April 2025"
+__date__ = "22 April 2025"
 __author__ = (
     "Jacques Boucher - jjrboucher@gmail.com\nCorey Forman - corey@digitalsleuth.ca"
 )
@@ -897,6 +897,7 @@ class UiDialog:
             )
         )
         update_status(f"Total processing time: {run_time}", color=green)
+        reset_vars()
         self.resetButton.setEnabled(True)
         self.resetButton.setStyleSheet(self.stylesheet)
         self.stopButton.setEnabled(False)
@@ -1988,7 +1989,6 @@ def write_to_excel(excel_file, triage_files):
                 worksheet.set_column(0, max_col - 1, 34)
                 update_status(f'"{sheet_name}" worksheet written to Excel.')
         write_tips(writer)
-    reset_vars()
 
 
 def write_tips(writer):
