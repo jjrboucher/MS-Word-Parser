@@ -31,7 +31,6 @@ from PyQt6.QtGui import (
 from PyQt6.QtWidgets import (
     QApplication,
     QCheckBox,
-    QFrame,
     QGroupBox,
     QLabel,
     QMainWindow,
@@ -76,6 +75,10 @@ metadata_worksheet = {}
 archive_files_worksheet = {}
 rsids_worksheet = {}
 comments_worksheet = {}
+people_worksheet = {}
+extensible_worksheet = {}
+extended_worksheet = {}
+comments_ids_worksheet = {}
 errors_worksheet = {"File Name": [], "Error": []}
 timestamp = dt.now().strftime("%Y%m%d_%H%M%S")
 log_file = f"DOCx_Parser_Log_{timestamp}.log"
@@ -86,10 +89,10 @@ black = QColor(0, 0, 0)
 __red__ = "\033[1;31m"
 __green__ = "\033[1;32m"
 __clr__ = "\033[1;m"
-__version__ = "2.0.1"
+__version__ = "3.0.0"
 __appname__ = f"MS Word Parser v{__version__}"
 __source__ = "https://github.com/jjrboucher/MS-Word-Parser"
-__date__ = "22 April 2025"
+__date__ = "28 April 2025"
 __author__ = (
     "Jacques Boucher - jjrboucher@gmail.com\nCorey Forman - corey@digitalsleuth.ca"
 )
@@ -229,13 +232,18 @@ class UiDialog:
         self.actionContents = QAction(MainWindow)
         self.actionContents.setObjectName("actionContents")
         self.actionContents.triggered.connect(self._contents)
-        self.centralwidget = QWidget(MainWindow)
-        self.centralwidget.setObjectName("centralwidget")
-        self.parsingOptions = QGroupBox(self.centralwidget)
+        self.centralWidget = QWidget(MainWindow)
+        self.centralWidget.setObjectName("centralWidget")
+        self.parsingOptions = QGroupBox(self.centralWidget)
         self.parsingOptions.setObjectName("parsingOptions")
-        self.parsingOptions.setGeometry(QRect(10, 10, 350, 60))
+        self.parsingOptions.setGeometry(QRect(10, 10, 180, 60))
         self.parsingOptions.setStyleSheet("background: #ffffff; color: black;")
         self.parsingOptions.setFont(self.text_font)
+        self.hashOption = QGroupBox(self.centralWidget)
+        self.hashOption.setObjectName("hashOption")
+        self.hashOption.setGeometry(QRect(200, 10, 160, 60))
+        self.hashOption.setStyleSheet("background: #ffffff; color: black;")
+        self.hashOption.setFont(self.text_font)
         self.triageButton = QRadioButton(self.parsingOptions)
         self.triageButton.setObjectName("triageButton")
         self.triageButton.setGeometry(QRect(10, 30, 89, 20))
@@ -247,20 +255,12 @@ class UiDialog:
         self.fullButton.setGeometry(QRect(90, 30, 89, 20))
         self.fullButton.setStyleSheet(self.stylesheet)
         self.fullButton.setFont(self.text_font)
-        self.separator = QFrame(self.parsingOptions)
-        self.separator.setFrameShape(QFrame.Shape.Box)
-        self.separator.setFrameShadow(QFrame.Shadow.Plain)
-        if os.sys.platform in {"win32", "darwin"}:
-            self.separator.setGeometry(QRect(220, 20, 6, 60))
-        elif os.sys.platform == "linux":
-            self.separator.setGeometry(QRect(220, 15, 6, 60))
-        self.separator.setStyleSheet(self.separator_sheet)
-        self.hashFiles = QCheckBox(self.parsingOptions)
+        self.hashFiles = QCheckBox(self.hashOption)
         self.hashFiles.setObjectName("hashFiles")
-        self.hashFiles.setGeometry(QRect(250, 30, 80, 20))
+        self.hashFiles.setGeometry(QRect(10, 30, 89, 20))
         self.hashFiles.setStyleSheet(self.stylesheet)
         self.hashFiles.setFont(self.text_font)
-        self.outputFiles = QGroupBox(self.centralwidget)
+        self.outputFiles = QGroupBox(self.centralWidget)
         self.outputFiles.setObjectName("outputFiles")
         self.outputFiles.setGeometry(QRect(10, 76, 350, 120))
         self.outputFiles.setStyleSheet("background-color: #ffffff; color: black;")
@@ -268,7 +268,7 @@ class UiDialog:
         self.excelFileLabel = QLabel(self.outputFiles)
         self.excelFileLabel.setObjectName("excelFileLabel")
         self.excelFileLabel.setGeometry(QRect(10, 30, 80, 16))
-        self.excelFileLabel.setStyleSheet("background: #fcfcfc; color: black;")
+        self.excelFileLabel.setStyleSheet("background: #ffffff; color: black;")
         self.excelFileLabel.setFont(self.text_font)
         self.excelFileText = "File -> Select Excel or click 'Select Excel'"
         self.excelFile = QTextEdit(self.outputFiles)
@@ -287,7 +287,7 @@ class UiDialog:
         self.generalLog = QLabel(self.outputFiles)
         self.generalLog.setObjectName("generalLog")
         self.generalLog.setGeometry(QRect(10, 61, 80, 16))
-        self.generalLog.setStyleSheet("background: #fcfcfc; color: black;")
+        self.generalLog.setStyleSheet("background: #ffffff; color: black;")
         self.generalLog.setFont(self.text_font)
         self.generalLogFile = QTextEdit(self.outputFiles)
         self.generalLogFile.setAlignment(
@@ -308,7 +308,7 @@ class UiDialog:
         self.outputPathLabel = QLabel(self.outputFiles)
         self.outputPathLabel.setObjectName("outputPathLabel")
         self.outputPathLabel.setGeometry(QRect(10, 92, 80, 16))
-        self.outputPathLabel.setStyleSheet("background: #fcfcfc; color: black;")
+        self.outputPathLabel.setStyleSheet("background: #ffffff; color: black;")
         self.outputPathLabel.setFont(self.text_font)
         self.outputPath = QTextEdit(self.outputFiles)
         self.outputPath.setAlignment(
@@ -327,7 +327,7 @@ class UiDialog:
         self.outputPath.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
         self.outputPath.setFont(self.text_font)
 
-        self.operationOptions = QGroupBox(self.centralwidget)
+        self.operationOptions = QGroupBox(self.centralWidget)
         self.operationOptions.setObjectName("operationOptions")
         self.operationOptions.setGeometry(QRect(10, 200, 350, 90))
         self.operationOptions.setStyleSheet("background-color: #ffffff; color:black;")
@@ -378,7 +378,7 @@ class UiDialog:
         self.resetButton.clicked.connect(self._reset)
         self.resetButton.setStyleSheet(self.stylesheet)
         self.resetButton.setFont(self.text_font)
-        self.processStatus = QGroupBox(self.centralwidget)
+        self.processStatus = QGroupBox(self.centralWidget)
         self.processStatus.setObjectName("processStatus")
         self.processStatus.setGeometry(QRect(370, 10, 768, 280))
         self.processStatus.setStyleSheet("background: #ffffff; color: black;")
@@ -396,7 +396,7 @@ class UiDialog:
         self.numOfFilesLabel = QLabel(self.processStatus)
         self.numOfFilesLabel.setObjectName("numOfFilesLabel")
         self.numOfFilesLabel.setGeometry(QRect(18, 28, 120, 26))
-        self.numOfFilesLabel.setStyleSheet("background: #fcfcfc; color: black;")
+        self.numOfFilesLabel.setStyleSheet("background: #ffffff; color: black;")
         self.numOfFilesLabel.setFont(self.text_font)
         self.numOfFiles = QTextEdit(self.processStatus)
         self.numOfFiles.setObjectName("numOfFiles")
@@ -416,7 +416,7 @@ class UiDialog:
         self.numOfErrorsLabel = QLabel(self.processStatus)
         self.numOfErrorsLabel.setObjectName("numOfErrorsLabel")
         self.numOfErrorsLabel.setGeometry(QRect(135, 28, 80, 26))
-        self.numOfErrorsLabel.setStyleSheet("background: #fcfcfc; color: black;")
+        self.numOfErrorsLabel.setStyleSheet("background: #ffffff; color: black;")
         self.numOfErrorsLabel.setFont(self.text_font)
         self.numOfErrors = QTextEdit(self.processStatus)
         self.numOfErrors.setObjectName("numOfErrors")
@@ -436,7 +436,7 @@ class UiDialog:
         self.numRemainingLabel = QLabel(self.processStatus)
         self.numRemainingLabel.setObjectName("numRemainingLabel")
         self.numRemainingLabel.setGeometry(QRect(257, 28, 120, 26))
-        self.numRemainingLabel.setStyleSheet("background: #fcfcfc; color: black;")
+        self.numRemainingLabel.setStyleSheet("background: #ffffff; color: black;")
         self.numRemainingLabel.setFont(self.text_font)
         self.numRemaining = QTextEdit(self.processStatus)
         self.numRemaining.setObjectName("numRemaining")
@@ -476,7 +476,7 @@ class UiDialog:
         self.openButton.setStyleSheet(self.disabled)
         self.openButton.setEnabled(False)
         self.openButton.clicked.connect(self.open_path)
-        MainWindow.setCentralWidget(self.centralwidget)
+        MainWindow.setCentralWidget(self.centralWidget)
         self.menubar = QMenuBar(MainWindow)
         self.menubar.setObjectName("menubar")
         self.menubar.setGeometry(QRect(0, 0, 1192, 22))
@@ -528,6 +528,9 @@ class UiDialog:
         )
         self.parsingOptions.setTitle(
             QCoreApplication.translate("MainWindow", "Parsing Options", None)
+        )
+        self.hashOption.setTitle(
+            QCoreApplication.translate("MainWindow", "Hash Option", None)
         )
         self.triageButton.setText(
             QCoreApplication.translate("MainWindow", "Triage", None)
@@ -618,6 +621,7 @@ class UiDialog:
                     list(folder_path.rglob("*.docx"))
                     + list(folder_path.rglob("*.dotx"))
                     + list(folder_path.rglob("*.dotm"))
+                    + list(folder_path.rglob("*.docm"))
                 )
                 files = [str(file) for file in recursive_list]
             else:
@@ -625,6 +629,7 @@ class UiDialog:
                     list(folder_path.glob("*.docx"))
                     + list(folder_path.glob("*.dotx"))
                     + list(folder_path.glob("*.dotm"))
+                    + list(folder_path.glob("*.docm"))
                 )
                 files = [str(file) for file in non_recursive_list]
             self.numOfFiles.setText(str(len(files)))
@@ -647,7 +652,7 @@ class UiDialog:
             self,
             "Select files ...",
             "",
-            "docx, dotx, dotm Files (*.docx *.dotx *.dotm)",
+            "docx, dotx, dotm, docm Files (*.docx *.dotx *.dotm *.docm)",
         )
         if files:
             for file in files:
@@ -947,7 +952,7 @@ class MsWordGui(QMainWindow, UiDialog):
             background-color: white; color: black;
         }
         QCheckBox {
-            background: #fcfcfc; color:black;
+            background: white; color:black;
         }
         QMenu {
             background-color: white; border: 1px solid black; color: black;
@@ -968,13 +973,13 @@ class MsWordGui(QMainWindow, UiDialog):
             background-color: #d9ebfb; color: black;
         }
         QPushButton {
-            background-color: #ffffff; border: 1px solid black; color: black;
+            background-color: white; border: 1px solid black; color: black;
         }
         QPushButton:hover {
             background-color: #d9ebfb; border: 1px solid black;
         }
         QRadioButton {
-            background: #fcfcfc; color:black;
+            background: white; color:black;
         }
         """
     scrollbar_sheet = """
@@ -1072,6 +1077,7 @@ class Docx:
         self.update_status = update_status
         self.namespaces = {
             "cp": "http://schemas.openxmlformats.org/package/2006/metadata/core-properties",
+            "cr": "http://schemas.microsoft.com/office/comments/2020/reactions",  ## comment reactions from commentsExtensible.xml
             "dc": "http://purl.org/dc/elements/1.1/",
             "dcterms": "http://purl.org/dc/terms/",
             "dcmitype": "http://purl.org/dc/dcmitype/",
@@ -1082,6 +1088,8 @@ class Docx:
             "w14": "http://schemas.microsoft.com/office/word/2010/wordml",
             "w15": "http://schemas.microsoft.com/office/word/2012/wordml",
             "w16": "http://schemas.microsoft.com/office/word/2018/wordml",
+            "w16cex": "http://schemas.microsoft.com/office/word/2018/wordml/cex",  ## commentExtensible from commentsExtensible.xml
+            "w16cid": "http://schemas.microsoft.com/office/word/2016/wordml/cid",  ## Comment IDs from commentsIds.xml
             "wp": "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing",
             "xsi": "http://www.w3.org/2001/XMLSchema-instance",
         }
@@ -1115,6 +1123,26 @@ class Docx:
         if self.settings_xml_content == "":
             self.settings_xml_file = "word\\settings.xml"
             self.settings_xml_content = self.__load_xml(self.settings_xml_file)
+        self.people_file = "word/people.xml"
+        self.people_xml_content = self.__load_xml(self.people_file)
+        if self.people_xml_content == "":
+            self.people_file = "word\\people.xml"
+            self.people_xml_content = self.__load_xml(self.people_file)
+        self.extensible_comments_file = "word/commentsExtensible.xml"
+        self.extensible_xml_content = self.__load_xml(self.extensible_comments_file)
+        if self.extensible_xml_content == "":
+            self.extensible_comments_file = "word\\commentsExtensible.xml"
+            self.extensible_xml_content = self.__load_xml(self.extensible_comments_file)
+        self.extended_comments_file = "word/commentsExtended.xml"
+        self.extended_xml_content = self.__load_xml(self.extended_comments_file)
+        if self.extended_xml_content == "":
+            self.extended_comments_file = "word\\commentsExtended.xml"
+            self.extended_xml_content = self.__load_xml(self.extended_comments_file)
+        self.comments_ids_file = "word/commentsIds.xml"
+        self.comments_ids_content = self.__load_xml(self.comments_ids_file)
+        if self.comments_ids_content == "":
+            self.comments_ids_file = "word\\commentsIds.xml"
+            self.comments_ids_content = self.__load_xml(self.comments_ids_file)
         self.rsidRs = self.__extract_all_rsids_from_settings_xml()
         self.ns_lookup = {
             "title": [self.core_xml_content, "dc"],
@@ -1190,19 +1218,6 @@ class Docx:
         return: list [xml file name, # of bytes in extra field, truncated bytes]
         """
         filename = ""
-        # zip_header = {
-        # "signature": [0, 4],  # byte 0 for 4 bytes
-        # "extract version": [4, 2],  # byte 4 for 2 bytes
-        # "bitflag": [6, 2],  # byte 6 for 2 bytes
-        # "compression": [8, 2],  # byte 8 for 2 bytes
-        # "modification time": [10, 2],  # byte 10 for 2 bytes
-        # "modification date": [12, 2],  # byte 12 for 2 bytes
-        # "CRC-32": [14, 4],  # byte 14 for 4 bytes
-        # "compressed size": [18, 4],  # byte 18 for 4 bytes
-        # "uncompressed size": [22, 4],  # byte 22 for 4 bytes
-        # "filename length": [26, 2],  # byte 26 for 2 bytes
-        # "extra field length": [28, 2],  # byte 28 for 2 bytes
-        # }
         extras = {}
         truncate_extra_field = 20  # extra field can be several hundred bytes, mostly 0x00. Grab display first 10
 
@@ -1283,6 +1298,27 @@ class Docx:
             return ""
         return meta_content
 
+    def get_people(self):  ## DEBUG
+        if self.people_xml_content != "":
+            xml = ET.fromstring(self.people_xml_content)
+            list_of_people = []
+            all_people = xml.findall(".//w15:person", self.namespaces)
+            for person in all_people:
+                author = person.get(f"{{{self.namespaces['w15']}}}author")
+                if len(person) > 0:
+                    providerId = person[0].get(
+                        f"{{{self.namespaces['w15']}}}providerId"
+                    )
+                    userId = person[0].get(f"{{{self.namespaces['w15']}}}userId")
+                else:
+                    providerId = userId = None
+                list_of_people.append([author, providerId, userId])
+            return list_of_people
+        return None
+
+    def any_comments(self):
+        return self.has_comments
+
     def get_comments(self):
         """
         return the list all_comments that contains the following:
@@ -1294,17 +1330,24 @@ class Docx:
         :return:
         """
 
-        if not self.has_comments:  # There are no comments
+        if not self.has_comments:
             return ["", "", "", "", ""]
         xml = ET.fromstring(self.comments_xml_content)
         # Find all comments
         comments = xml.findall(".//w:comment", self.namespaces)
-        all_comments = []  # list to contain all comments
+        all_comments = []
         for comment in comments:
             author = comment.get(f"{{{self.namespaces['w']}}}author")
             date_time = comment.get(f"{{{self.namespaces['w']}}}date")
             initials = comment.get(f"{{{self.namespaces['w']}}}initials")
             comment_id = comment.get(f"{{{self.namespaces['w']}}}id")
+            comment_paras = comment.findall(".//w:p", self.namespaces)
+            if len(comment_paras) > 0:
+                comment_paraId = comment_paras[0].get(
+                    f"{{{self.namespaces['w14']}}}paraId"
+                )
+            else:
+                comment_paraId = None
             text = (
                 "".join(
                     [
@@ -1316,11 +1359,84 @@ class Docx:
                 .encode("utf-8", "surrogatepass")
                 .decode()
             )
-            all_comments.append([comment_id, date_time, author, initials, text])
+            all_comments.append(
+                [comment_id, comment_paraId, date_time, author, initials, text]
+            )
         return all_comments
 
-    def any_comments(self):
-        return self.has_comments
+    def get_comments_ids(self):
+        if self.comments_ids_content != "":
+            all_comments_ids = []
+            xml = ET.fromstring(self.comments_ids_content)
+            comments_ids = xml.findall(".//w16cid:commentId", self.namespaces)
+            for comment_id in comments_ids:
+                paraId = comment_id.get(f"{{{self.namespaces['w16cid']}}}paraId", "")
+                durableId = comment_id.get(
+                    f"{{{self.namespaces['w16cid']}}}durableId", ""
+                )
+                all_comments_ids.append([paraId, durableId])
+            return all_comments_ids
+        return None
+
+    def get_extended_comments(self):
+        if self.extended_xml_content != "":
+            all_extended_comments = []
+            xml = ET.fromstring(self.extended_xml_content)
+            extended_comments = xml.findall(".//w15:commentEx", self.namespaces)
+            for values in extended_comments:
+                paraId = values.get(f"{{{self.namespaces['w15']}}}paraId")
+                done = values.get(f"{{{self.namespaces['w15']}}}done")
+                paraIdParent = values.get(
+                    f"{{{self.namespaces['w15']}}}paraIdParent", "IS_PARENT"
+                )
+                all_extended_comments.append([paraId, paraIdParent, done])
+            return all_extended_comments
+        return None
+
+    def get_extensible_comments(self):
+        if self.extensible_xml_content != "":
+            all_extensible_comments = {}
+            xml = ET.fromstring(self.extensible_xml_content)
+            extensible_comments = xml.findall(
+                ".//w16cex:commentExtensible", self.namespaces
+            )
+            reaction_types = {0: "Unknown", 1: "Like", 2: "Unknown"}
+            for values in extensible_comments:
+                uri = "None"
+                reactionType = "None"
+                userId = userProvider = userName = ""
+                durableId = values.get(f"{{{self.namespaces['w16cex']}}}durableId")
+                dateUtc = values.get(f"{{{self.namespaces['w16cex']}}}dateUtc")
+                extLst = values.findall(".//w16cex:extLst", self.namespaces)
+                all_extensible_comments[durableId] = []
+                all_extensible_comments[durableId].append(dateUtc)
+                if extLst:
+                    ext = extLst[0].find("w16:ext", self.namespaces)
+                    uri = ext.get(f"{{{self.namespaces['w16']}}}uri")
+                    all_extensible_comments[durableId].append(uri)
+                    for entry in ext.findall(".//cr:reaction", self.namespaces):
+                        reactionType = entry.get("reactionType", "")
+                        all_extensible_comments[durableId].append(
+                            reaction_types[int(reactionType)]
+                        )
+                        for reactionInfo in entry.findall(
+                            ".//cr:reactionInfo", self.namespaces
+                        ):
+                            reactionDateUtc = reactionInfo.get("dateUtc", "")
+                            user = reactionInfo.find("cr:user", self.namespaces)
+                            if user is not None:
+                                userId = user.get("userId", "")
+                                userProvider = user.get("userProvider", "")
+                                userName = user.get("userName", "")
+                            all_extensible_comments[durableId].append(
+                                [reactionDateUtc, userId, userProvider, userName]
+                            )
+                else:
+                    all_extensible_comments[durableId].append(uri)
+                    all_extensible_comments[durableId].append(reactionType)
+                    all_extensible_comments[durableId].append(["", "", "", ""])
+            return all_extensible_comments
+        return None
 
     def __extract_all_rsids_from_settings_xml(self):
         """
@@ -1452,9 +1568,7 @@ class Docx:
                     self.extra_fields[fname][0],
                     self.extra_fields[fname][1],
                 ]
-            return (
-                xml_files  # returns dictionary {xml_filename: [file size, file hash]}
-            )
+            return xml_files
 
     def xml_hash(self, xmlfile: str):
         """
@@ -1509,29 +1623,22 @@ class Docx:
                 )
         return "" if root is None else root
 
-    def doc_ids(self):
+    def get_doc_ids(self):
         """
         :return: the w14, w15, and w16 docId's from settings.xml
         """
         x = ET.fromstring(self.settings_xml_content)
+        w14_id = w15_id = w16_id = "None"
         w14_ns = x.find(f"{{{self.namespaces['w14']}}}docId")
-        w14_id = (
-            w14_ns.get(f"{{{self.namespaces['w14']}}}val", "")
-            if w14_ns is not None
-            else ""
-        )
+        if w14_ns is not None:
+            w14_id = w14_ns.get(f"{{{self.namespaces['w14']}}}val", "None")
         w15_ns = x.find(f"{{{self.namespaces['w15']}}}docId")
-        w15_id = (
-            w15_ns.get(f"{{{self.namespaces['w15']}}}val", "")
-            if w15_ns is not None
-            else ""
-        )
+        if w15_ns is not None:
+            w15_id = w15_ns.get(f"{{{self.namespaces['w15']}}}val", "None")
         w16_ns = x.find(f"{{{self.namespaces['w16']}}}docId")
-        w16_id = (
-            w16_ns.get(f"{{{self.namespaces['w16']}}}val", "")
-            if w16_ns is not None
-            else ""
-        )
+        if w16_ns is not None:
+            w16_id = w16_ns.get(f"{{{self.namespaces['w16']}}}val", "None")
+
         return [w14_id, w15_id, w16_id]
 
     def rsidr(self):
@@ -1608,6 +1715,16 @@ class Docx:
             f"Total editing time: {self.get_metadata('TotalTime')} minute(s)."
         )
 
+    def get_proof_state(self):
+        xml = ET.fromstring(self.settings_xml_content)
+        proof_state = xml.find(f"{{{self.namespaces['w']}}}proofState")
+        spelling = grammar = "None"
+        if proof_state is not None:
+            spelling = proof_state.get(f"{{{self.namespaces['w']}}}spelling", "None")
+            grammar = proof_state.get(f"{{{self.namespaces['w']}}}grammar", "None")
+
+        return [spelling, grammar]
+
 
 def process_docx(filename, triage, hashing):
     """
@@ -1619,7 +1736,7 @@ def process_docx(filename, triage, hashing):
         update_status = ms_word_gui.update_status
     else:
         update_status = update_cli
-    global doc_summary_worksheet, metadata_worksheet, archive_files_worksheet, rsids_worksheet, comments_worksheet
+    global doc_summary_worksheet, metadata_worksheet, archive_files_worksheet, rsids_worksheet, comments_worksheet, people_worksheet, extensible_worksheet, extended_worksheet, comments_ids_worksheet
     this_file = filename.msword_file
     this_rsid_root = filename.rsid_root()
     xml_files = filename.xml_files()
@@ -1666,13 +1783,16 @@ def process_docx(filename, triage, hashing):
         "<w15:docId>",
         "<w16:docId>",
         "Hyperlinks",
+        "Spell Check",
+        "Grammar Check",
     ]
     if not hashing:
         headers.pop(1)
     doc_summary_worksheet = (
         {k: [] for k in headers} if not doc_summary_worksheet else doc_summary_worksheet
     )
-    w14_id, w15_id, w16_id = filename.doc_ids()
+    w14_id, w15_id, w16_id = filename.get_doc_ids()
+    spelling, grammar = filename.get_proof_state()
     doc_summary_worksheet["File Name"].append(this_file)
     if hashing:
         doc_summary_worksheet["MD5 Hash"].append(filename.hash())
@@ -1686,6 +1806,8 @@ def process_docx(filename, triage, hashing):
     doc_summary_worksheet["<w15:docId>"].append(w15_id)
     doc_summary_worksheet["<w16:docId>"].append(w16_id)
     doc_summary_worksheet["Hyperlinks"].append(filename.hyperlinks())
+    doc_summary_worksheet["Spell Check"].append(spelling)
+    doc_summary_worksheet["Grammar Check"].append(grammar)
 
     update_status("    Extracted Doc_Summary artifacts")
 
@@ -1770,6 +1892,7 @@ def process_docx(filename, triage, hashing):
         headers = [
             "File Name",
             "Comment ID #",
+            "Comment paraId",
             "Timestamp (UTC)",
             "Author",
             "Initials",
@@ -1782,10 +1905,13 @@ def process_docx(filename, triage, hashing):
             update_status(f"    Processing comment: {comment}", level="debug")
             comments_worksheet[headers[0]].append(this_file)  # Filename
             comments_worksheet[headers[1]].append(comment[0])  # ID
-            comments_worksheet[headers[2]].append(comment[1])  # Timestamp
-            comments_worksheet[headers[3]].append(comment[2])  # Author
-            comments_worksheet[headers[4]].append(comment[3])  # Initials
-            comments_worksheet[headers[5]].append(comment[4])  # Text
+            comments_worksheet[headers[2]].append(
+                comment[1]
+            )  # paraId for later correlation
+            comments_worksheet[headers[3]].append(comment[2])  # Timestamp
+            comments_worksheet[headers[4]].append(comment[3])  # Author
+            comments_worksheet[headers[5]].append(comment[4])  # Initials
+            comments_worksheet[headers[6]].append(comment[5])  # Text
 
         update_status("    Extracted comments artifacts")
 
@@ -1903,6 +2029,77 @@ def process_docx(filename, triage, hashing):
             rsids_worksheet[headers[2]].append(k)
             rsids_worksheet[headers[3]].append(v)
             rsids_worksheet[headers[4]].append(this_rsid_root)
+        all_people = filename.get_people()
+        if all_people:
+            update_status("    Processing people information from document")
+            headers = ["File Name", "Author", "providerId", "userId"]
+            people_worksheet = (
+                {k: [] for k in headers} if not people_worksheet else people_worksheet
+            )
+            for each_person in all_people:
+                people_worksheet["File Name"].append(this_file)
+                people_worksheet["Author"].append(each_person[0])
+                people_worksheet["providerId"].append(each_person[1])
+                people_worksheet["userId"].append(each_person[2])
+        extensible_comments = filename.get_extensible_comments()
+        if extensible_comments:
+            update_status("    Processing extensible comments data")
+            headers = [
+                "File Name",
+                "durableId",
+                "dateUtc",
+                "uri",
+                "reactionType",
+                "reactionDateUtc",
+                "userId",
+                "userProvider",
+                "userName",
+            ]
+            extensible_worksheet = (
+                {k: [] for k in headers}
+                if not extensible_worksheet
+                else extensible_worksheet
+            )
+            for comment, data in extensible_comments.items():
+                idx = 3
+                while idx + 1 <= len(data):
+                    extensible_worksheet["File Name"].append(this_file)
+                    extensible_worksheet["durableId"].append(comment)
+                    extensible_worksheet["dateUtc"].append(data[0])
+                    extensible_worksheet["uri"].append(data[1])
+                    extensible_worksheet["reactionType"].append(data[2])
+                    extensible_worksheet["reactionDateUtc"].append(data[idx][0])
+                    extensible_worksheet["userId"].append(data[idx][1])
+                    extensible_worksheet["userProvider"].append(data[idx][2])
+                    extensible_worksheet["userName"].append(data[idx][3])
+                    idx += 1
+        extended_comments = filename.get_extended_comments()
+        if extended_comments:
+            update_status("    Processing extensible comments data")
+            headers = ["File Name", "paraId", "paraIdParent", "done"]
+            extended_worksheet = (
+                {k: [] for k in headers}
+                if not extended_worksheet
+                else extended_worksheet
+            )
+            for comment in extended_comments:
+                extended_worksheet["File Name"].append(this_file)
+                extended_worksheet["paraId"].append(comment[0])
+                extended_worksheet["paraIdParent"].append(comment[1])
+                extended_worksheet["done"].append(comment[2])
+        comments_ids = filename.get_comments_ids()
+        if comments_ids:
+            update_status("    Processing comments ids")
+            headers = ["File Name", "paraId", "durableId"]
+            comments_ids_worksheet = (
+                {k: [] for k in headers}
+                if not comments_ids_worksheet
+                else comments_ids_worksheet
+            )
+            for comments_id in comments_ids:
+                comments_ids_worksheet["File Name"].append(this_file)
+                comments_ids_worksheet["paraId"].append(comments_id[0])
+                comments_ids_worksheet["durableId"].append(comments_id[1])
     update_status(f"Finished processing {this_file}")
     update_status(f'{"-"*36}')
 
@@ -1923,8 +2120,9 @@ def write_to_excel(excel_file, triage_files):
                 worksheet = writer.sheets[sheet_name]
                 (max_row, max_col) = df_summary_chunk.shape
                 worksheet.set_column(0, 1, 34)
-                worksheet.set_column(2, max_col - 4, 16)
-                worksheet.set_column(max_col - 3, max_col - 1, 40)
+                worksheet.set_column(2, 7, 16)
+                worksheet.set_column(8, 10, 50)
+                worksheet.set_column(11, max_col - 1, 20)
                 worksheet.autofilter(0, 0, max_row, max_col - 1)
                 update_status(f'"{sheet_name}" worksheet written to Excel.')
         df_metadata = chunk_list(metadata_worksheet, "Metadata")
@@ -1953,6 +2151,55 @@ def write_to_excel(excel_file, triage_files):
                 worksheet.autofilter(0, 0, max_row, max_col - 1)
                 update_status(f'"{sheet_name}" worksheet written to Excel.')
         if not triage_files:
+            df_extensible = chunk_list(extensible_worksheet, "Extensible Comments")
+            for chunk_dict, sheet_name in df_extensible:
+                df_extensible_chunk = pd.DataFrame(data=chunk_dict)
+                if not df_extensible_chunk.empty:
+                    df_extensible_chunk.to_excel(
+                        excel_writer=writer, sheet_name=sheet_name, index=False
+                    )
+                    worksheet = writer.sheets[sheet_name]
+                    (max_row, max_col) = df_extensible_chunk.shape
+                    worksheet.set_column(0, max_col - 1, 35)
+                    worksheet.autofilter(0, 0, max_row, max_col - 1)
+                    update_status(f'"{sheet_name}" worksheet written to Excel.')
+            df_extended = chunk_list(extended_worksheet, "Extended Comments")
+            for chunk_dict, sheet_name in df_extended:
+                df_extended_chunk = pd.DataFrame(data=chunk_dict)
+                if not df_extended_chunk.empty:
+                    df_extended_chunk.to_excel(
+                        excel_writer=writer, sheet_name=sheet_name, index=False
+                    )
+                    worksheet = writer.sheets[sheet_name]
+                    (max_row, max_col) = df_extended_chunk.shape
+                    worksheet.set_column(0, max_col - 1, 35)
+                    worksheet.autofilter(0, 0, max_row, max_col - 1)
+                    update_status(f'"{sheet_name}" worksheet written to Excel.')
+            df_comments_ids = chunk_list(comments_ids_worksheet, "Comments IDs")
+            for chunk_dict, sheet_name in df_comments_ids:
+                df_comments_ids_chunk = pd.DataFrame(data=chunk_dict)
+                if not df_comments_ids_chunk.empty:
+                    df_comments_ids_chunk.to_excel(
+                        excel_writer=writer, sheet_name=sheet_name, index=False
+                    )
+                    worksheet = writer.sheets[sheet_name]
+                    (max_row, max_col) = df_comments_ids_chunk.shape
+                    worksheet.set_column(0, 0, 35)
+                    worksheet.set_column(1, max_col - 1, 14)
+                    worksheet.autofilter(0, 0, max_row, max_col - 1)
+                    update_status(f'"{sheet_name}" worksheet written to Excel.')
+            df_people = chunk_list(people_worksheet, "People")
+            for chunk_dict, sheet_name in df_people:
+                df_people_chunk = pd.DataFrame(data=chunk_dict)
+                if not df_people_chunk.empty:
+                    df_people_chunk.to_excel(
+                        excel_writer=writer, sheet_name=sheet_name, index=False
+                    )
+                    worksheet = writer.sheets[sheet_name]
+                    (max_row, max_col) = df_people_chunk.shape
+                    worksheet.set_column(0, max_col - 1, 35)
+                    worksheet.autofilter(0, 0, max_row, max_col - 1)
+                    update_status(f'"{sheet_name}" worksheet written to Excel.')
             df_rsids = chunk_list(rsids_worksheet, "RSIDs")
             for chunk_dict, sheet_name in df_rsids:
                 df_rsids_chunk = pd.DataFrame(data=chunk_dict)
@@ -2166,7 +2413,7 @@ def reset_vars():
 def gui():
     global ms_word_gui
     ms_word_app = QApplication([__appname__, "windows:darkmode=2"])
-    ms_word_app.setStyle("Fusion")
+    # ms_word_app.setStyle("Fusion")
     ms_word_gui = MsWordGui()
     ms_word_gui.show()
     ms_word_app.exec()
@@ -2254,12 +2501,14 @@ def main():
                     list(folder_path.rglob("*.docx"))
                     + list(folder_path.rglob("*.dotx"))
                     + list(folder_path.rglob("*.dotm"))
+                    + list(folder_path.rglob("*.docm"))
                 )
             else:
                 file_list = (
                     list(folder_path.glob("*.docx"))
                     + list(folder_path.glob("*.dotx"))
                     + list(folder_path.glob("*.dotm"))
+                    + list(folder_path.glob("*.docm"))
                 )
             try:
                 process_cli(file_list, args.triage, args.hash, args.excel)
