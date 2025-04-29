@@ -79,6 +79,7 @@ people_worksheet = {}
 extensible_worksheet = {}
 extended_worksheet = {}
 comments_ids_worksheet = {}
+custom_xml_worksheet = {}
 errors_worksheet = {"File Name": [], "Error": []}
 timestamp = dt.now().strftime("%Y%m%d_%H%M%S")
 log_file = f"DOCx_Parser_Log_{timestamp}.log"
@@ -1076,25 +1077,37 @@ class Docx:
             update_status = update_cli
         self.update_status = update_status
         self.namespaces = {
+            "b": "http://schemas.openxmlformats.org/officeDocument/2006/bibliography",
+            "ct": "http://schemas.microsoft.com/office/2006/metadata/contentType",
             "cp": "http://schemas.openxmlformats.org/package/2006/metadata/core-properties",
-            "cr": "http://schemas.microsoft.com/office/comments/2020/reactions",  ## comment reactions from commentsExtensible.xml
+            "cprop": "http://schemas.openxmlformats.org/officeDocument/2006/custom-properties",
+            "cr": "http://schemas.microsoft.com/office/comments/2020/reactions",
             "dc": "http://purl.org/dc/elements/1.1/",
             "dcterms": "http://purl.org/dc/terms/",
             "dcmitype": "http://purl.org/dc/dcmitype/",
             "default": "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties",
+            "ds": "http://schemas.openxmlformats.org/officeDocument/2006/customXml",
+            "ma": "http://schemas.microsoft.com/office/2006/metadata/properties/metaAttributes",
+            "p": "http://schemas.microsoft.com/office/2006/metadata/properties",
+            "pc": "http://schemas.microsoft.com/office/infopath/2007/PartnerControls",
             "r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+            "sc": "Microsoft.SharePoint.Taxonomy.ContentTypeSync",
+            "sp": "http://schemas.microsoft.com/sharepoint/v3",
             "vt": "http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes",
             "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
             "w14": "http://schemas.microsoft.com/office/word/2010/wordml",
             "w15": "http://schemas.microsoft.com/office/word/2012/wordml",
             "w16": "http://schemas.microsoft.com/office/word/2018/wordml",
-            "w16cex": "http://schemas.microsoft.com/office/word/2018/wordml/cex",  ## commentExtensible from commentsExtensible.xml
-            "w16cid": "http://schemas.microsoft.com/office/word/2016/wordml/cid",  ## Comment IDs from commentsIds.xml
+            "w16cex": "http://schemas.microsoft.com/office/word/2018/wordml/cex",
+            "w16cid": "http://schemas.microsoft.com/office/word/2016/wordml/cid",
             "wp": "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing",
+            "xs": "http://www.w3.org/2001/XMLSchema",
+            "xsd": "http://www.w3.org/2001/XMLSchema",
             "xsi": "http://www.w3.org/2001/XMLSchema-instance",
         }
         self.msword_file = msword_file
         self.hashing = hashing
+        self.item_files = []
         self.header_offsets, self.binary_content = self.__find_binary_string()
         self.extra_fields = self.__xml_extra_bytes()
         self.core_xml_file = "docProps/core.xml"
@@ -1143,6 +1156,11 @@ class Docx:
         if self.comments_ids_content == "":
             self.comments_ids_file = "word\\commentsIds.xml"
             self.comments_ids_content = self.__load_xml(self.comments_ids_file)
+        self.custom_xml_file = "docProps/custom.xml"
+        self.custom_xml_content = self.__load_xml(self.custom_xml_file)
+        if self.custom_xml_content == "":
+            self.custom_xml_file = "docProps\\custom.xml"
+            self.custom_xml_content = self.__load_xml(self.custom_xml_file)
         self.rsidRs = self.__extract_all_rsids_from_settings_xml()
         self.ns_lookup = {
             "title": [self.core_xml_content, "dc"],
@@ -1180,7 +1198,6 @@ class Docx:
         self.r_tags = x.findall(".//w:r", self.namespaces)
         self.t_tags = x.findall(".//w:t", self.namespaces)
         self.tr_tags = x.findall(".//w:tr", self.namespaces)
-
         if not triage:  # if not run in triage mode, do full parsing
 
             self.rsidR_in_document_xml = self.__rsids_in_document_xml("rsidR")
@@ -1298,7 +1315,7 @@ class Docx:
             return ""
         return meta_content
 
-    def get_people(self):  ## DEBUG
+    def get_people(self):
         if self.people_xml_content != "":
             xml = ET.fromstring(self.people_xml_content)
             list_of_people = []
@@ -1539,6 +1556,12 @@ class Docx:
             # returns XML files in the DOCx
             xml_files = {}
             for file_info in zip_file.infolist():
+                if (
+                    "customXml/item" in file_info.filename
+                    and "Props" not in file_info.filename
+                    and file_info.filename not in self.item_files
+                ):
+                    self.item_files.append(file_info.filename)
                 with zipfile.ZipFile(self.msword_file, "r") as zip_ref:
                     try:
                         with zip_ref.open(file_info.filename) as xml_file:
@@ -1725,6 +1748,56 @@ class Docx:
 
         return [spelling, grammar]
 
+    def get_custom_xml(self):
+        if self.custom_xml_content:
+            props = {}
+            xml = ET.fromstring(self.custom_xml_content)
+            for cprop in xml.findall(".//cprop:property", self.namespaces):
+                attribs = cprop.attrib
+                for attr_name, attr_val in attribs.items():
+                    props[attr_name] = attr_val
+                for sub_prop in cprop:
+                    tag = (
+                        sub_prop.tag.split("}", 1)[1]
+                        if "}" in sub_prop.tag
+                        else sub_prop.tag
+                    )
+                    value = sub_prop.text
+                    props[tag] = value
+            return props
+        return None
+
+    def get_unique_content(
+        self, files
+    ):  ## Not yet added to processing - intended for item#.xml files at this time, could expand.
+        content = {}
+        content[self.msword_file] = {}
+        for file in files:
+            content[self.msword_file][file] = {}
+            xml_content = self.__load_xml(file)
+            if b"<?mso-contentType?>" in xml_content:
+                xml_content = (xml_content.replace(b"<?mso-contentType?>", b"")).decode(
+                    "utf-8"
+                )
+            xml = ET.fromstring(xml_content)
+            attribs = xml.attrib
+            tag = xml.tag.split("}", 1)[1] if "}" in xml.tag else xml.tag
+            content[self.msword_file][file]["root_tag"] = tag
+            for attr_name, attr_val in attribs.items():
+                attr_name = (
+                    attr_name.split("}", 1)[1] if "}" in attr_name else attr_name
+                )
+                content[self.msword_file][file][attr_name] = attr_val
+            for sub_prop in xml:
+                tag = (
+                    sub_prop.tag.split("}", 1)[1]
+                    if "}" in sub_prop.tag
+                    else sub_prop.tag
+                )
+                value = sub_prop.text
+                content[self.msword_file][file][tag] = value
+        return content
+
 
 def process_docx(filename, triage, hashing):
     """
@@ -1736,7 +1809,7 @@ def process_docx(filename, triage, hashing):
         update_status = ms_word_gui.update_status
     else:
         update_status = update_cli
-    global doc_summary_worksheet, metadata_worksheet, archive_files_worksheet, rsids_worksheet, comments_worksheet, people_worksheet, extensible_worksheet, extended_worksheet, comments_ids_worksheet
+    global doc_summary_worksheet, metadata_worksheet, archive_files_worksheet, rsids_worksheet, comments_worksheet, people_worksheet, extensible_worksheet, extended_worksheet, comments_ids_worksheet, custom_xml_worksheet
     this_file = filename.msword_file
     this_rsid_root = filename.rsid_root()
     xml_files = filename.xml_files()
@@ -2100,6 +2173,20 @@ def process_docx(filename, triage, hashing):
                 comments_ids_worksheet["File Name"].append(this_file)
                 comments_ids_worksheet["paraId"].append(comments_id[0])
                 comments_ids_worksheet["durableId"].append(comments_id[1])
+        custom_props = filename.get_custom_xml()
+        if custom_props:
+            update_status("    Processing custom properties")
+            headers = ["File Name"]
+            for k, v in custom_props.items():
+                headers.append(k)
+            custom_xml_worksheet = (
+                {k: [] for k in headers}
+                if not custom_xml_worksheet
+                else custom_xml_worksheet
+            )
+            custom_xml_worksheet["File Name"].append(this_file)
+            for k, v in custom_props.items():
+                custom_xml_worksheet[k].append(v)
     update_status(f"Finished processing {this_file}")
     update_status(f'{"-"*36}')
 
@@ -2209,6 +2296,18 @@ def write_to_excel(excel_file, triage_files):
                     )
                     worksheet = writer.sheets[sheet_name]
                     (max_row, max_col) = df_rsids_chunk.shape
+                    worksheet.set_column(0, max_col - 1, 20)
+                    worksheet.autofilter(0, 0, max_row, max_col - 1)
+                    update_status(f'"{sheet_name}" worksheet written to Excel.')
+            df_custom = chunk_list(custom_xml_worksheet, "Custom Properties")
+            for chunk_dict, sheet_name in df_custom:
+                df_custom_chunk = pd.DataFrame(data=chunk_dict)
+                if not df_custom_chunk.empty:
+                    df_custom_chunk.to_excel(
+                        excel_writer=writer, sheet_name=sheet_name, index=False
+                    )
+                    worksheet = writer.sheets[sheet_name]
+                    (max_row, max_col) = df_custom_chunk.shape
                     worksheet.set_column(0, max_col - 1, 20)
                     worksheet.autofilter(0, 0, max_row, max_col - 1)
                     update_status(f'"{sheet_name}" worksheet written to Excel.')
