@@ -80,6 +80,8 @@ extensible_worksheet = {}
 extended_worksheet = {}
 comments_ids_worksheet = {}
 custom_xml_worksheet = {}
+item_worksheet = {}
+item_files = []
 errors_worksheet = {"File Name": [], "Error": []}
 timestamp = dt.now().strftime("%Y%m%d_%H%M%S")
 log_file = f"DOCx_Parser_Log_{timestamp}.log"
@@ -93,7 +95,7 @@ __clr__ = "\033[1;m"
 __version__ = "3.0.0"
 __appname__ = f"MS Word Parser v{__version__}"
 __source__ = "https://github.com/jjrboucher/MS-Word-Parser"
-__date__ = "28 April 2025"
+__date__ = "29 April 2025"
 __author__ = (
     "Jacques Boucher - jjrboucher@gmail.com\nCorey Forman - corey@digitalsleuth.ca"
 )
@@ -636,7 +638,10 @@ class UiDialog:
             self.numOfFiles.setText(str(len(files)))
             self.numRemaining.setText(str(len(files)))
             if files:
-                update_status(f"The following {len(files)} files have been loaded:")
+                if len(files) > 1:
+                    update_status(f"The following {len(files)} files have been loaded:")
+                else:
+                    update_status(f"The following {len(files)} file has been loaded:")
                 joiner = f"\n{dt.now().strftime(__dtfmt__)} -     "
                 update_status("    " + joiner.join(files))
                 if self.excelFile.toPlainText() != self.excelFileText:
@@ -660,7 +665,10 @@ class UiDialog:
                 all_files.append(os.path.normpath(file))
             self.numOfFiles.setText(str(len(all_files)))
             self.numRemaining.setText(str(len(all_files)))
-            update_status(f"The following {len(all_files)} files have been loaded:")
+            if len(all_files) > 1:
+                update_status(f"The following {len(all_files)} files have been loaded:")
+            else:
+                update_status(f"The following {len(all_files)} file has been loaded:")
             joiner = f"\n{dt.now().strftime(__dtfmt__)} -     "
             update_status("    " + joiner.join(all_files))
             if self.excelFile.toPlainText() != self.excelFileText:
@@ -1107,7 +1115,6 @@ class Docx:
         }
         self.msword_file = msword_file
         self.hashing = hashing
-        self.item_files = []
         self.header_offsets, self.binary_content = self.__find_binary_string()
         self.extra_fields = self.__xml_extra_bytes()
         self.core_xml_file = "docProps/core.xml"
@@ -1538,6 +1545,7 @@ class Docx:
         return ""  # if no hashing was selected.
 
     def xml_files(self):
+        global item_files
         """
         :return: A dictionary in the following format:
         {XML filename: [file hash,
@@ -1559,9 +1567,9 @@ class Docx:
                 if (
                     "customXml/item" in file_info.filename
                     and "Props" not in file_info.filename
-                    and file_info.filename not in self.item_files
+                    and file_info.filename not in item_files
                 ):
-                    self.item_files.append(file_info.filename)
+                    item_files.append(file_info.filename)
                 with zipfile.ZipFile(self.msword_file, "r") as zip_ref:
                     try:
                         with zip_ref.open(file_info.filename) as xml_file:
@@ -1767,36 +1775,48 @@ class Docx:
             return props
         return None
 
-    def get_unique_content(
-        self, files
-    ):  ## Not yet added to processing - intended for item#.xml files at this time, could expand.
-        content = {}
-        content[self.msword_file] = {}
-        for file in files:
-            content[self.msword_file][file] = {}
-            xml_content = self.__load_xml(file)
-            if b"<?mso-contentType?>" in xml_content:
-                xml_content = (xml_content.replace(b"<?mso-contentType?>", b"")).decode(
-                    "utf-8"
-                )
-            xml = ET.fromstring(xml_content)
-            attribs = xml.attrib
-            tag = xml.tag.split("}", 1)[1] if "}" in xml.tag else xml.tag
-            content[self.msword_file][file]["root_tag"] = tag
-            for attr_name, attr_val in attribs.items():
-                attr_name = (
-                    attr_name.split("}", 1)[1] if "}" in attr_name else attr_name
-                )
-                content[self.msword_file][file][attr_name] = attr_val
-            for sub_prop in xml:
-                tag = (
-                    sub_prop.tag.split("}", 1)[1]
-                    if "}" in sub_prop.tag
-                    else sub_prop.tag
-                )
-                value = sub_prop.text
-                content[self.msword_file][file][tag] = value
-        return content
+    def get_all_content(self, files):
+        if files:
+            content = {}
+            content[self.msword_file] = {}
+            for file in files:
+                content[self.msword_file][file] = {}
+                xml_content = self.__load_xml(file)
+                if b"<?mso-contentType?>" in xml_content:
+                    xml_content = (
+                        xml_content.replace(b"<?mso-contentType?>", b"")
+                    ).decode("utf-8")
+                xml = ET.fromstring(xml_content)
+                for element in xml.iter():
+                    tag = (
+                        element.tag.split("}")[-1]
+                        if "}" in element.tag
+                        else element.tag
+                    )
+                    if tag not in content[self.msword_file][file]:
+                        content[self.msword_file][file][tag] = []
+                    attribs = {}
+                    for name, value in element.attrib.items():
+                        name = name.split("}", 1)[-1] if "}" in name else name
+                        attribs[name] = value
+                    text = (element.text or "").strip()
+                    if text:
+                        attribs["_text"] = text
+                    tail = (element.tail or "").strip()
+                    if tail:
+                        attribs["_tail"] = tail
+                    child_tags = list(element)
+                    if child_tags:
+                        attribs["_children"] = []
+                        for child in child_tags:
+                            attribs["_children"].append(
+                                child.tag.split("}")[-1]
+                                if "}" in child.tag
+                                else child.tag
+                            )
+                    content[self.msword_file][file][tag].append(attribs)
+            return content
+        return None
 
 
 def process_docx(filename, triage, hashing):
@@ -1809,7 +1829,7 @@ def process_docx(filename, triage, hashing):
         update_status = ms_word_gui.update_status
     else:
         update_status = update_cli
-    global doc_summary_worksheet, metadata_worksheet, archive_files_worksheet, rsids_worksheet, comments_worksheet, people_worksheet, extensible_worksheet, extended_worksheet, comments_ids_worksheet, custom_xml_worksheet
+    global doc_summary_worksheet, metadata_worksheet, archive_files_worksheet, rsids_worksheet, comments_worksheet, people_worksheet, extensible_worksheet, extended_worksheet, comments_ids_worksheet, custom_xml_worksheet, item_files, item_worksheet
     this_file = filename.msword_file
     this_rsid_root = filename.rsid_root()
     xml_files = filename.xml_files()
@@ -2187,6 +2207,9 @@ def process_docx(filename, triage, hashing):
             custom_xml_worksheet["File Name"].append(this_file)
             for k, v in custom_props.items():
                 custom_xml_worksheet[k].append(v)
+        # item_xml_content = filename.get_all_content(item_files) ## Not in use yet, will add once an Excel layout has been decided.
+        # if item_xml_content:
+        # update_status("    Processing customXml item files")
     update_status(f"Finished processing {this_file}")
     update_status(f'{"-"*36}')
 
