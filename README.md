@@ -19,7 +19,7 @@ $ parse-docx
 
 usage: parse-docx [-h] [-e EXCEL] [-g] [--hash] [-r] [-V] [--dir DIR | --files [FILES ...]] [-t | -f]
 
-MS Word Parser 2.0.0
+MS Word Parser 3.0.0
 
 options:
   -h, --help            show this help message and exit
@@ -46,7 +46,7 @@ You can select one or more MS Word files within a folder or alternatively select
 ### Output
 
 The results will be saved to a Microsoft Excel file. You will be prompted to provide a file name of the Excel file and where you want to save it. The Excel file will have four or more worksheets depending on the processing option you select.
-The script will also output a log file in the same folder as the Excel file and will bear the following naming convention: `DOCx_Parser_Log_YYYYMMDD_HHMMSS.log.`
+The script will also output a log file in the same folder as the Excel file and will bear the following naming convention: `ms-word-parser-log-YYYYMMDD_HHMMSS.log.`
 
 ### Processing Options
 
