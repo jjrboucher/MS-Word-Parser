@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools >= 61.0"]
+requires = ["setuptools >= 77.0.30"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
@@ -7,7 +7,7 @@ exclude = ["debian*", "binaries*", "build*", "dist*", "archive*"]
 
 [project]
 name = "ms-word-parser"
-version = "2.0.1"
+version = "3.0.0"
 dependencies = [
     "PyQt6",
     "pandas",
