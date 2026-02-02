@@ -70,6 +70,7 @@ except ModuleNotFoundError:
     )
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
+warnings.filterwarnings("ignore", category=FutureWarning)
 doc_summary_worksheet = {}
 metadata_worksheet = {}
 archive_files_worksheet = {}
@@ -97,7 +98,7 @@ __clr__ = "\033[1;m"
 __version__ = "3.0.0"
 __appname__ = f"MS Word Parser v{__version__}"
 __source__ = "https://github.com/jjrboucher/MS-Word-Parser"
-__date__ = "28 Jan 2026"
+__date__ = "02 Feb 2026"
 __author__ = (
     "Jacques Boucher - jjrboucher@gmail.com\nCorey Forman - corey@digitalsleuth.ca"
 )
@@ -257,7 +258,7 @@ class UiMainWindow:
         self.triageButton.setFont(self.text_font)
         self.fullButton = QRadioButton(self.parsingOptions)
         self.fullButton.setObjectName("fullButton")
-        self.fullButton.setGeometry(QRect(90, 30, 89, 20))
+        self.fullButton.setGeometry(QRect(90, 30, 88, 20))
         self.fullButton.setStyleSheet(self.stylesheet)
         self.fullButton.setFont(self.text_font)
         self.hashFiles = QCheckBox(self.hashOption)
@@ -622,7 +623,7 @@ class UiMainWindow:
         msg.setWindowModality(Qt.WindowModality.ApplicationModal)
         response = msg.exec()
         return response
-
+     
     def add_directory(self):
         update_status = self.update_status
         folder_path = QFileDialog.getExistingDirectory(
@@ -630,6 +631,7 @@ class UiMainWindow:
         )
         if folder_path:
             folder_path = Path(folder_path)
+            #response = self.load_recursively()
             response = QMessageBox.question(
                 None,
                 "Load recursively",
@@ -1878,6 +1880,12 @@ class Docx:
             ts_data.append([ink_file, ts])
         return ts_data
 
+    def adjust_timestamp(self, ts):
+        if ts:
+            adjusted_timestamp = ts.replace('T', ' ').replace('Z', '') ## Fix this to remove the 7 digit nanoseconds for standardization
+            return adjusted_timestamp.split(".")[0]
+        return ''
+
 
 def process_docx(filename, triage, hashing):
     """
@@ -2009,10 +2017,10 @@ def process_docx(filename, triage, hashing):
     )
     metadata_worksheet[headers[0]].append(this_file)
     metadata_worksheet[headers[1]].append(filename.get_metadata("creator"))
-    metadata_worksheet[headers[2]].append(filename.get_metadata("created"))
+    metadata_worksheet[headers[2]].append(filename.adjust_timestamp(filename.get_metadata("created")))
     metadata_worksheet[headers[3]].append(filename.get_metadata("lastModifiedBy"))
-    metadata_worksheet[headers[4]].append(filename.get_metadata("modified"))
-    metadata_worksheet[headers[5]].append(filename.get_metadata("lastPrinted"))
+    metadata_worksheet[headers[4]].append(filename.adjust_timestamp(filename.get_metadata("modified")))
+    metadata_worksheet[headers[5]].append(filename.adjust_timestamp(filename.get_metadata("lastPrinted")))
     metadata_worksheet[headers[6]].append(filename.get_metadata("Manager"))
     metadata_worksheet[headers[7]].append(filename.get_metadata("Company"))
     metadata_worksheet[headers[8]].append(filename.get_metadata("revision"))
@@ -2063,7 +2071,7 @@ def process_docx(filename, triage, hashing):
             comments_worksheet[headers[2]].append(
                 comment[1]
             )  # paraId for later correlation
-            comments_worksheet[headers[3]].append(comment[2])  # Timestamp
+            comments_worksheet[headers[3]].append(filename.adjust_timestamp(comment[2]))  # Timestamp
             comments_worksheet[headers[4]].append(comment[3])  # Author
             comments_worksheet[headers[5]].append(comment[4])  # Initials
             comments_worksheet[headers[6]].append(comment[5])  # Text
@@ -2103,7 +2111,7 @@ def process_docx(filename, triage, hashing):
                 archive_files_worksheet["MD5 Hash"].append(xml_info[0])
             archive_files_worksheet[
                 "Modified Time (local/UTC/Redmond, Washington)"
-            ].append(xml_info[1])
+            ].append(filename.adjust_timestamp(xml_info[1]))
             archive_files_worksheet["Uncompressed Size (bytes)"].append(xml_info[2])
             archive_files_worksheet["ZIP Compression Type"].append(xml_info[3])
             archive_files_worksheet["ZIP Create System"].append(xml_info[4])
@@ -2237,10 +2245,10 @@ def process_docx(filename, triage, hashing):
                 while idx + 1 <= len(data):
                     extensible_worksheet["File Name"].append(this_file)
                     extensible_worksheet["durableId"].append(comment)
-                    extensible_worksheet["dateUtc"].append(data[0])
+                    extensible_worksheet["dateUtc"].append(filename.adjust_timestamp(data[0]))
                     extensible_worksheet["uri"].append(data[1])
                     extensible_worksheet["reactionType"].append(data[2])
-                    extensible_worksheet["reactionDateUtc"].append(data[idx][0])
+                    extensible_worksheet["reactionDateUtc"].append(filename.adjust_timestamp(data[idx][0]))
                     extensible_worksheet["userId"].append(data[idx][1])
                     extensible_worksheet["userProvider"].append(data[idx][2])
                     extensible_worksheet["userName"].append(data[idx][3])
@@ -2326,7 +2334,7 @@ def process_docx(filename, triage, hashing):
                 for ink_file in ink_content:
                     ink_worksheet["File Name"].append(this_file)
                     ink_worksheet["Ink XML File"].append(ink_file[0])
-                    ink_worksheet["Timestamp (UTC)"].append(ink_file[1])
+                    ink_worksheet["Timestamp (UTC)"].append(filename.adjust_timestamp(ink_file[1]))
     update_status(f"Finished processing {this_file}")
     update_status(f'{"-"*36}')
 
@@ -2336,7 +2344,7 @@ def write_to_excel(excel_file, triage_files):
         update_status = ms_word_gui.update_status
     else:
         update_status = update_cli
-    with pd.ExcelWriter(path=excel_file, engine="xlsxwriter", mode="w") as writer:
+    with pd.ExcelWriter(path=excel_file, engine="xlsxwriter", mode="w", datetime_format="yyyy-mm-dd hh:mm:ss") as writer:
         df_summary = chunk_list(doc_summary_worksheet, "Document Summary")
         for chunk_dict, sheet_name in df_summary:
             df_summary_chunk = pd.DataFrame(data=chunk_dict)
@@ -2356,6 +2364,9 @@ def write_to_excel(excel_file, triage_files):
         for chunk_dict, sheet_name in df_metadata:
             df_metadata_chunk = pd.DataFrame(data=chunk_dict)
             if not df_metadata_chunk.empty:
+                for col in df_metadata_chunk.columns:
+                    if 'date' in col.lower():
+                        df_metadata_chunk[col] = pd.to_datetime(df_metadata_chunk[col], errors='ignore', format="%Y-%m-%d %H:%M:%S")
                 df_metadata_chunk.to_excel(
                     excel_writer=writer, sheet_name=sheet_name, index=False
                 )
@@ -2368,6 +2379,9 @@ def write_to_excel(excel_file, triage_files):
         for chunk_dict, sheet_name in df_comments:
             df_comments_chunk = pd.DataFrame(data=chunk_dict)
             if not df_comments_chunk.empty:
+                for col in df_comments_chunk.columns:
+                    if 'date' in col.lower() or 'time' in col.lower():
+                        df_comments_chunk[col] = pd.to_datetime(df_comments_chunk[col], errors='ignore', format="%Y-%m-%d %H:%M:%S")                 
                 df_comments_chunk.to_excel(
                     excel_writer=writer, sheet_name=sheet_name, index=False
                 )
@@ -2382,6 +2396,9 @@ def write_to_excel(excel_file, triage_files):
             for chunk_dict, sheet_name in df_extensible:
                 df_extensible_chunk = pd.DataFrame(data=chunk_dict)
                 if not df_extensible_chunk.empty:
+                    for col in df_extensible_chunk.columns:
+                        if 'date' in col.lower() or 'time' in col.lower():
+                            df_extensible_chunk[col] = pd.to_datetime(df_extensible_chunk[col], errors='ignore', format="%Y-%m-%d %H:%M:%S")                    
                     df_extensible_chunk.to_excel(
                         excel_writer=writer, sheet_name=sheet_name, index=False
                     )
@@ -2415,6 +2432,31 @@ def write_to_excel(excel_file, triage_files):
                     worksheet.set_column(1, max_col - 1, 14)
                     worksheet.autofilter(0, 0, max_row, max_col - 1)
                     update_status(f'"{sheet_name}" worksheet written to Excel.')
+            if comments_worksheet and comments_ids_worksheet and extended_worksheet and extensible_worksheet:
+                df_com = pd.DataFrame(comments_worksheet)
+                df_com_id = pd.DataFrame(comments_ids_worksheet)
+                df_ext = pd.DataFrame(extended_worksheet)
+                df_extens = pd.DataFrame(extensible_worksheet)
+                merged = pd.merge(df_com, df_ext, left_on=['File Name', 'Comment paraId'], right_on=['File Name', 'paraId'], how='left', suffixes=('', '_ext'))
+                merged = pd.merge(merged, df_com_id, left_on=['File Name', 'paraId'], right_on=['File Name', 'paraId'], how='left', suffixes=('', '_cid'))
+                merged = pd.merge(merged, df_extens, left_on=['File Name', 'durableId'], right_on=['File Name', 'durableId'], how='left', suffixes=('', '_extensible'))
+                merged = merged.loc[:, ~merged.columns.str.endswith(('_ext', '_cid', '_extensible'))]
+                all_comments = merged.to_dict(orient='list')
+                df_all_comments = chunk_list(all_comments, "Aggregated Comment Data")
+                for chunk_dict, sheet_name in df_all_comments:
+                    df_all_comments_chunk = pd.DataFrame(data=chunk_dict)
+                    if not df_all_comments_chunk.empty:
+                        df_all_comments_chunk.to_excel(
+                            excel_writer=writer, sheet_name=sheet_name, index=False
+                        )
+                        worksheet = writer.sheets[sheet_name]
+                        (max_row, max_col) = df_all_comments_chunk.shape
+                        worksheet.set_column(0, 0, 35)
+                        worksheet.set_column(1, 2, 14)
+                        worksheet.set_column(3, 3, 20)
+                        worksheet.set_column(4, max_col - 1, 25)
+                        worksheet.autofilter(0, 0, max_row, max_col -1)
+                        update_status(f'"{sheet_name}" worksheet written to Excel.')
             df_people = chunk_list(people_worksheet, "People")
             for chunk_dict, sheet_name in df_people:
                 df_people_chunk = pd.DataFrame(data=chunk_dict)
@@ -2431,6 +2473,9 @@ def write_to_excel(excel_file, triage_files):
             for chunk_dict, sheet_name in df_rsids:
                 df_rsids_chunk = pd.DataFrame(data=chunk_dict)
                 if not df_rsids_chunk.empty:
+                    for col in df_rsids_chunk.columns:
+                        if 'date' in col.lower() or 'time' in col.lower():
+                            df_rsids_chunk[col] = pd.to_datetime(df_rsids_chunk[col], errors='ignore', format="%Y-%m-%d %H:%M:%S")                    
                     df_rsids_chunk.to_excel(
                         excel_writer=writer, sheet_name=sheet_name, index=False
                     )
@@ -2455,6 +2500,9 @@ def write_to_excel(excel_file, triage_files):
             for chunk_dict, sheet_name in df_archive:
                 df_archive_chunk = pd.DataFrame(data=chunk_dict)
                 if not df_archive_chunk.empty:
+                    for col in df_archive_chunk.columns:
+                        if 'date' in col.lower() or 'time' in col.lower():
+                            df_archive_chunk[col] = pd.to_datetime(df_archive_chunk[col], errors='ignore', format="%Y-%m-%d %H:%M:%S")                    
                     df_archive_chunk.to_excel(
                         excel_writer=writer, sheet_name=sheet_name, index=False
                     )
@@ -2481,6 +2529,9 @@ def write_to_excel(excel_file, triage_files):
                 for chunk_dict, sheet_name in df_ink:
                     df_ink_chunk = pd.DataFrame(data=chunk_dict)
                     if not df_ink_chunk.empty:
+                        for col in df_ink_chunk.columns:
+                            if 'date' in col.lower() or 'time' in col.lower():
+                                df_ink_chunk[col] = pd.to_datetime(df_ink_chunk[col], errors='ignore', format="%Y-%m-%d %H:%M:%S")                         
                         df_ink_chunk.to_excel(
                             excel_writer=writer, sheet_name=sheet_name, index=False
                         )
@@ -2493,7 +2544,7 @@ def write_to_excel(excel_file, triage_files):
         timeline_worksheet = generate_timeline(metadata_worksheet, comments_worksheet, extensible_worksheet, rsids_worksheet, archive_files_worksheet, ink_worksheet)
         df_timeline = chunk_list(timeline_worksheet, "Timeline")
         for chunk_dict, sheet_name in df_timeline:
-            chunk_dict['Timestamp'] = pd.to_datetime(chunk_dict['Timestamp'], format="mixed", errors="coerce")
+            chunk_dict['Timestamp'] = pd.to_datetime(chunk_dict['Timestamp'], format="%Y-%m-%d %H:%M:%S", errors="coerce")
             df_timeline_chunk = pd.DataFrame(data=chunk_dict)
             if not df_timeline_chunk.empty:
                 df_timeline_chunk.to_excel(
@@ -2542,68 +2593,84 @@ def write_tips(writer):
 
 
 def generate_timeline(metadata_sheet, comments_sheet, extensible_sheet, rsids_sheet, archive_sheet, ink_sheet):
-    headers = ["Timestamp", "Type", "Value", "File Name"]
+    headers = ["File Name", "Timestamp", "Type", "Value", "Source"]
     timeline_worksheet = {k: [] for k in headers}
     if metadata_sheet:
         for idx, entry in enumerate(metadata_sheet['Created Date']):
-            if entry != '':
-                timeline_worksheet['Timestamp'].append(metadata_sheet['Created Date'][idx].replace('T', ' ').replace('Z',''))
+            if entry:
+                timeline_worksheet['File Name'].append(metadata_sheet['File Name'][idx])
+                timeline_worksheet['Timestamp'].append(metadata_sheet['Created Date'][idx])
                 timeline_worksheet['Type'].append('created')
                 timeline_worksheet['Value'].append('')
-                timeline_worksheet['File Name'].append(metadata_sheet['File Name'][idx])
+                timeline_worksheet['Source'].append("Metadata")
         for idx, entry in enumerate(metadata_sheet['Modified Date']):
-            if entry != '':
-                timeline_worksheet['Timestamp'].append(metadata_sheet['Modified Date'][idx].replace('T', ' ').replace('Z',''))
+            if entry:
+                timeline_worksheet['File Name'].append(metadata_sheet['File Name'][idx])
+                timeline_worksheet['Timestamp'].append(metadata_sheet['Modified Date'][idx])
                 timeline_worksheet['Type'].append('modified')
                 timeline_worksheet['Value'].append('')
-                timeline_worksheet['File Name'].append(metadata_sheet['File Name'][idx])
+                timeline_worksheet['Source'].append("Metadata")
         for idx, entry in enumerate(metadata_sheet['Last Printed Date']):
-            if entry != '':
-                timeline_worksheet['Timestamp'].append(metadata_sheet['Last Printed Date'][idx].replace('T', ' ').replace('Z',''))
+            if entry:
+                timeline_worksheet['File Name'].append(metadata_sheet['File Name'][idx])
+                timeline_worksheet['Timestamp'].append(metadata_sheet['Last Printed Date'][idx])
                 timeline_worksheet['Type'].append('last printed')
                 timeline_worksheet['Value'].append('')
-                timeline_worksheet['File Name'].append(metadata_sheet['File Name'][idx])
+                timeline_worksheet['Source'].append("Metadata")
     if comments_sheet:
         for idx, entry in enumerate(comments_sheet['Timestamp (UTC)']):
-            if entry != '':
-                timeline_worksheet['Timestamp'].append(comments_sheet['Timestamp (UTC)'][idx].replace('T', ' ').replace('Z',''))
+            if entry:
+                timeline_worksheet['File Name'].append(comments_sheet['File Name'][idx])
+                timeline_worksheet['Timestamp'].append(comments_sheet['Timestamp (UTC)'][idx])
                 timeline_worksheet['Type'].append('comment')
                 timeline_worksheet['Value'].append(comments_sheet['Comment'][idx])
-                timeline_worksheet['File Name'].append(comments_sheet['File Name'][idx])
+                timeline_worksheet['Source'].append("Comments")
     if extensible_sheet:
         for idx, entry in enumerate(extensible_sheet['dateUtc']):
-            if entry != '':
-                timeline_worksheet['Timestamp'].append(extensible_sheet['dateUtc'][idx].replace('T', ' ').replace('Z', ''))
+            if entry:
+                timeline_worksheet['File Name'].append(extensible_sheet['File Name'][idx])
+                timeline_worksheet['Timestamp'].append(extensible_sheet['dateUtc'][idx])
                 timeline_worksheet['Type'].append('durableId')
                 timeline_worksheet['Value'].append(extensible_sheet['durableId'][idx])
+                timeline_worksheet['Source'].append("Extensible Comments")
+        for idx, entry in enumerate(extensible_sheet['reactionDateUtc']):
+            if entry:
                 timeline_worksheet['File Name'].append(extensible_sheet['File Name'][idx])
+                timeline_worksheet['Timestamp'].append(extensible_sheet['reactionDateUtc'][idx])
+                timeline_worksheet['Type'].append('reaction')
+                timeline_worksheet['Value'].append(f"{extensible_sheet['reactionType'][idx]} by {extensible_sheet['userId'][idx]}")
+                timeline_worksheet['Source'].append("Extensible Comments")
     if rsids_sheet:
         for idx, entry in enumerate(rsids_sheet['File Created Date']):
-            if entry != '':
-                timeline_worksheet['Timestamp'].append(rsids_sheet['File Created Date'][idx].replace('T', ' ').replace('Z', ''))
-                timeline_worksheet['Type'].append('rsid - created')
-                timeline_worksheet['Value'].append(f"{rsids_sheet['RSID Type'][idx]} - {rsids_sheet['RSID Value'][idx]}")
+            if entry:
                 timeline_worksheet['File Name'].append(rsids_sheet['File Name'][idx])
+                timeline_worksheet['Timestamp'].append(rsids_sheet['File Created Date'][idx])
+                timeline_worksheet['Type'].append('created - rsid')
+                timeline_worksheet['Value'].append(f"{rsids_sheet['RSID Type'][idx]} - {rsids_sheet['RSID Value'][idx]}")
+                timeline_worksheet['Source'].append("RSIDs")
         for idx, entry in enumerate(rsids_sheet['File Modified Date']):
-            if entry != '':
-                timeline_worksheet['Timestamp'].append(rsids_sheet['File Modified Date'][idx].replace('T', ' ').replace('Z', ''))
-                timeline_worksheet['Type'].append('rsid - modified')
-                timeline_worksheet['Value'].append(f"{rsids_sheet['RSID Type'][idx]} - {rsids_sheet['RSID Value'][idx]}")
+            if entry:
                 timeline_worksheet['File Name'].append(rsids_sheet['File Name'][idx])
+                timeline_worksheet['Timestamp'].append(rsids_sheet['File Modified Date'][idx])
+                timeline_worksheet['Type'].append('modified - rsid')
+                timeline_worksheet['Value'].append(f"{rsids_sheet['RSID Type'][idx]} - {rsids_sheet['RSID Value'][idx]}")
+                timeline_worksheet['Source'].append("RSIDs")
     if archive_sheet:
         for idx, entry in enumerate(archive_sheet['Modified Time (local/UTC/Redmond, Washington)']):
-            if entry != '':
-                timeline_worksheet['Timestamp'].append(archive_sheet['Modified Time (local/UTC/Redmond, Washington)'][idx].replace('T', ' ').replace('Z', ''))
-                timeline_worksheet['Type'].append('archive file - modified')
-                timeline_worksheet['Value'].append(archive_sheet['Archive File'][idx])
+            if entry:
                 timeline_worksheet['File Name'].append(archive_sheet['File Name'][idx])
+                timeline_worksheet['Timestamp'].append(archive_sheet['Modified Time (local/UTC/Redmond, Washington)'][idx])
+                timeline_worksheet['Type'].append('modified - archive file')
+                timeline_worksheet['Value'].append(archive_sheet['Archive File'][idx])
+                timeline_worksheet['Source'].append("Archive Files")
     if ink_sheet:
         for idx, entry in enumerate(ink_sheet['Timestamp (UTC)']):
-            if entry != '':
-                timeline_worksheet['Timestamp'].append(ink_sheet['Timestamp (UTC)'][idx].replace('T', ' ').replace('Z', ''))
+            if entry:
+                timeline_worksheet['File Name'].append(ink_sheet['File Name'][idx])
+                timeline_worksheet['Timestamp'].append(ink_sheet['Timestamp (UTC)'][idx])
                 timeline_worksheet['Type'].append('ink file')
                 timeline_worksheet['Value'].append(ink_sheet['Ink XML File'][idx])
-                timeline_worksheet['File Name'].append(ink_sheet['File Name'][idx])
+                timeline_worksheet['Source'].append("Ink XML Files")
     df = pd.DataFrame(timeline_worksheet)
     df = df.sort_values('Timestamp')
     timeline_worksheet = df.to_dict(orient='list')
@@ -2770,7 +2837,7 @@ def reset_vars():
 def gui():
     global ms_word_gui
     ms_word_app = QApplication([__appname__, "windows:darkmode=2"])
-    ## ms_word_app.setStyle("Fusion")
+    ms_word_app.setStyle("Universal")
     ms_word_gui = MsWordGui()
     ms_word_gui.show()
     ms_word_app.exec()
