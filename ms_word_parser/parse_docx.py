@@ -1882,7 +1882,7 @@ class Docx:
 
     def adjust_timestamp(self, ts):
         if ts:
-            adjusted_timestamp = ts.replace('T', ' ').replace('Z', '') ## Fix this to remove the 7 digit nanoseconds for standardization
+            adjusted_timestamp = ts.replace('T', ' ').replace('Z', '')
             return adjusted_timestamp.split(".")[0]
         return ''
 
