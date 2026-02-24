@@ -83,7 +83,7 @@ __clr__ = "\033[1;m"
 __version__ = "3.0.0"
 __appname__ = f"MS Word Parser v{__version__}"
 __source__ = "https://github.com/jjrboucher/MS-Word-Parser"
-__date__ = "22 Feb 2026"
+__date__ = "23 Feb 2026"
 __author__ = (
     "Jacques Boucher - jjrboucher@gmail.com\nCorey Forman - corey@digitalsleuth.ca"
 )
@@ -1729,7 +1729,7 @@ class Docx:
                     f"{{{self.namespaces['w']}}}val",
                     None,
                 )
-        return "" if root is None else root
+        return None if root is None else root
 
     def get_doc_ids(self):
         """
@@ -2091,10 +2091,10 @@ def process_docx(filename, triage, hashing, store: DataStore):
         filename.get_metadata("CharactersWithSpaces"),
         filename.get_metadata("keywords"),
         filename.get_metadata("description"),
+        filename.get_metadata("category"),
         filename.get_metadata("Application"),
         filename.get_metadata("AppVersion"),
         filename.get_metadata("DocSecurity"),
-        filename.get_metadata("category"),
         filename.get_metadata("contentStatus"),
         filename.get_metadata("language"),
         filename.get_metadata("version"),
@@ -2390,12 +2390,6 @@ def write_to_excel(excel_file, triage_files, store: DataStore):
         "engine": "xlsxwriter",
         "mode": "w",
         "datetime_format": "yyyy-mm-dd hh:mm:ss",
-        "engine_kwargs": {
-            "options": {
-                "constant_memory": True,
-                "default_date_format": "yyyy-mm-dd hh:mm:ss",
-            }
-        },
     }
     LAYOUTS = {
         "summary": [
@@ -2664,21 +2658,32 @@ def write_to_excel(excel_file, triage_files, store: DataStore):
         write_tips(writer)
         update_status('"Tips" worksheet written.')
         if store.sqlite:
-            db_file = f"ms-word-parser-db-{store.timestamp}.db"
-            update_status(f"Writing results to {db_file}")
+            excel_parent = os.path.dirname(excel_file)
+            excel_name = os.path.splitext(os.path.basename(excel_file))[0]
+            db_file = os.path.normpath(f"{excel_parent}{os.sep}{excel_name}.db")
+            if os.path.exists(db_file):
+                try:
+                    os.remove(db_file)
+                except:
+                    update_status(f'Unable to remove "{db_file}".')
+                    db_file = os.path.normpath(f"{excel_parent}{os.sep}{excel_name}_{store.timestamp}.db")
+            update_status(f'Writing results to "{db_file}".')
             conn = sqlite3.connect(db_file)
             for sheet, sheet_name, layout in triage_sheets:
-                pd.DataFrame(sheet).to_sql(sheet_name, conn, index=False)
+                if sheet:
+                    pd.DataFrame(sheet).to_sql(sheet_name, conn, index=False)
             if not triage_files:
                 for sheet, sheet_name, layout in full_sheets:
-                    pd.DataFrame(sheet).to_sql(sheet_name, conn, index=False)
+                    if sheet:
+                        pd.DataFrame(sheet).to_sql(sheet_name, conn, index=False)
             if aggregated:
                 pd.DataFrame(store.aggregated_worksheet).to_sql(
                     "Aggregated Comment Data", conn, index=False
                 )
-            pd.DataFrame(store.timeline_worksheet).to_sql("Timeline", conn, index=False)
+            if not store.timeline_worksheet.empty:
+                pd.DataFrame(store.timeline_worksheet).to_sql("Timeline", conn, index=False)
             conn.close()
-            update_status(f"All data written to {db_file}")
+            update_status(f'All data written to "{db_file}".')
 
 
 def write_tips(writer):
@@ -2886,11 +2891,11 @@ def generate_visual_timeline(writer, sheet):
             "date_axis": True,
             "min": min_date,
             "max": max_date,
-            "major_unit": 120,
-            # "major_unit": major_unit_days,
+            #"major_unit": 120,
+            "major_unit": major_unit_days,
             "major_unit_type": "days",
-            "minor_unit": 30,
-            # "minor_unit": max(1, major_unit_days // 4),
+            #"minor_unit": 30,
+            "minor_unit": max(1, major_unit_days // 4),
             "minor_unit_type": "days",
             "num_format": "yyyy-mm-dd",
         }
