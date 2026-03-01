@@ -83,7 +83,7 @@ __clr__ = "\033[1;m"
 __version__ = "3.0.0"
 __appname__ = f"MS Word Parser v{__version__}"
 __source__ = "https://github.com/jjrboucher/MS-Word-Parser"
-__date__ = "28 Feb 2026"
+__date__ = "01 Mar 2026"
 __author__ = (
     "Jacques Boucher - jjrboucher@gmail.com\nCorey Forman - corey@digitalsleuth.ca"
 )
@@ -1137,13 +1137,15 @@ def process_docx(filename, triage, hashing, store: DataStore):
     then loop through them, calling this function for each DOCx file.
     """
     if store.ms_word_gui:
+        level = "info"
         update_status = store.ms_word_gui.update_status
     else:
+        level = "debug"
         update_status = lambda msg, **kwargs: update_cli(msg, store=store, **kwargs)
     this_file = filename.msword_file
     this_rsid_root = filename.rsid_root()
     xml_files = filename.xml_files
-    update_status(f"Processing {this_file}")
+    update_status(f"Processing {this_file}", level="info")
     file_details = filename.details()
     third_party_paths = [
         "word\\settings.xml",
@@ -1152,7 +1154,7 @@ def process_docx(filename, triage, hashing, store: DataStore):
     ]
     third_party = False
     for line in file_details.split("\n"):
-        update_status(f"    {line.rstrip()}")
+        update_status(f"    {line.rstrip()}", level=level)
     for checkFile in (
         "word/settings.xml",
         "docProps/core.xml",
@@ -1165,10 +1167,11 @@ def process_docx(filename, triage, hashing, store: DataStore):
         xml_exists = checkFile in xml_files.keys()
         if xml_exists and checkFile in third_party_paths:
             third_party = True
-        update_status(f"    {checkFile} exists: {xml_exists}")
+        update_status(f"    {checkFile} exists: {xml_exists}", level=level)
         if third_party:
             update_status(
-                f"    {this_file} may have been created using something other than MS Word"
+                f"    {this_file} may have been created using something other than MS Word",
+                level=level,
             )
 
     # Writing document summary worksheet.
@@ -1238,7 +1241,7 @@ def process_docx(filename, triage, hashing, store: DataStore):
         ]
     for k, v in zip(headers, values):
         store.doc_summary_worksheet[k].append(v)
-    update_status("    Extracted Document Summary artifacts")
+    update_status("    Extracted Document Summary artifacts", level=level)
 
     # The keys will be used as the column heading in the spreadsheet
     # The order they are in is the order that the columns will be in the spreadsheet
@@ -1318,7 +1321,7 @@ def process_docx(filename, triage, hashing, store: DataStore):
     ]
     for k, v in zip(headers, values):
         store.metadata_worksheet[k].append(v)
-    update_status("    Extracted metadata artifacts")
+    update_status("    Extracted metadata artifacts", level=level)
 
     if filename.any_comments():  # checks if there are comments
         headers = [
@@ -1336,7 +1339,7 @@ def process_docx(filename, triage, hashing, store: DataStore):
             else store.comments_worksheet
         )
         for comment in filename.get_comments():
-            update_status(f"    Processing comment: {comment}", level="debug")
+            update_status(f"    Processing comment: {comment}", level=level)
             values = [
                 this_file,  # Filename
                 comment[3],  # Author
@@ -1348,7 +1351,7 @@ def process_docx(filename, triage, hashing, store: DataStore):
             ]
             for k, v in zip(headers, values):
                 store.comments_worksheet[k].append(v)
-        update_status("    Extracted comments artifacts")
+        update_status("    Extracted comments artifacts", level=level)
 
     if not triage:  # will generate these spreadsheets if not triage
         headers = [
@@ -1396,7 +1399,7 @@ def process_docx(filename, triage, hashing, store: DataStore):
             for k, v in zip(headers, values):
                 store.archive_files_worksheet[k].append(v)
 
-        update_status("    Extracted archive files artifacts")
+        update_status("    Extracted archive files artifacts", level=level)
 
         # Calculating count of rsidR, rsidRPr, rsidP, rsidRDefault, rsidTr, paraId, and textId in document.xml
         # and writing to "rsids" worksheet
@@ -1429,7 +1432,7 @@ def process_docx(filename, triage, hashing, store: DataStore):
         ws = store.rsids_worksheet
         cols = [ws[h] for h in headers]
         for label, func in rsid_lookups:
-            update_status(f"    Calculating {label} count")
+            update_status(f"    Calculating {label} count", level=level)
             for k, v in func().items():
                 cols[0].append(this_file)
                 cols[1].append(this_rsid_root)
@@ -1440,7 +1443,9 @@ def process_docx(filename, triage, hashing, store: DataStore):
                 cols[6].append(modified_dt)
         all_people = filename.get_people()
         if all_people:
-            update_status("    Processing people information from document")
+            update_status(
+                "    Processing people information from document", level=level
+            )
             headers = ["File Name", "Author", "providerId", "userId"]
             store.people_worksheet = (
                 {k: [] for k in headers}
@@ -1454,7 +1459,7 @@ def process_docx(filename, triage, hashing, store: DataStore):
 
         extensible_comments = filename.get_extensible_comments()
         if extensible_comments:
-            update_status("    Processing extensible comments data")
+            update_status("    Processing extensible comments data", level=level)
             headers = [
                 "File Name",
                 "durableId",
@@ -1491,7 +1496,7 @@ def process_docx(filename, triage, hashing, store: DataStore):
 
         extended_comments = filename.get_extended_comments()
         if extended_comments:
-            update_status("    Processing extensible comments data")
+            update_status("    Processing extensible comments data", level=level)
             headers = ["File Name", "paraId", "paraIdParent", "Done"]
             store.extended_worksheet = (
                 {k: [] for k in headers}
@@ -1505,7 +1510,7 @@ def process_docx(filename, triage, hashing, store: DataStore):
 
         comments_ids = filename.get_comments_ids()
         if comments_ids:
-            update_status("    Processing comments ids")
+            update_status("    Processing comments ids", level=level)
             headers = ["File Name", "paraId", "durableId"]
             store.comments_ids_worksheet = (
                 {k: [] for k in headers}
@@ -1519,7 +1524,7 @@ def process_docx(filename, triage, hashing, store: DataStore):
 
         custom_props = filename.get_custom_xml()
         if custom_props:
-            update_status("    Processing custom properties")
+            update_status("    Processing custom properties", level=level)
             if not store.custom_xml_worksheet:
                 headers = ["File Name"]
                 store.custom_xml_worksheet = {h: [] for h in headers}
@@ -1541,7 +1546,7 @@ def process_docx(filename, triage, hashing, store: DataStore):
             xml_content = filename.get_all_content(filename.item_files)
             if xml_content:
                 item_xml_content = xml_content[this_file]
-                update_status("    Processing item.xml files")
+                update_status("    Processing item.xml files", level=level)
                 if not store.item_worksheet:
                     headers = ["File Name", "Item XML File", "Content"]
                     store.item_worksheet = {h: [] for h in headers}
@@ -1567,7 +1572,7 @@ def process_docx(filename, triage, hashing, store: DataStore):
         if filename.ink_files:
             ink_content = filename.get_ink()
             if ink_content:
-                update_status("    Processing ink.xml files")
+                update_status("    Processing ink.xml files", level=level)
                 if not store.ink_worksheet:
                     headers = ["File Name", "Ink XML File", "Timestamp (UTC)"]
                     store.ink_worksheet = {h: [] for h in headers}
@@ -1582,8 +1587,8 @@ def process_docx(filename, triage, hashing, store: DataStore):
                     for k, v in zip(headers, values):
                         store.ink_worksheet[k].append(v)
 
-    update_status(f"Finished processing {this_file}")
-    update_status(f'{"-"*36}')
+    update_status(f"Finished processing {this_file}", level="info")
+    update_status(f'{"-"*36}', level="info")
 
 
 def chunk_df(data, sheet_name, chunk_size=1000000):
@@ -1706,7 +1711,7 @@ def write_to_excel(excel_file, triage_files, store: DataStore):
                     ws.set_column(final_start, final_end, width)
                 ws.autofilter(0, 0, max_row, max_col - 1)
                 ws.freeze_panes(1, 0)
-                update_status(f'"{actual_name}" written.')
+                update_status(f'"{actual_name}" written.', level="info")
                 del df_chunk
             del data
 
@@ -1779,22 +1784,25 @@ def write_to_excel(excel_file, triage_files, store: DataStore):
             )
         if store.timeline:
             update_status(
-                "Generating Timeline worksheet - this may take some time depending on the number of documents being parsed ..."
+                "Generating Timeline worksheet - this may take some time depending on the number of documents being parsed ...",
+                level="info",
             )
             store.timeline_worksheet = generate_timeline(store)
             process_and_write(store.timeline_worksheet, "Timeline", "timeline")
             generate_visual_timeline(writer, store.timeline_worksheet)
-            update_status('"Visual Timeline" written.')
+            update_status('"Visual Timeline" written.', level="info")
         write_tips(writer)
-        update_status('"Tips" worksheet written.')
-        update_status(f"All Excel data written to {store.excel_file}")
+        update_status('"Tips" worksheet written.', level="info")
+        update_status(f"All Excel data written to {store.excel_file}", level="info")
 
 
 def write_to_sqlite(store):
     if store.ms_word_gui:
         update_status = store.ms_word_gui.update_status
+        level = "info"
     else:
         update_status = lambda msg, **kwargs: update_cli(msg, store=store, **kwargs)
+        level = "debug"
     sql_type_map = {
         re.sub(
             r"[^a-z0-9]",
@@ -1812,11 +1820,13 @@ def write_to_sqlite(store):
         try:
             os.remove(store.sqlite_file)
         except:
-            update_status(f'Unable to remove "{store.sqlite_file}".')
+            update_status(f'Unable to remove "{store.sqlite_file}".', level=level)
             store.sqlite_file = os.path.normpath(
                 f"{store.output_path}{os.sep}{store.basename}_2.db"
             )
-    update_status(f'Writing results to SQLite database "{store.sqlite_file}".')
+    update_status(
+        f'Writing results to SQLite database "{store.sqlite_file}".', level="info"
+    )
     conn = sqlite3.connect(store.sqlite_file)
     triage_sheets = [
         (store.doc_summary_worksheet, "Document Summary", "summary"),
@@ -1951,9 +1961,14 @@ def write_to_sqlite(store):
         conn.execute(timeline_view_stmt)
     try:
         conn.close()
-        update_status(f'All SQLite data written to "{store.sqlite_file}".')
+        update_status(
+            f'All SQLite data written to "{store.sqlite_file}".', level="info"
+        )
     except:
-        update_status(f'SQLite database could not be written to "{store.sqlite_file}".')
+        update_status(
+            f'SQLite database could not be written to "{store.sqlite_file}".',
+            level="error",
+        )
 
 
 def restructure_sheet(sheet, sheet_name):
@@ -1973,6 +1988,7 @@ def restructure_sheet(sheet, sheet_name):
         }
         new_name = sheet_name.lower().replace(" ", "_")
         return new_sheet, new_name
+    return None, None
 
 
 def write_tips(writer):
@@ -2180,10 +2196,8 @@ def generate_visual_timeline(writer, sheet):
             "date_axis": True,
             "min": min_date,
             "max": max_date,
-            # "major_unit": 120,
             "major_unit": major_unit_days,
             "major_unit_type": "days",
-            # "minor_unit": 30,
             "minor_unit": max(1, major_unit_days // 4),
             "minor_unit_type": "days",
             "num_format": "yyyy-mm-dd",
@@ -2228,11 +2242,11 @@ def update_cli(msg, level="info", color=__clr__, store: DataStore = None):
         store.color_fmt.set_color(color)
         store.logger.log(log_level, msg)
         store.color_fmt.set_color("")
-        return
-    store.logger.log(log_level, msg)
+    else:
+        store.logger.log(log_level, msg)
 
 
-def process_cli(files, triage_files, hash_files, store: DataStore):
+def process_cli(files, triage_files, hash_files, store: DataStore, ingest=False):
     docxErrorCount = 0
     store.start_time = dt.now().strftime(__dtfmt__)
     update_cli(f"{__appname__}", store=store)
@@ -2243,11 +2257,45 @@ def process_cli(files, triage_files, hash_files, store: DataStore):
     if store.sqlite:
         update_cli(f"SQLite DB file: {store.sqlite_file}", store=store)
     update_cli(f"Log file: {os.path.abspath(store.log_file)}", store=store)
-    update_cli(f"The following {len(files)} files are being processed:", store=store)
-    joiner = f"\n{dt.now().strftime(__dtfmt__)} -     "
-    update_cli(
-        "    " + joiner.join(os.path.abspath(str(f)) for f in files), store=store
-    )
+    if ingest:
+        file_list, missing = read_ingest(files)
+        store.filenames = file_list
+        if missing:
+            update_cli(
+                f"The following {len(missing)} file(s) do not exist:",
+                color=__red__,
+                store=store,
+            )
+            joiner = f"\n{dt.now().strftime(__dtfmt__)} -     "
+            update_cli("    " + joiner.join(missing), color=__red__, store=store)
+        if len(file_list) > 1:
+            update_cli(
+                f"The following {len(file_list)} files have been loaded:",
+                store=store,
+            )
+        elif len(file_list) == 1:
+            update_cli(
+                f"The following {len(file_list)} file has been loaded:", store=store
+            )
+        else:
+            update_cli(
+                "No files were loaded. Please check the file paths and try again.",
+                level="error",
+                color=__red__,
+                store=store,
+            )
+            return
+        joiner = f"\n{dt.now().strftime(__dtfmt__)} -     "
+        update_cli("    " + joiner.join(file_list), store=store)
+        files = file_list
+    else:
+        update_cli(
+            f"The following {len(files)} files are being processed:", store=store
+        )
+        joiner = f"\n{dt.now().strftime(__dtfmt__)} -     "
+        update_cli(
+            "    " + joiner.join(os.path.abspath(str(f)) for f in files), store=store
+        )
     update_cli(f"Script executed: {store.start_time}", store=store)
     update_cli("Summary of files parsed:", store=store)
     update_cli(f'{"="*36}', store=store)
@@ -2320,9 +2368,9 @@ class ColorFormatter(logging.Formatter):
         return formatter.format(record)
 
 
-def cli_log(output_path, verbose=False, store: DataStore = None):
+def cli_log(output_path, verbose=0, store: DataStore = None):
     log = logging.getLogger("ms-word-parser")
-    log.setLevel(logging.INFO)
+    log.setLevel(logging.DEBUG)
     log_fmt = logging.Formatter(
         "%(asctime)s | %(levelname)-8s | %(message)s",
         datefmt=__dtfmt__,
@@ -2331,10 +2379,12 @@ def cli_log(output_path, verbose=False, store: DataStore = None):
     file_handler = logging.FileHandler(log_path, "w", "utf-8")
     file_handler.setFormatter(log_fmt)
     log.addHandler(file_handler)
-    if verbose:
+    verbosity = {0: None, 1: logging.INFO, 2: logging.DEBUG}
+    stream_level = verbosity.get(verbose, logging.DEBUG)
+    if stream_level is not None:
         store.color_fmt = ColorFormatter()
         stream_handler = logging.StreamHandler(stream=sys.stdout)
-        stream_handler.setLevel(logging.DEBUG)
+        stream_handler.setLevel(stream_level)
         stream_handler.setFormatter(store.color_fmt)
         log.addHandler(stream_handler)
     return log
@@ -2466,9 +2516,9 @@ def main():
     arg_parse.add_argument(
         "-v",
         "--verbose",
-        action="store_true",
+        action="count",
+        default=0,
         help="Output to STDOUT as well as log",
-        default=False,
     )
     file_source = arg_parse.add_mutually_exclusive_group(required=False)
     file_source.add_argument(
@@ -2511,7 +2561,7 @@ def main():
         if args.hash:
             store.hash_files = True
         if args.excel or args.sqlite:
-            store.logger = cli_log(output_path, args.verbose, store=store)
+            store.logger = cli_log(output_path, verbose=args.verbose, store=store)
             if args.excel:
                 store.excel = True
                 store.excel_file = f"{output_path}{os.sep}{store.basename}.xlsx"
@@ -2520,34 +2570,7 @@ def main():
                 store.sqlite_file = f"{output_path}{os.sep}{store.basename}.db"
         if args.files:
             file_list = args.files
-            missing = []
-            exists = []
-            for f in file_list:
-                if os.path.exists(f):
-                    exists.append(f)
-                else:
-                    missing.append(f)
-            file_list = exists
             store.filenames = file_list
-            if missing:
-                update_cli(
-                    f"The following {len(missing)} file(s) do not exist:",
-                    color=__red__,
-                    store=store,
-                )
-                joiner = f"\n{dt.now().strftime(__dtfmt__)} -     "
-                update_cli("    " + joiner.join(missing), color=__red__, store=store)
-            if len(file_list) > 1:
-                update_cli(
-                    f"The following {len(file_list)} files have been loaded:",
-                    store=store,
-                )
-            else:
-                update_cli(
-                    f"The following {len(file_list)} file has been loaded:", store=store
-                )
-            joiner = f"\n{dt.now().strftime(__dtfmt__)} -     "
-            update_cli("    " + joiner.join(file_list), store=store)
             try:
                 process_cli(
                     file_list,
@@ -2598,41 +2621,13 @@ def main():
                 arg_parse.error(
                     f"The file {args.ingest} does not exist. Please check your path and try again."
                 )
-            file_list, missing = read_ingest(args.ingest)
-            store.filenames = file_list
-            if missing:
-                update_cli(
-                    f"The following {len(missing)} file(s) do not exist:",
-                    color=__red__,
-                    store=store,
-                )
-                joiner = f"\n{dt.now().strftime(__dtfmt__)} -     "
-                update_cli("    " + joiner.join(missing), color=__red__, store=store)
-            if len(file_list) > 1:
-                update_cli(
-                    f"The following {len(file_list)} files have been loaded:",
-                    store=store,
-                )
-            elif len(file_list) == 1:
-                update_cli(
-                    f"The following {len(file_list)} file has been loaded:", store=store
-                )
-            else:
-                update_cli(
-                    "No files were loaded. Please check the file paths and try again.",
-                    level="error",
-                    color=__red__,
-                    store=store,
-                )
-                return
-            joiner = f"\n{dt.now().strftime(__dtfmt__)} -     "
-            update_cli("    " + joiner.join(file_list), store=store)
             try:
                 process_cli(
-                    file_list,
+                    args.ingest,
                     args.triage,
                     args.hash,
                     store,
+                    ingest=True,
                 )
             except KeyboardInterrupt:
                 stop_cli(store)

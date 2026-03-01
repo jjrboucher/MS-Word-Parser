@@ -1,5 +1,6 @@
 from datetime import datetime as dt
 
+
 class DataStore:
     """Stores the state of all variables for use in multiple functions."""
 

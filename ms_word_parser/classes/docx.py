@@ -12,6 +12,7 @@ except ModuleNotFoundError:
 
 __dtfmt__ = "%Y-%m-%d %H:%M:%S"
 
+
 class Docx:
     """
     Accepts a docx file. Has the following methods to extract data from core.xml, app.xml, document.xml
@@ -37,11 +38,6 @@ class Docx:
         if store is None:
             store = DataStore()
         self.store = store
-        if store.ms_word_gui:
-            update_status = store.ms_word_gui.update_status
-        else:
-            update_status = lambda msg, **kwargs: update_cli(msg, store=store, **kwargs)
-        self.update_status = update_status
         self.item_files = []
         self.ink_files = []
         self.xml_files = {}
@@ -871,6 +867,8 @@ class Docx:
 
     def adjust_timestamp(self, ts):
         if ts:
-            adjusted_timestamp = ts.replace("T", " ").replace("Z", "")
-            return adjusted_timestamp.split(".")[0]
-        return ""
+            adjusted_timestamp = ts.replace("T", " ").replace("Z", "").split(".")[0]
+            if dt.fromisoformat(adjusted_timestamp).year < 2007:
+                return None
+            return adjusted_timestamp
+        return None
