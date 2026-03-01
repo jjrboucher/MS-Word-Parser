@@ -1,21 +1,16 @@
 #!/usr/bin/env python3
 
-import hashlib
 import os
 import sys
 import json
 import math
 import sqlite3
 import re
-import zipfile
-from zipfile import BadZipFile
 import logging
 import subprocess
 import argparse
 from datetime import datetime as dt, timedelta
 from pathlib import Path
-import struct
-import xml.etree.ElementTree as ET
 import warnings
 import pandas as pd
 
@@ -53,6 +48,8 @@ from PyQt6.QtWidgets import (
 )
 
 try:
+    from classes.datastore import DataStore
+    from classes.docx import Docx
     from tips import (
         tip_sameRsidRoot,
         tip_numDocumentsEachRsidRoot,
@@ -63,6 +60,8 @@ try:
         tip_guiWorkFlow,
     )
 except ModuleNotFoundError:
+    from ms_word_parser.classes.datastore import DataStore
+    from ms_word_parser.classes.docx import Docx
     from ms_word_parser.tips import (
         tip_sameRsidRoot,
         tip_numDocumentsEachRsidRoot,
@@ -84,174 +83,11 @@ __clr__ = "\033[1;m"
 __version__ = "3.0.0"
 __appname__ = f"MS Word Parser v{__version__}"
 __source__ = "https://github.com/jjrboucher/MS-Word-Parser"
-__date__ = "27 Feb 2026"
+__date__ = "28 Feb 2026"
 __author__ = (
     "Jacques Boucher - jjrboucher@gmail.com\nCorey Forman - corey@digitalsleuth.ca"
 )
 __dtfmt__ = "%Y-%m-%d %H:%M:%S"
-
-
-class DataStore:
-    """Stores the state of all variables for use in multiple functions."""
-
-    def __init__(self):
-        """Main data stores"""
-        self.doc_summary_worksheet = {}
-        self.metadata_worksheet = {}
-        self.archive_files_worksheet = {}
-        self.rsids_worksheet = {}
-        self.comments_worksheet = {}
-        self.people_worksheet = {}
-        self.extensible_worksheet = {}
-        self.extended_worksheet = {}
-        self.comments_ids_worksheet = {}
-        self.custom_xml_worksheet = {}
-        self.item_worksheet = {}
-        self.ink_worksheet = {}
-        self.timeline_worksheet = {}
-        self.aggregated_worksheet = {}
-        self.ink_content = []
-        self.filenames = []
-        self.item_xml_content = None
-        self.excel_file = None
-        self.sqlite_file = None
-        self.output_path = None
-        self.errors_worksheet = {"File Name": [], "Error": []}
-        self.timestamp = dt.now().strftime("%Y%m%d_%H%M%S")
-        self.basename = f"ms-word-parser-log-{self.timestamp}"
-        self.log_file = f"ms-word-parser-log-{self.timestamp}.log"
-        self.ms_word_gui = None
-        self.start_time = None
-        self.color_fmt = None
-        self.logger = None
-        self.sqlite = False
-        self.excel = False
-        self.timeline = False
-        self.type_map = {
-            "<w:p> tags": "Int32",
-            "<w:r> tags": "Int32",
-            "<w:t> tags": "Int32",
-            "<w:tr> tags": "Int32",
-            "<w14:docId>": "string",
-            "<w15:docId>": "string",
-            "<w16:docId>": "string",
-            "App Version": "string",
-            "Application": "string",
-            "Archive File": "string",
-            "Author": "string",
-            "Category": "string",
-            "Characters With Spaces": "Int32",
-            "Characters": "Int32",
-            "Comment ID": "Int32",
-            "Comment paraId": "string",
-            "Company": "string",
-            "Content Status": "string",
-            "Content": "string",
-            "Count in document.xml": "Int32",
-            "Created Date": "datetime64[ns]",
-            "dateUtc": "datetime64[ns]",
-            "Description": "string",
-            "Doc Security": "Int32",
-            "Done": "boolean",
-            "durableId": "string",
-            "File Created Date": "datetime64[ns]",
-            "File Modified Date": "datetime64[ns]",
-            "File Name": "string",
-            "Grammar Check": "string",
-            "Has Comments": "boolean",
-            "Has Ink": "boolean",
-            "Hyperlinks Changed": "string",
-            "Hyperlinks": "string",
-            "Initials": "string",
-            "Ink XML File": "string",
-            "Item XML File": "string",
-            "Keywords": "string",
-            "Language": "string",
-            "Last Modified By": "string",
-            "Last Printed Date": "datetime64[ns]",
-            "Lines": "Int32",
-            "Manager": "string",
-            "MD5 Hash": "string",
-            "Modified Date": "datetime64[ns]",
-            "Modified Time (local/UTC/Redmond, Washington)": "datetime64[ns]",
-            "Pages": "Int32",
-            "Paragraphs": "Int32",
-            "paraId Text": "string",
-            "paraId": "string",
-            "paraIdParent": "string",
-            "providerId": "string",
-            "reactionDateUtc": "datetime64[ns]",
-            "reactionType": "string",
-            "Revision": "Int32",
-            "RSID Root": "string",
-            "RSID Type": "string",
-            "RSID Value": "string",
-            "Shared Doc": "string",
-            "Source": "string",
-            "Spell Check": "string",
-            "Subject": "string",
-            "Template": "string",
-            "Timestamp (UTC)": "datetime64[ns]",
-            "Timestamp": "datetime64[ns]",
-            "Title": "string",
-            "Total Editing Time": "string",
-            "Type": "string",
-            "Uncompressed Size (bytes)": "Int32",
-            "Unique rsidR": "Int32",
-            "uri": "string",
-            "userId": "string",
-            "userName": "string",
-            "userProvider": "string",
-            "Value": "string",
-            "Version": "string",
-            "Words": "Int32",
-            "ZIP Compression Type": "string",
-            "ZIP Create System": "Int32",
-            "ZIP Created Version": "Int32",
-            "ZIP Extra Characters (truncated)": "string",
-            "ZIP Extra Flag (len)": "Int32",
-            "ZIP Extract Version": "Int32",
-            "ZIP Flag Bits (hex)": "string",
-        }
-        self.sqlite_types = {
-            "Int32": "INTEGER",
-            "string": "TEXT",
-            "boolean": "INTEGER",
-             "datetime64[ns]": "TEXT"
-        }
-        self.triage_files = None
-        self.hash_files = None
-
-    def reset_vars(self):
-        """Reset variables"""
-        self.doc_summary_worksheet = {}
-        self.metadata_worksheet = {}
-        self.archive_files_worksheet = {}
-        self.rsids_worksheet = {}
-        self.comments_worksheet = {}
-        self.people_worksheet = {}
-        self.extensible_worksheet = {}
-        self.extended_worksheet = {}
-        self.comments_ids_worksheet = {}
-        self.custom_xml_worksheet = {}
-        self.item_worksheet = {}
-        self.ink_worksheet = {}
-        self.timeline_worksheet = {}
-        self.aggregated_worksheet = {}
-        self.ink_content = []
-        self.item_xml_content = None
-        self.excel_file = None
-        self.sqlite_file = None
-        self.output_path = None
-        self.errors_worksheet = {"File Name": [], "Error": []}
-        self.timestamp = dt.now().strftime("%Y%m%d_%H%M%S")
-        self.log_file = f"ms-word-parser-log-{self.timestamp}.log"
-        self.basename = f"ms-word-parser-log-{self.timestamp}"
-        self.sqlite = False
-        self.excel = False
-        self.timeline = False
-        self.triage_files = None
-        self.hash_files = None
 
 
 class AboutWindow(QWidget):
@@ -374,14 +210,14 @@ class UiMainWindow:
         y = (screen_geometry.height() - self.height()) // 2
         self.move(x, y)
 
-        """ Menu Actions """
+        # Menu Actions
         self.actionSelect_Output = QAction(MainWindow)
         self.actionSelect_Output.setObjectName("actionSelect_Output")
         self.actionSelect_Output.triggered.connect(self.select_output)
-        self.actionSelectIngest = QAction(MainWindow)
-        self.actionSelectIngest.setObjectName("actionSelectIngest")
-        self.actionSelectIngest.triggered.connect(self.select_ingest)
-        self.actionSelectIngest.setVisible(False)
+        self.actionAdd_Ingest = QAction(MainWindow)
+        self.actionAdd_Ingest.setObjectName("actionAdd_Ingest")
+        self.actionAdd_Ingest.triggered.connect(self.add_ingest)
+        self.actionAdd_Ingest.setVisible(False)
         self.actionAdd_Files = QAction(MainWindow)
         self.actionAdd_Files.setObjectName("actionAdd_Files")
         self.actionAdd_Files.triggered.connect(self.add_files)
@@ -400,11 +236,11 @@ class UiMainWindow:
         self.actionContents.setObjectName("actionContents")
         self.actionContents.triggered.connect(self._contents)
 
-        """ Central Widget """
+        # Central Widget
         self.centralWidget = QWidget(MainWindow)
         self.centralWidget.setObjectName("centralWidget")
 
-        """ Processing Options """
+        # Processing Options
         self.processOptions = QGroupBox(self.centralWidget)
         self.processOptions.setObjectName("processOptions")
         self.processOptions.setGeometry(QRect(10, 10, 340, 100))
@@ -438,17 +274,17 @@ class UiMainWindow:
         self.hashFiles.setObjectName("hashFiles")
         self.hashFiles.setGeometry(QRect(100, 60, 89, 20))
         self.hashFiles.setStyleSheet(self.stylesheet)
-        self.hashFiles.setFont(self.text_font)        
+        self.hashFiles.setFont(self.text_font)
         self.timelineButton = QCheckBox(self.processOptions)
         self.timelineButton.setObjectName("timelineButton")
         self.timelineButton.setGeometry(QRect(190, 60, 89, 20))
         self.timelineButton.setStyleSheet(self.stylesheet)
         self.timelineButton.setFont(self.text_font)
 
-        """ Operation Options """
+        # Operation Options
         self.operationOptions = QGroupBox(self.centralWidget)
         self.operationOptions.setObjectName("operationOptions")
-        self.operationOptions.setGeometry(QRect(10, 116, 340, 100)) ## 10, 220, 350, 90
+        self.operationOptions.setGeometry(QRect(10, 116, 340, 100))
         self.operationOptions.setStyleSheet("background-color: #ffffff; color:black;")
         self.operationOptions.setFont(self.text_font)
         self.outputButton = QPushButton(self.operationOptions)
@@ -456,7 +292,7 @@ class UiMainWindow:
         self.outputButton.setGeometry(QRect(10, 28, 86, 24))
         self.outputButton.setStyleSheet(self.stylesheet)
         self.outputButton.clicked.connect(self.select_output)
-        self.outputButton.setFont(self.text_font)        
+        self.outputButton.setFont(self.text_font)
         self.addFilesButton = QPushButton(self.operationOptions)
         self.addFilesButton.setObjectName("addFilesButton")
         self.addFilesButton.setGeometry(QRect(112, 28, 86, 24))
@@ -471,9 +307,16 @@ class UiMainWindow:
         self.addDirectoryButton.setStyleSheet(self.disabled)
         self.addDirectoryButton.clicked.connect(self.add_directory)
         self.addDirectoryButton.setFont(self.text_font)
+        self.addIngestButton = QPushButton(self.operationOptions)
+        self.addIngestButton.setObjectName("addIngestButton")
+        self.addIngestButton.setGeometry(QRect(10, 58, 86, 24))
+        self.addIngestButton.setEnabled(False)
+        self.addIngestButton.setStyleSheet(self.disabled)
+        self.addIngestButton.setFont(self.text_font)
+        self.addIngestButton.clicked.connect(self.add_ingest)
         self.processButton = QPushButton(self.operationOptions)
         self.processButton.setObjectName("processButton")
-        self.processButton.setGeometry(QRect(10, 58, 86, 24))
+        self.processButton.setGeometry(QRect(112, 58, 86, 24))
         self.processButton.setEnabled(False)
         self.processButton.setStyleSheet(self.disabled)
         self.processButton.clicked.connect(
@@ -487,24 +330,17 @@ class UiMainWindow:
             )
         )
         self.processButton.setFont(self.text_font)
-        self.stopButton = QPushButton(self.operationOptions)
-        self.stopButton.setObjectName("stopButton")
-        self.stopButton.setGeometry(QRect(112, 58, 86, 24))
-        self.stopButton.setEnabled(False)
-        self.stopButton.setStyleSheet(self.disabled)
-        self.stopButton.clicked.connect(self._stop)
-        self.stopButton.setFont(self.text_font)
         self.resetButton = QPushButton(self.operationOptions)
         self.resetButton.setObjectName("resetButton")
         self.resetButton.setGeometry(QRect(214, 58, 86, 24))
         self.resetButton.clicked.connect(self._reset)
         self.resetButton.setStyleSheet(self.stylesheet)
-        self.resetButton.setFont(self.text_font)        
+        self.resetButton.setFont(self.text_font)
 
-        """ Output Files """
+        # Output Files
         self.outputFiles = QGroupBox(self.centralWidget)
         self.outputFiles.setObjectName("outputFiles")
-        self.outputFiles.setGeometry(QRect(10, 220, 340, 90)) ## 10, 116, 350, 100
+        self.outputFiles.setGeometry(QRect(10, 220, 340, 90))
         self.outputFiles.setStyleSheet("background-color: #ffffff; color: black;")
         self.outputFiles.setFont(self.text_font)
         self.outputPathLabel = QLabel(self.outputFiles)
@@ -527,7 +363,7 @@ class UiMainWindow:
             Qt.ScrollBarPolicy.ScrollBarAlwaysOff
         )
         self.outputPath.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
-        self.outputPath.setFont(self.text_font)        
+        self.outputPath.setFont(self.text_font)
         self.generalLog = QLabel(self.outputFiles)
         self.generalLog.setObjectName("generalLog")
         self.generalLog.setGeometry(QRect(10, 61, 80, 16))
@@ -550,7 +386,7 @@ class UiMainWindow:
         )
         self.generalLogFile.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
 
-        """ Processing Status """
+        # Processing Status
         self.processStatus = QGroupBox(self.centralWidget)
         self.processStatus.setObjectName("processStatus")
         self.processStatus.setGeometry(QRect(360, 10, 768, 300))
@@ -628,20 +464,18 @@ class UiMainWindow:
         self.numRemaining.setFont(self.text_font)
         self.openLogButton = QPushButton(self.processStatus)
         self.openLogButton.setObjectName("openLogButton")
-        self.openLogButton.setGeometry(QRect(402, 29, 110, 24))
+        self.openLogButton.setGeometry(QRect(522, 29, 110, 24))
         self.openLogButton.setFont(self.text_font)
         self.openLogButton.setStyleSheet(self.disabled)
         self.openLogButton.setEnabled(False)
         self.openLogButton.clicked.connect(lambda: self.open_file(self.log_path))
-        self.openExcelButton = QPushButton(self.processStatus)
-        self.openExcelButton.setObjectName("openExcelButton")
-        self.openExcelButton.setGeometry(QRect(522, 29, 110, 24))
-        self.openExcelButton.setFont(self.text_font)
-        self.openExcelButton.setStyleSheet(self.disabled)
-        self.openExcelButton.setEnabled(False)
-        self.openExcelButton.clicked.connect(
-            lambda: self.open_file(self.excel_full_path)
-        )
+        self.stopButton = QPushButton(self.processStatus)
+        self.stopButton.setObjectName("stopButton")
+        self.stopButton.setGeometry(QRect(402, 29, 110, 24))
+        self.stopButton.setEnabled(False)
+        self.stopButton.setStyleSheet(self.disabled)
+        self.stopButton.clicked.connect(self._stop)
+        self.stopButton.setFont(self.text_font)
         self.openButton = QPushButton(self.processStatus)
         self.openButton.setObjectName("openButton")
         self.openButton.setGeometry(QRect(642, 29, 110, 24))
@@ -662,12 +496,12 @@ class UiMainWindow:
         self.menuHelp.setFont(self.text_font)
         MainWindow.setMenuBar(self.menubar)
 
-        """ Menu Bar """
+        # Menu Bar
         self.menubar.addAction(self.menuFile.menuAction())
         self.menubar.addAction(self.menuHelp.menuAction())
         self.menuFile.addAction(self.actionSelect_Output)
         self.menuFile.addSeparator()
-        self.menuFile.addAction(self.actionSelectIngest)
+        self.menuFile.addAction(self.actionAdd_Ingest)
         self.menuFile.addAction(self.actionAdd_Files)
         self.menuFile.addAction(self.actionAdd_Directory)
         self.menuFile.addSeparator()
@@ -686,9 +520,9 @@ class UiMainWindow:
         self.actionSelect_Output.setText(
             QCoreApplication.translate("MainWindow", "Select &Output Path ...", None)
         )
-        self.actionSelectIngest.setText(
-            QCoreApplication.translate("MainWindow", "Select &Ingest File ...", None)
-        )        
+        self.actionAdd_Ingest.setText(
+            QCoreApplication.translate("MainWindow", "Add &Ingest File ...", None)
+        )
         self.actionAdd_Files.setText(
             QCoreApplication.translate("MainWindow", "Add &Files ...", None)
         )
@@ -702,9 +536,6 @@ class UiMainWindow:
         self.actionContents.setText(
             QCoreApplication.translate("MainWindow", "Contents", None)
         )
-        ##self.parsingOptions.setTitle(
-            ##QCoreApplication.translate("MainWindow", "Parsing Options", None)
-        ##)
         self.processOptions.setTitle(
             QCoreApplication.translate("MainWindow", "Processing Options", None)
         )
@@ -727,12 +558,6 @@ class UiMainWindow:
         self.outputFiles.setTitle(
             QCoreApplication.translate("MainWindow", "Output Files", None)
         )
-        ##self.excelFile.setText(
-            ##QCoreApplication.translate("MainWindow", self.excelFileText, None)
-        ##)
-        ##self.excelFileLabel.setText(
-            ##QCoreApplication.translate("MainWindow", "Excel File:", None)
-        ##)
         self.outputPathLabel.setText(
             QCoreApplication.translate("MainWindow", "Output Path:", None)
         )
@@ -743,15 +568,15 @@ class UiMainWindow:
             QCoreApplication.translate("MainWindow", "Process", None)
         )
         self.stopButton.setText(QCoreApplication.translate("MainWindow", "Stop", None))
+        self.addIngestButton.setText(
+            QCoreApplication.translate("MainWindow", "Add Ingest", None)
+        )
         self.resetButton.setText(
             QCoreApplication.translate("MainWindow", "Reset", None)
         )
-        ##self.excelButton.setText(
-            ##QCoreApplication.translate("MainWindow", "Select Excel", None)
-        ##)
         self.outputButton.setText(
             QCoreApplication.translate("MainWindow", "Output Path", None)
-        )        
+        )
         self.addFilesButton.setText(
             QCoreApplication.translate("MainWindow", "Add Files", None)
         )
@@ -760,9 +585,6 @@ class UiMainWindow:
         )
         self.openLogButton.setText(
             QCoreApplication.translate("MainWindow", "Open Log File", None)
-        )
-        self.openExcelButton.setText(
-            QCoreApplication.translate("MainWindow", "Open Excel File", None)
         )
         self.openButton.setText(
             QCoreApplication.translate("MainWindow", "Open Output Path", None)
@@ -794,7 +616,10 @@ class UiMainWindow:
     def select_output(self):
         update_status = self.update_status
         folder_path = QFileDialog.getExistingDirectory(
-            self, "Select a directory for output ...", "", QFileDialog.Option.ShowDirsOnly
+            self,
+            "Select a directory for output ...",
+            "",
+            QFileDialog.Option.ShowDirsOnly,
         )
         if folder_path:
             folder_path = os.path.normpath(folder_path)
@@ -812,17 +637,18 @@ class UiMainWindow:
             excel_full_path = os.path.normpath(excel_full_path)
             self.excel_full_path = excel_full_path
             self.store.excel_file = excel_full_path
-            sqlite_full_path = os.path.normpath(f"{folder_path}{os.sep}{self.store.basename}.db")
+            sqlite_full_path = os.path.normpath(
+                f"{folder_path}{os.sep}{self.store.basename}.db"
+            )
             self.store.sqlite_file = sqlite_full_path
             update_status(f"Output File Path: {folder_path}")
             update_status(f"Log file: {self.log_path}")
-            ##self.excelFile.setText(excel_file)
             if self.numOfFiles.toPlainText() != "0":
                 self.processButton.setEnabled(True)
                 self.processButton.setStyleSheet(self.stylesheet)
             self.actionAdd_Files.setVisible(True)
             self.actionAdd_Directory.setVisible(True)
-            self.actionSelectIngest.setVisible(True)
+            self.actionAdd_Ingest.setVisible(True)
             self.generalLogFile.setText(self.store.log_file)
             self.outputPath.setText(folder_path)
             self.openButton.setEnabled(True)
@@ -831,8 +657,10 @@ class UiMainWindow:
             self.addFilesButton.setStyleSheet(self.stylesheet)
             self.addDirectoryButton.setEnabled(True)
             self.addDirectoryButton.setStyleSheet(self.stylesheet)
+            self.addIngestButton.setEnabled(True)
+            self.addIngestButton.setStyleSheet(self.stylesheet)
 
-    def select_ingest(self):
+    def add_ingest(self):
         update_status = self.update_status
         all_files = []
         exists = []
@@ -844,7 +672,7 @@ class UiMainWindow:
             "txt Files (*.txt)",
         )
         if file:
-            with open(file, 'r', encoding='utf-8-sig') as content:
+            with open(file, "r", encoding="utf-8-sig") as content:
                 ingest_data = content.readlines()
                 for line in ingest_data:
                     all_files.append(os.path.normpath(line.strip()))
@@ -857,26 +685,25 @@ class UiMainWindow:
                 self.numOfFiles.setText(str(len(all_files)))
                 self.numRemaining.setText(str(len(all_files)))
                 if no_files:
-                    update_status(f"The following {len(no_files)} file(s) do not exist:", color=red)
+                    update_status(
+                        f"The following {len(no_files)} file(s) do not exist:",
+                        color=red,
+                    )
                     joiner = f"\n{dt.now().strftime(__dtfmt__)} -     "
                     update_status("    " + joiner.join(no_files), color=red)
                 if len(all_files) > 1:
-                    update_status(f"The following {len(all_files)} files have been loaded:")
+                    update_status(
+                        f"The following {len(all_files)} files have been loaded:"
+                    )
                 else:
-                    update_status(f"The following {len(all_files)} file has been loaded:")
+                    update_status(
+                        f"The following {len(all_files)} file has been loaded:"
+                    )
                 joiner = f"\n{dt.now().strftime(__dtfmt__)} -     "
                 update_status("    " + joiner.join(all_files))
-                self.addFilesButton.setEnabled(False)
-                self.addFilesButton.setStyleSheet(self.disabled)
-                self.addDirectoryButton.setEnabled(False)
-                self.addDirectoryButton.setStyleSheet(self.disabled)
-                if self.excelCheck.isChecked() or self.sqliteButton.isChecked():
-                    self.processButton.setEnabled(True)
-                    self.processButton.setStyleSheet(self.stylesheet)
-                    self.files = all_files
-                    self.can_process = True
-                else:
-                    self.can_process = False
+                self.files = all_files
+                self.can_process = True
+                self.toggle_process()
 
     def add_directory(self):
         update_status = self.update_status
@@ -917,13 +744,9 @@ class UiMainWindow:
                     update_status(f"The following {len(files)} file has been loaded:")
                 joiner = f"\n{dt.now().strftime(__dtfmt__)} -     "
                 update_status("    " + joiner.join(files))
-                if self.excelCheck.isChecked() or self.sqliteButton.isChecked():
-                    self.processButton.setEnabled(True)
-                    self.processButton.setStyleSheet(self.stylesheet)
-                    self.files = files
-                    self.can_process = True
-                else:
-                    self.can_process = False
+                self.files = files
+                self.can_process = True
+                self.toggle_process()
             else:
                 update_status("No files found. Please check your path and try again.")
 
@@ -947,51 +770,9 @@ class UiMainWindow:
                 update_status(f"The following {len(all_files)} file has been loaded:")
             joiner = f"\n{dt.now().strftime(__dtfmt__)} -     "
             update_status("    " + joiner.join(all_files))
-            if self.excelCheck.isChecked() or self.sqliteButton.isChecked():
-                self.processButton.setEnabled(True)
-                self.processButton.setStyleSheet(self.stylesheet)
-                self.files = all_files
-                self.can_process = True
-            else:
-                self.can_process = False
-
-    def open_excel(self):
-        excel_full_path, _ = QFileDialog.getSaveFileName(
-            self, "Select an Excel document ...", "", "Excel Files (*.xlsx)"
-        )
-        if excel_full_path:
-            self.excel_path = os.path.normpath(os.path.dirname(excel_full_path))
-            self.log_path = os.path.normpath(
-                f"{self.excel_path}{os.sep}{self.store.log_file}"
-            )
-            self.log_handler = logging.FileHandler(self.log_path, "w", "utf-8")
-            self.log_handler.setFormatter(self.log_fmt)
-            self.logger.addHandler(self.log_handler)
-            update_status = self.update_status
-            update_status(f"{__appname__}")
-            if not excel_full_path.endswith(".xlsx"):
-                excel_full_path += ".xlsx"
-            excel_full_path = os.path.normpath(excel_full_path)
-            self.excel_full_path = excel_full_path
-            self.store.excel_file = excel_full_path
-            excel_file = os.path.basename(excel_full_path)
-            update_status(f"Output File Path: {self.excel_path}")
-            update_status(f"Excel output file: {excel_file}")
-            update_status(f"Log file: {self.log_path}")
-            ##self.excelFile.setText(excel_file)
-            if self.numOfFiles.toPlainText() != "0":
-                self.processButton.setEnabled(True)
-                self.processButton.setStyleSheet(self.stylesheet)
-            self.actionAdd_Files.setVisible(True)
-            self.actionAdd_Directory.setVisible(True)
-            self.generalLogFile.setText(self.store.log_file)
-            self.outputPath.setText(self.excel_path)
-            self.openButton.setEnabled(True)
-            self.openButton.setStyleSheet(self.stylesheet)
-            self.addFilesButton.setEnabled(True)
-            self.addFilesButton.setStyleSheet(self.stylesheet)
-            self.addDirectoryButton.setEnabled(True)
-            self.addDirectoryButton.setStyleSheet(self.stylesheet)
+            self.files = all_files
+            self.can_process = True
+            self.toggle_process()
 
     def open_path(self):
         out_path = self.outputPath.toPlainText().strip()
@@ -1015,7 +796,9 @@ class UiMainWindow:
             self.update_status(f"Unable to open {file}: {e}", level="error")
 
     def toggle_process(self):
-        if (self.excelCheck.isChecked() or self.sqliteButton.isChecked()) and self.can_process:
+        if (
+            self.excelCheck.isChecked() or self.sqliteButton.isChecked()
+        ) and self.can_process:
             self.processButton.setEnabled(True)
             self.processButton.setStyleSheet(self.stylesheet)
         else:
@@ -1024,7 +807,6 @@ class UiMainWindow:
 
     def _reset(self):
         self.store.reset_vars()
-        ##self.excelFile.setText(self.excelFileText)
         self.can_process = False
         self.generalLogFile.setText(self.store.log_file)
         self.outputPath.clear()
@@ -1037,18 +819,18 @@ class UiMainWindow:
         self.processButton.setStyleSheet(self.disabled)
         self.openLogButton.setEnabled(False)
         self.openLogButton.setStyleSheet(self.disabled)
-        self.openExcelButton.setEnabled(False)
-        self.openExcelButton.setStyleSheet(self.disabled)
         self.openButton.setEnabled(False)
         self.openButton.setStyleSheet(self.disabled)
         self.actionAdd_Files.setVisible(False)
         self.actionAdd_Directory.setVisible(False)
-        self.actionSelectIngest.setVisible(False)
+        self.actionAdd_Ingest.setVisible(False)
         self.triageButton.setChecked(True)
         self.addFilesButton.setEnabled(False)
         self.addFilesButton.setStyleSheet(self.disabled)
         self.addDirectoryButton.setEnabled(False)
         self.addDirectoryButton.setStyleSheet(self.disabled)
+        self.addIngestButton.setEnabled(False)
+        self.addIngestButton.setStyleSheet(self.disabled)
         self.hashFiles.setChecked(False)
         self.sqliteButton.setChecked(False)
         self.timelineButton.setChecked(False)
@@ -1135,13 +917,13 @@ class UiMainWindow:
                 update_status("Attempting to write current results to Excel")
                 try:
                     if self.store.excel:
-                        write_to_excel(self.excel_full_path, triage_files, store=self.store)
+                        write_to_excel(
+                            self.store.excel_file,
+                            self.store.triage_files,
+                            store=self.store,
+                        )
                     if self.store.sqlite:
-                        status = write_to_sqlite(self.store)
-                        if status:
-                            update_status(f'All data written to "{self.store.db_file}".')
-                        else:
-                            update_status(f'SQLite database could not be written to "{self.store.db_file}".')                    
+                        write_to_sqlite(self.store)
                     if docxErrorCount > 0:
                         clr = red
                     else:
@@ -1169,9 +951,6 @@ class UiMainWindow:
                     update_status(f"Total processing time: {run_time}", color=green)
                     self.openLogButton.setEnabled(True)
                     self.openLogButton.setStyleSheet(self.stylesheet)
-                    if self.store.excel:
-                        self.openExcelButton.setStyleSheet(self.stylesheet)
-                        self.openExcelButton.setEnabled(True)
                 except Exception as e:
                     update_status(f"Unable to write results to Excel: {e}")
                 return
@@ -1194,13 +973,11 @@ class UiMainWindow:
                 remaining -= 1
             self.numRemaining.setText(str(remaining))
         if self.store.excel:
-            write_to_excel(self.excel_full_path, triage_files, store=self.store)
+            write_to_excel(
+                self.store.excel_file, self.store.triage_files, store=self.store
+            )
         if self.store.sqlite:
-            status = write_to_sqlite(self.store)
-            if status:
-                update_status(f'All data written to "{self.store.db_file}".')
-            else:
-                update_status(f'SQLite database could not be written to "{self.store.db_file}".')        
+            write_to_sqlite(self.store)
         update_status(f'{"="*24}')
         if docxErrorCount > 0:
             clr = red
@@ -1225,16 +1002,12 @@ class UiMainWindow:
             )
         )
         update_status(f"Total processing time: {run_time}", color=green)
-        
         self.resetButton.setEnabled(True)
         self.resetButton.setStyleSheet(self.stylesheet)
         self.stopButton.setEnabled(False)
         self.stopButton.setStyleSheet(self.disabled)
         self.openLogButton.setEnabled(True)
         self.openLogButton.setStyleSheet(self.stylesheet)
-        if self.store.excel:
-            self.openExcelButton.setStyleSheet(self.stylesheet)
-            self.openExcelButton.setEnabled(True)
         reset_vars(self.store)
 
 
@@ -1355,869 +1128,6 @@ class MsWordGui(QMainWindow, UiMainWindow):
         )
         self.setWindowIcon(dialog_icon)
         self.setupUi(self)
-
-
-class Docx:
-    """
-    Accepts a docx file. Has the following methods to extract data from core.xml, app.xml, document.xml
-
-    app_version, application, category, characters, characters_with_spaces, company, content_status, created, creator,
-    description, filename, keywords, last_modified_by, last_printed, lines, manager, modified, pages, paragraph_tags,
-    paragraphs, revision, runs_tags, security, subject, template, text_tags, title, total_editing_time, words,
-    xml_files, xml_hash, xml_size
-    """
-
-    def __init__(
-        self, msword_file, triage=False, hashing=True, store: DataStore = None
-    ):
-        """
-        .docx file to pass to the class
-        Triage value can be True or False. If True, will parse less info to execute faster.
-        When set to False, it does not try to parse RSID values from document.xml.
-        If triage value not passed, it defaults to False and does full parsing.
-        The script using this class still ultimately decides what methods it wants to use.
-        But if in triage mode, some of the variables will not get assigned any value, thus
-        will affect any methods that rely on those variables having a value assigned to them.
-        """
-        if store is None:
-            store = DataStore()
-        self.store = store
-        if store.ms_word_gui:
-            update_status = store.ms_word_gui.update_status
-        else:
-            update_status = lambda msg, **kwargs: update_cli(msg, store=store, **kwargs)
-        self.update_status = update_status
-        self.item_files = []
-        self.ink_files = []
-        self.xml_files = {}
-        self.namespaces = {
-            "a": "http://schemas.openxmlformats.org/drawingml/2006/main",
-            "aink": "http://schemas.microsoft.com/office/drawing/2016/ink",
-            "b": "http://schemas.openxmlformats.org/officeDocument/2006/bibliography",
-            "ct": "http://schemas.microsoft.com/office/2006/metadata/contentType",
-            "cp": "http://schemas.openxmlformats.org/package/2006/metadata/core-properties",
-            "cprop": "http://schemas.openxmlformats.org/officeDocument/2006/custom-properties",
-            "cr": "http://schemas.microsoft.com/office/comments/2020/reactions",
-            "cx": "http://schemas.microsoft.com/office/drawing/2014/chartex",
-            "dc": "http://purl.org/dc/elements/1.1/",
-            "dcterms": "http://purl.org/dc/terms/",
-            "dcmitype": "http://purl.org/dc/dcmitype/",
-            "default": "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties",
-            "ds": "http://schemas.openxmlformats.org/officeDocument/2006/customXml",
-            "inkml": "http://www.w3.org/2003/InkML",
-            "m": "http://schemas.openxmlformats.org/officeDocument/2006/math",
-            "ma": "http://schemas.microsoft.com/office/2006/metadata/properties/metaAttributes",
-            "mc": "http://schemas.openxmlformats.org/markup-compatibility/2006",
-            "o": "urn:schemas-microsoft-com:office:office",
-            "oel": "http://schemas.microsoft.com/office/2019/extlst",
-            "p": "http://schemas.microsoft.com/office/2006/metadata/properties",
-            "pc": "http://schemas.microsoft.com/office/infopath/2007/PartnerControls",
-            "pic": "http://schemas.openxmlformats.org/drawingml/2006/picture",
-            "r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
-            "sc": "Microsoft.SharePoint.Taxonomy.ContentTypeSync",
-            "sp": "http://schemas.microsoft.com/sharepoint/v3",
-            "v": "urn:schemas-microsoft-com:vml",
-            "vt": "http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes",
-            "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
-            "w14": "http://schemas.microsoft.com/office/word/2010/wordml",
-            "w15": "http://schemas.microsoft.com/office/word/2012/wordml",
-            "w16": "http://schemas.microsoft.com/office/word/2018/wordml",
-            "w16cex": "http://schemas.microsoft.com/office/word/2018/wordml/cex",
-            "w16cid": "http://schemas.microsoft.com/office/word/2016/wordml/cid",
-            "w16du": "http://schemas.microsoft.com/office/word/2023/wordml/word16du",
-            "w16sdtdh": "http://schemas.microsoft.com/office/word/2020/wordml/sdtdatahash",
-            "wne": "http://schemas.microsoft.com/office/word/2006/wordml",
-            "wp": "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing",
-            "wpc": "http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas",
-            "wpg": "http://schemas.microsoft.com/office/word/2010/wordprocessingGroup",
-            "wpi": "http://schemas.microsoft.com/office/word/2010/wordprocessingInk",
-            "wps": "http://schemas.microsoft.com/office/word/2010/wordprocessingShape",
-            "wp14": "http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing",
-            "xs": "http://www.w3.org/2001/XMLSchema",
-            "xsd": "http://www.w3.org/2001/XMLSchema",
-            "xsi": "http://www.w3.org/2001/XMLSchema-instance",
-        }
-        self.has_ink = False
-        self.has_comments = False
-        self.msword_file = msword_file
-        self.hashing = hashing
-        self.header_offsets, self.binary_content = self.__find_binary_string()
-        self.extra_fields = self.__xml_extra_bytes()
-        self.__load_all_xml()
-        self.rsidRs = self.__extract_all_rsids_from_settings_xml()
-        self.ns_lookup = {
-            "title": [self.core_xml_content, "dc"],
-            "subject": [self.core_xml_content, "dc"],
-            "creator": [self.core_xml_content, "dc"],
-            "keywords": [self.core_xml_content, "cp"],
-            "description": [self.core_xml_content, "dc"],
-            "revision": [self.core_xml_content, "cp"],
-            "created": [self.core_xml_content, "dcterms"],
-            "modified": [self.core_xml_content, "dcterms"],
-            "lastModifiedBy": [self.core_xml_content, "cp"],
-            "lastPrinted": [self.core_xml_content, "cp"],
-            "category": [self.core_xml_content, "cp"],
-            "contentStatus": [self.core_xml_content, "cp"],
-            "language": [self.core_xml_content, "dc"],
-            "version": [self.core_xml_content, "cp"],
-            "Template": [self.app_xml_content, "default"],
-            "TotalTime": [self.app_xml_content, "default"],
-            "Pages": [self.app_xml_content, "default"],
-            "Words": [self.app_xml_content, "default"],
-            "Characters": [self.app_xml_content, "default"],
-            "Application": [self.app_xml_content, "default"],
-            "DocSecurity": [self.app_xml_content, "default"],
-            "Lines": [self.app_xml_content, "default"],
-            "Paragraphs": [self.app_xml_content, "default"],
-            "CharactersWithSpaces": [self.app_xml_content, "default"],
-            "AppVersion": [self.app_xml_content, "default"],
-            "Manager": [self.app_xml_content, "default"],
-            "Company": [self.app_xml_content, "default"],
-            "SharedDoc": [self.app_xml_content, "default"],
-            "HyperlinksChanged": [self.app_xml_content, "default"],
-        }
-        x = ET.fromstring(self.document_xml_content)
-        self.p_tags = x.findall(".//w:p", self.namespaces)
-        self.r_tags = x.findall(".//w:r", self.namespaces)
-        self.t_tags = x.findall(".//w:t", self.namespaces)
-        self.tr_tags = x.findall(".//w:tr", self.namespaces)
-        self.shapedata = x.findall(".//v:shape", self.namespaces)
-        self.drawing_tags = x.findall(".//w:drawing", self.namespaces)
-        if self.drawing_tags or self.ink_files:
-            self.has_ink = True
-        if not triage:  # if not run in triage mode, do full parsing
-            self.rsidR_in_document_xml = self.__rsids_in_document_xml("rsidR")
-            self.rsidRPr = self.__rsids_in_document_xml("rsidRPr")
-            self.rsidP = self.__rsids_in_document_xml("rsidP")
-            self.rsidRDefault = self.__rsids_in_document_xml("rsidRDefault")
-            self.rsidTr = self.__rsids_in_document_xml("rsidTr")
-            self.para_id = self.__rsids_in_document_xml("paraId")
-            self.text_id = self.__rsids_in_document_xml("textId")
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.core_xml_content = None
-        self.app_xml_content = None
-        self.document_xml_content = None
-        self.comments_xml_content = None
-        self.settings_xml_content = None
-        self.people_xml_content = None
-        self.extensible_xml_content = None
-        self.extended_xml_content = None
-        self.comments_ids_content = None
-        self.custom_xml_content = None
-
-    def __find_binary_string(self):
-
-        pkzip_header = b"PK\x03\x04"
-        with open(self.msword_file, "rb") as msword_binary:  # read the file as binary
-            content = msword_binary.read()
-        matches = []  # list of offsets where header is found
-        index = 0
-
-        while index < len(content):  # iterate over the list
-            index = content.find(pkzip_header, index)  # search for
-            if index == -1:  # no more items in the list.
-                break
-            matches.append(index)
-            index += 1
-
-        return (
-            matches,
-            content,
-        )  # returns the list of offsets of each header, and the binary file.
-
-    def __xml_extra_bytes(self):
-        """
-        ref: https://en.wikipedia.org/wiki/ZIP_(file_format)#Local_file_header
-
-        return: list [xml file name, # of bytes in extra field, truncated bytes]
-        """
-        filename = ""
-        extras = {}
-        truncate_extra_field = 20  # extra field can be several hundred bytes, mostly 0x00. This grabs the first 20.
-
-        for offset in self.header_offsets:
-            (
-                filename_len,
-                extrafield_len,
-            ) = struct.unpack("<2H", self.binary_content[offset + 26 : offset + 30])
-            filename_start = offset + 30
-            filename_end = offset + 30 + filename_len
-            if filename_end - filename_start < 256:
-                # some DOCx files somehow produce false positives of
-                # excessively long filenames and results in an error. This avoids that error.
-                filename = self.binary_content[filename_start:filename_end].decode(
-                    "ascii"
-                )
-            extrafield_start = filename_end
-            extrafield_end = extrafield_start + extrafield_len
-            extrafield = self.binary_content[extrafield_start:extrafield_end]
-            extrafield_hex_as_text = []
-
-            for h in extrafield:
-                extrafield_hex_as_text.append(f"{h:02x}")
-
-            if not extrafield:
-                extras[filename] = [extrafield_len, "nil"]
-            elif (
-                extrafield_len <= truncate_extra_field
-            ):  # field size larger than truncate value
-                extras[filename] = [
-                    extrafield_len,
-                    f"0x{''.join(extrafield_hex_as_text)}",
-                ]
-            else:
-                extras[filename] = [
-                    extrafield_len,
-                    f"0x{''.join(extrafield_hex_as_text[0:truncate_extra_field])}",
-                ]  # adds only
-                # the select # of characters as specified in the variable truncate_extra_field. This is so that
-                # we don't end up with hundreds of characters in a cell in Excel, as some extra fields can be
-                # several hundred values long. But so far, most are 0x00, with only the first few being values other
-                # than hex 0x00.
-
-        return extras
-
-    def __load_xml(self, xml_file):
-        content = ""
-        if (
-            xml_file in self.get_xml_files()
-        ):  # if the file exists, read it and return its content
-            if "comments.xml" in xml_file:
-                self.has_comments = True
-            with zipfile.ZipFile(self.msword_file, "r") as zipref:
-                with zipref.open(xml_file) as xmlFile:
-                    content = xmlFile.read()
-        return content
-
-    def __load_all_xml(self):
-        xml_files = {}
-        blank = {
-        "MD5": None,
-        "Modified Time": None,
-        "File Size": None,
-        "Zip Compression": None,
-        "Zip Create System": None,
-        "Zip Create Version": None,
-        "Zip Extract Version": None,
-        "Zip Flag Bits": None,
-        "Zip Extra Fields 1": None,
-        "Zip Extra Fields 2": None,
-        }
-        xml_map = {
-            "core_xml_content": "docProps/core.xml",
-            "app_xml_content": "docProps/app.xml",
-            "document_xml_content": "word/document.xml",
-            "comments_xml_content": "word/comments.xml",
-            "settings_xml_content": "word/settings.xml",
-            "people_xml_content": "word/people.xml",
-            "extensible_xml_content": "word/commentsExtensible.xml",
-            "extended_xml_content": "word/commentsExtended.xml",
-            "comments_ids_content": "word/commentsIds.xml",
-            "custom_xml_content": "docProps/custom.xml",
-        }
-        
-        modified_time = None
-        compression_types = {0: "Store (None)", 8: "DEFLATE"}
-        try:
-            with zipfile.ZipFile(self.msword_file, "r") as zipref:
-                zip_filenames = zipref.namelist()
-                zip_info = zipref.infolist()
-                for xml in zip_info:
-                    md5hash = None
-                    xml_name = xml.filename
-                    if xml_name not in self.extra_fields:
-                        xml_name = xml_name.replace("/", "\\")
-                    xml_files[xml_name] = blank.copy()
-                    if (
-                        "customXml/item" in xml_name
-                        and "Props" not in xml_name
-                        and xml_name not in self.item_files
-                    ):
-                        self.item_files.append(xml_name)
-                    if (
-                        "ink/ink" in xml_name
-                        and xml_name not in self.ink_files
-                    ):
-                        self.ink_files.append(xml_name)
-                    if self.hashing:
-                        with zipref.open(xml_name) as xml_file:
-                            content = xml_file.read()
-                            md5hash = self.hash(content)
-                    m_time = xml.date_time
-                    if m_time not in ((1980, 1, 1, 0, 0, 0), (1980, 0, 0, 0, 0, 0)):
-                        modified_time = dt(*m_time).strftime(__dtfmt__)
-                    xml_files[xml_name]["MD5"] = md5hash
-                    xml_files[xml_name]["Modified Time"] = modified_time
-                    xml_files[xml_name]["File Size"] = xml.file_size
-                    xml_files[xml_name]["Zip Compression"] = f'{str(xml.compress_type)}: {compression_types.get(xml.compress_type, "Unidentified")}'
-                    xml_files[xml_name]["Zip Create System"] = xml.create_system
-                    xml_files[xml_name]["Zip Create Version"] = xml.create_version
-                    xml_files[xml_name]["Zip Extract Version"] = xml.extract_version
-                    xml_files[xml_name]["Zip Flag Bits"] = f"{xml.flag_bits:#0{6}x}"
-                    xml_files[xml_name]["Zip Extra Fields Length"] = self.extra_fields[xml_name][0]
-                    xml_files[xml_name]["Zip Extra Fields Bytes"] = self.extra_fields[xml_name][1]
-                for attrib, file_path in xml_map.items():
-                    alt_path = file_path.replace("/", "\\")
-                    target = file_path if file_path in zip_filenames else alt_path
-                    if target in zip_filenames:
-                        if "comments.xml" in target:
-                            self.has_comments = True
-                        content = zipref.read(target)
-                        setattr(self, attrib, content)
-                    else:
-                        setattr(self, attrib, "")
-                #for file_info in zip_info:
-            self.xml_files = xml_files
-        except (zipfile.BadZipFile, FileNotFoundError) as e:
-            raise Exception(f"Error accessing {self.msword_file}: {e}") from e
-        return self.xml_files
-
-
-    def get_metadata(self, attrib):
-        """
-        :param: xmlcontent (self.core_xml_content or self.app_xml_content)
-        :param: attrib (the attribute in the content to get)
-        :return:
-        """
-        xmlcontent = self.ns_lookup[attrib][0]
-        ns = self.namespaces[self.ns_lookup[attrib][1]]
-        if xmlcontent:
-            content = ET.fromstring(xmlcontent)
-            ns_extract = content.find(f"{{{ns}}}{attrib}")
-            meta_content = ns_extract.text if ns_extract is not None else None
-        else:
-            return None
-        return meta_content
-
-    def get_people(self):
-        if self.people_xml_content != "":
-            xml = ET.fromstring(self.people_xml_content)
-            list_of_people = []
-            all_people = xml.findall(".//w15:person", self.namespaces)
-            for person in all_people:
-                author = person.get(f"{{{self.namespaces['w15']}}}author")
-                if len(person) > 0:
-                    providerId = person[0].get(
-                        f"{{{self.namespaces['w15']}}}providerId"
-                    )
-                    userId = person[0].get(f"{{{self.namespaces['w15']}}}userId")
-                else:
-                    providerId = userId = None
-                list_of_people.append([author, providerId, userId])
-            return list_of_people
-        return None
-
-    def any_comments(self):
-        return self.has_comments
-
-    def get_comments(self):
-        """
-        return the list all_comments that contains the following:
-            Comment ID,
-            Timestamp,
-            Author,
-            Initials,
-            Text
-        :return:
-        """
-
-        if not self.has_comments:
-            return [None, None, None, None, None]
-        xml = ET.fromstring(self.comments_xml_content)
-        # Find all comments
-        comments = xml.findall(".//w:comment", self.namespaces)
-        all_comments = []
-        for comment in comments:
-            author = comment.get(f"{{{self.namespaces['w']}}}author")
-            date_time = comment.get(f"{{{self.namespaces['w']}}}date")
-            initials = comment.get(f"{{{self.namespaces['w']}}}initials")
-            comment_id = comment.get(f"{{{self.namespaces['w']}}}id")
-            comment_paras = comment.findall(".//w:p", self.namespaces)
-            text = (
-                "\n".join(
-                    [
-                        t.text
-                        for t in comment.findall(".//w:t", self.namespaces)
-                        if t.text
-                    ]
-                )
-                .encode("utf-8", "surrogatepass")
-                .decode()
-            )
-            if len(comment_paras) > 0:
-                comment_paraId = comment_paras[-1].get(
-                    f"{{{self.namespaces['w14']}}}paraId"
-                )
-            else:
-                comment_paraId = None
-            all_comments.append(
-                [comment_id, comment_paraId, date_time, author, initials, text]
-            )
-        return all_comments
-
-    def get_comments_ids(self):
-        if self.comments_ids_content != "":
-            all_comments_ids = []
-            xml = ET.fromstring(self.comments_ids_content)
-            comments_ids = xml.findall(".//w16cid:commentId", self.namespaces)
-            for comment_id in comments_ids:
-                paraId = comment_id.get(f"{{{self.namespaces['w16cid']}}}paraId", "")
-                durableId = comment_id.get(
-                    f"{{{self.namespaces['w16cid']}}}durableId", ""
-                )
-                all_comments_ids.append([paraId, durableId])
-            return all_comments_ids
-        return None
-
-    def get_extended_comments(self):
-        if self.extended_xml_content != "":
-            all_extended_comments = []
-            xml = ET.fromstring(self.extended_xml_content)
-            extended_comments = xml.findall(".//w15:commentEx", self.namespaces)
-            for values in extended_comments:
-                paraId = values.get(f"{{{self.namespaces['w15']}}}paraId")
-                done = values.get(f"{{{self.namespaces['w15']}}}done")
-                paraIdParent = values.get(
-                    f"{{{self.namespaces['w15']}}}paraIdParent", "IS_PARENT"
-                )
-                all_extended_comments.append([paraId, paraIdParent, done])
-            return all_extended_comments
-        return None
-
-    def get_extensible_comments(self):
-        if self.extensible_xml_content != "":
-            all_extensible_comments = {}
-            xml = ET.fromstring(self.extensible_xml_content)
-            extensible_comments = xml.findall(
-                ".//w16cex:commentExtensible", self.namespaces
-            )
-            reaction_types = {0: "Unknown", 1: "Like", 2: "Unknown"}
-            for values in extensible_comments:
-                uri = "None"
-                reactionType = "None"
-                userId = userProvider = userName = ""
-                durableId = values.get(f"{{{self.namespaces['w16cex']}}}durableId")
-                dateUtc = values.get(f"{{{self.namespaces['w16cex']}}}dateUtc")
-                extLst = values.findall(".//w16cex:extLst", self.namespaces)
-                all_extensible_comments[durableId] = []
-                all_extensible_comments[durableId].append(dateUtc)
-                if extLst:
-                    ext = extLst[0].find("w16:ext", self.namespaces)
-                    uri = ext.get(f"{{{self.namespaces['w16']}}}uri")
-                    all_extensible_comments[durableId].append(uri)
-                    for entry in ext.findall(".//cr:reaction", self.namespaces):
-                        reactionType = entry.get("reactionType", "")
-                        all_extensible_comments[durableId].append(
-                            reaction_types[int(reactionType)]
-                        )
-                        for reactionInfo in entry.findall(
-                            ".//cr:reactionInfo", self.namespaces
-                        ):
-                            reactionDateUtc = reactionInfo.get("dateUtc", "")
-                            user = reactionInfo.find("cr:user", self.namespaces)
-                            if user is not None:
-                                userId = user.get("userId", "")
-                                userProvider = user.get("userProvider", "")
-                                userName = user.get("userName", "")
-                            all_extensible_comments[durableId].append(
-                                [reactionDateUtc, userId, userProvider, userName]
-                            )
-                else:
-                    all_extensible_comments[durableId].append(uri)
-                    all_extensible_comments[durableId].append(reactionType)
-                    all_extensible_comments[durableId].append(["", "", "", ""])
-            return all_extensible_comments
-        return None
-
-    def __extract_all_rsids_from_settings_xml(self):
-        """
-        function to extract all RSIDs at the beginning of the class.
-        :return:
-        """
-        rsids = []
-        x = ET.fromstring(self.settings_xml_content)
-        rsid_tags = x.findall(".//w:rsid", self.namespaces)
-        for tag in rsid_tags:
-            rsid_tag = tag.get(f"{{{self.namespaces['w']}}}val", None)
-            if rsid_tag:
-                rsids.append(rsid_tag)
-        return "" if not rsids else rsids
-
-    def __rsids_in_document_xml(self, rsid):
-        """
-        :param rsid tag name (e.g. "rsidRPr", "rsidP", "rsidRDefault")
-        The function accepts an rsid tag name as a parameter (e.g. rsidRPr, rsidP, rsidDefault).
-        It searches document.xml for a pattern to find all instances of that rsid tag.
-        It creates a dictionary that contains each unique rsid value as the key, and the count of how many times
-        that rsid is in document.xml.
-        E.g., {"00123456": 4, "00234567": 0, "00345678":11}
-
-        :return: dictionary where the key is unique RSIDs, and the value is a count of the occurrences of that rsid
-        in document.xml
-        """
-        rsids = {}
-        all_rsids = []
-        ns_list = {
-            "rsidR": self.namespaces["w"],
-            "rsidRDefault": self.namespaces["w"],
-            "rsidRPr": self.namespaces["w"],
-            "rsidP": self.namespaces["w"],
-            "rsidTr": self.namespaces["w"],
-            "paraId": self.namespaces["w14"],
-            "textId": self.namespaces["w14"],
-        }
-        for entry in (self.p_tags, self.r_tags, self.t_tags, self.tr_tags):
-            for item in entry:
-                other_rsid = item.get(f"{{{ns_list[rsid]}}}{rsid}", None)
-                if other_rsid:
-                    all_rsids.append(other_rsid)
-        unique_rsids = set(all_rsids)
-        if rsid == "rsidR":
-            for each in self.rsidRs:
-                rsids[each] = all_rsids.count(each)
-        else:
-            for each_rsid in unique_rsids:
-                rsids[each_rsid] = all_rsids.count(each_rsid)
-        return rsids
-
-    def hyperlinks(self):
-        """
-        :return: Hyperlink values in document.xml
-        """
-        doc_hyperlinks = []
-        doc = ET.fromstring(self.document_xml_content)
-        for hyperlink in doc.findall(f".//{{{self.namespaces['w']}}}hyperlink"):
-            link_text = hyperlink.findall(f".//{{{self.namespaces['w']}}}t")
-            hyperlinks = ",".join(link.text for link in link_text if link.text)
-            hyperlinks = hyperlinks.replace("http", "hxxp")
-            rel_id = hyperlink.get(f"{{{self.namespaces['r']}}}id", "")
-            doc_hyperlinks.append([hyperlinks, rel_id])
-        all_hyperlinks = "|".join(f"{url}: {rel}" for url, rel in doc_hyperlinks)
-        return all_hyperlinks
-
-    def filename(self):
-        """
-        :return: the filename of the DOCx file passed to the class
-        """
-        return self.msword_file
-
-    def hash(self, content=None):
-        """
-        Function that will return the hash of the file itself
-        """
-        if self.hashing:  # if hashing option was selected
-            filehash = hashlib.md5()
-            if content is None:
-                filehash.update(self.binary_content)
-            else:
-                filehash.update(content)
-            return filehash.hexdigest().upper()
-        return None  # if no hashing was selected.
-
-    def get_xml_files(self):
-        """
-        :return: A dictionary in the following format:
-        {XML filename: [file hash,
-                        modified date,
-                        file size,
-                        ZIP compression type,
-                        ZIP Create System,
-                        ZIP Created Version,
-                        ZIP Extract Version,
-                        ZIP Flag Bits (hex),
-                        ZIP extra values (hex as text)
-        }
-        """
-        compression_types = {0: "Store (None)", 8: "DEFLATE"}
-        md5hash = None
-        with zipfile.ZipFile(self.msword_file, "r") as zip_file:
-            xml_files = {}
-            for file_info in zip_file.infolist():
-                if (
-                    "customXml/item" in file_info.filename
-                    and "Props" not in file_info.filename
-                    and file_info.filename not in self.item_files
-                ):
-                    self.item_files.append(file_info.filename)
-                if (
-                    "ink/ink" in file_info.filename
-                    and file_info.filename not in self.ink_files
-                ):
-                    self.ink_files.append(file_info.filename)
-                with zipfile.ZipFile(self.msword_file, "r") as zip_ref:
-                    try:
-                        with zip_ref.open(file_info.filename) as xml_file:
-                            if self.hashing:  # if hashing option selected
-                                md5hash = self.hash(xml_file.read())
-                            else:
-                                md5hash = "Option Not Selected"  # else return blank for hash value.
-                    except zipfile.BadZipFile:
-                        pass
-                    except OSError as exc:
-                        raise Exception(
-                            "Error processing the zip file header - likely offset is incorrect."
-                        ) from exc
-                m_time = file_info.date_time
-                if m_time in ((1980, 1, 1, 0, 0, 0), (1980, 0, 0, 0, 0, 0)):
-                    modified_time = None
-                else:
-                    modified_time = dt(*m_time).strftime(__dtfmt__)
-                fname = file_info.filename
-                if fname not in self.extra_fields:
-                    fname = fname.replace("/", "\\")
-                xml_files[file_info.filename] = [
-                    md5hash,
-                    modified_time,
-                    file_info.file_size,
-                    f'{str(file_info.compress_type)}: {compression_types.get(file_info.compress_type, "Unidentified")}',
-                    file_info.create_system,
-                    file_info.create_version,
-                    file_info.extract_version,
-                    f"{file_info.flag_bits:#0{6}x}",
-                    self.extra_fields[fname][0],
-                    self.extra_fields[fname][1],
-                ]
-            return xml_files
-
-    def xml_hash(self, xmlfile: str):
-        """
-        :param: xmlfile
-        :return: the hash of a specified XML file
-        """
-        return self.xml_files[xmlfile]["MD5"]
-
-    def xml_size(self, xmlfile: str):
-        """
-        :param: xmlfile
-        :return: the size of a specified XML file
-        """
-        return self.xml_files[xmlfile]["File Size"]
-
-    def paragraph_tags(self):
-        """
-        :return: the total number of paragraph tags in document.xml
-        """
-        return len(self.p_tags)
-
-    def runs_tags(self):
-        """
-        :return: the total number of runs tags in document.xml
-        """
-        return len(self.r_tags)
-
-    def text_tags(self):
-        """
-        :return: the total number of text tags in document.xml
-        """
-        return len(self.t_tags)
-
-    def table_row_tags(self):
-        """
-        :return: the total number of table row tags in document.xml
-        """
-        return len(self.tr_tags)
-
-    def rsid_root(self):
-        """
-        :return: rsidRoot from settings.xml
-        """
-        x = ET.fromstring(self.settings_xml_content)
-        rsid_root_entry = x.findall(".//w:rsidRoot", self.namespaces)
-        root = None
-        for entry in [rsid_root_entry]:
-            for item in entry:
-                root = item.get(
-                    f"{{{self.namespaces['w']}}}val",
-                    None,
-                )
-        return None if root is None else root
-
-    def get_doc_ids(self):
-        """
-        :return: the w14, w15, and w16 docId's from settings.xml
-        """
-        x = ET.fromstring(self.settings_xml_content)
-        w14_id = w15_id = w16_id = "None"
-        w14_ns = x.find(f"{{{self.namespaces['w14']}}}docId")
-        if w14_ns is not None:
-            w14_id = w14_ns.get(f"{{{self.namespaces['w14']}}}val", "None")
-        w15_ns = x.find(f"{{{self.namespaces['w15']}}}docId")
-        if w15_ns is not None:
-            w15_id = w15_ns.get(f"{{{self.namespaces['w15']}}}val", "None")
-        w16_ns = x.find(f"{{{self.namespaces['w16']}}}docId")
-        if w16_ns is not None:
-            w16_id = w16_ns.get(f"{{{self.namespaces['w16']}}}val", "None")
-
-        return [w14_id, w15_id, w16_id]
-
-    def rsidr(self):
-        """
-        :return: a list containing all the rsidR in settings.xml
-        Not all of these will necessarily still be in the document. If all text from a particular revision/save
-        session is deleted, the associated rsidR will no longer be found in the document. Thus, the absence
-        of an rsidR lets you know that all the data from that editing session has been deleted from the document.
-
-        Because there are no duplicate rsidR values in settings.xml (as long as you don't also grab rsidRoot),
-        there is no need for the method to deduplicate.
-        """
-        return self.rsidRs
-
-    def rsidr_in_document_xml(self):
-        """
-        return dictionary with unique rsidR and count of how many times it is found in document.xml
-        :return:
-        """
-        return self.rsidR_in_document_xml
-
-    def rsidrpr_in_document_xml(self):
-        """
-        return dictionary with unique rsidRPr and count of how many times it is found in document.xml
-        :return:
-        """
-        return self.rsidRPr
-
-    def rsidp_in_document_xml(self):
-        """
-        return dictionary with unique rsidP and count of how many times it is found in document.xml
-        :return:
-        """
-        return self.rsidP
-
-    def rsidrdefault_in_document_xml(self):
-        """
-        return dictionary with unique rsidRDefault and count of how many times it is found in document.xml
-        :return:
-        """
-        return self.rsidRDefault
-
-    def rsidtr_in_document_xml(self):
-        """
-        return dictionary with unique rsidTr and count of how many times it is found in document.xml
-        :return:
-        """
-        return self.rsidTr
-
-    def paragraph_id_tags(self):
-        return self.para_id
-
-    def text_id_tags(self):
-        return self.text_id
-
-    def details(self):
-        """
-        :return: a text string that you can print out to get a summary of the document.
-        This can be edited to suit your needs. You can naturally accomplish the same results by calling each of
-        the methods in your print statement in the main script.
-        """
-        if self.get_metadata("lastPrinted") == "":
-            printed = "Document was never printed"
-        else:
-            printed = f"Printed: {self.get_metadata('lastPrinted')}"
-        return (
-            f"Document: {self.filename()}\n"
-            f"Created by: {self.get_metadata('creator')}\n"
-            f"Created date: {self.get_metadata('created')}\n"
-            f"Last edited by: {self.get_metadata('lastModifiedBy')}\n"
-            f"Edited date: {self.get_metadata('modified')}\n"
-            f"{printed}\n"
-            f"Total pages: {self.get_metadata('Pages')}\n"
-            f"Total editing time: {self.get_metadata('TotalTime')} minute(s)."
-        )
-
-    def get_proof_state(self):
-        xml = ET.fromstring(self.settings_xml_content)
-        proof_state = xml.find(f"{{{self.namespaces['w']}}}proofState")
-        spelling = grammar = "None"
-        if proof_state is not None:
-            spelling = proof_state.get(f"{{{self.namespaces['w']}}}spelling", "None")
-            grammar = proof_state.get(f"{{{self.namespaces['w']}}}grammar", "None")
-
-        return [spelling, grammar]
-
-    def get_custom_xml(self):
-        if self.custom_xml_content:
-            props = {}
-            xml = ET.fromstring(self.custom_xml_content)
-            for cprop in xml.findall(".//cprop:property", self.namespaces):
-                attribs = cprop.attrib
-                for attr_name, attr_val in attribs.items():
-                    props[attr_name] = attr_val
-                for sub_prop in cprop:
-                    tag = (
-                        sub_prop.tag.split("}", 1)[1]
-                        if "}" in sub_prop.tag
-                        else sub_prop.tag
-                    )
-                    value = sub_prop.text
-                    props[tag] = value
-            return props
-        return None
-
-    def get_all_content(self, files):
-        if files:
-            content = {self.msword_file: {}}
-            for file in files:
-                content[self.msword_file][file] = {}
-                xml_content = self.__load_xml(file)
-                if xml_content == "":
-                    continue
-                if b"<?mso-contentType?>" in xml_content:
-                    xml_content = (
-                        xml_content.replace(b"<?mso-contentType?>", b"")
-                    ).decode("utf-8")
-                xml = ET.fromstring(xml_content)
-                for element in xml.iter():
-                    tag = (
-                        element.tag.split("}")[-1]
-                        if "}" in element.tag
-                        else element.tag
-                    )
-                    if tag not in content[self.msword_file][file]:
-                        content[self.msword_file][file][tag] = []
-                    attribs = {}
-                    for name, value in element.attrib.items():
-                        name = name.split("}", 1)[-1] if "}" in name else name
-                        attribs[name] = value
-                    text = (element.text or "").strip()
-                    if text:
-                        attribs["_text"] = text
-                    tail = (element.tail or "").strip()
-                    if tail:
-                        attribs["_tail"] = tail
-                    child_tags = list(element)
-                    if child_tags:
-                        attribs["_children"] = []
-                        for child in child_tags:
-                            attribs["_children"].append(
-                                child.tag.split("}")[-1]
-                                if "}" in child.tag
-                                else child.tag
-                            )
-                    content[self.msword_file][file][tag].append(attribs)
-            return content
-        return None
-
-    def get_ink(self):
-        ts_data = []
-        for ink_file in self.ink_files:
-            load_ink = self.__load_xml(ink_file)
-            xml = ET.fromstring(load_ink)
-            for element in xml.iter():
-                tag = element.tag.split("}")[-1] if "}" in element.tag else element.tag
-                if tag == "timestamp":
-                    (ts_ns, ts_id), (timestring, ts) = element.attrib.items()
-            ts_data.append([ink_file, ts])
-        return ts_data
-
-    def adjust_timestamp(self, ts):
-        if ts:
-            adjusted_timestamp = ts.replace("T", " ").replace("Z", "")
-            return adjusted_timestamp.split(".")[0]
-        return ""
 
 
 def process_docx(filename, triage, hashing, store: DataStore):
@@ -2691,8 +1601,6 @@ def write_to_excel(excel_file, triage_files, store: DataStore):
         update_status = store.ms_word_gui.update_status
     else:
         update_status = lambda msg, **kwargs: update_cli(msg, store=store, **kwargs)
-    store.excel_file = excel_file
-    store.triage_files = triage_files
     options = {
         "engine": "xlsxwriter",
         "mode": "w",
@@ -2879,34 +1787,37 @@ def write_to_excel(excel_file, triage_files, store: DataStore):
             update_status('"Visual Timeline" written.')
         write_tips(writer)
         update_status('"Tips" worksheet written.')
+        update_status(f"All Excel data written to {store.excel_file}")
 
 
 def write_to_sqlite(store):
     if store.ms_word_gui:
         update_status = store.ms_word_gui.update_status
     else:
-        update_status = lambda msg, **kwargs: update_cli(msg, store=store, **kwargs)    
+        update_status = lambda msg, **kwargs: update_cli(msg, store=store, **kwargs)
     sql_type_map = {
-        re.sub(r'[^a-z0-9]', '_', k.lower()
-               .replace('<', '')
-               .replace('>', '')
-               .replace('(', '')
-               .replace(')', '')
-               .replace(',', '')): store.sqlite_types.get(v, "TEXT") 
+        re.sub(
+            r"[^a-z0-9]",
+            "_",
+            k.lower()
+            .replace("<", "")
+            .replace(">", "")
+            .replace("(", "")
+            .replace(")", "")
+            .replace(",", ""),
+        ): store.sqlite_types.get(v, "TEXT")
         for k, v in store.type_map.items()
-    }    
-    status = False
-    excel_parent = os.path.dirname(store.excel_file)
-    excel_name = os.path.splitext(os.path.basename(store.excel_file))[0]
-    store.db_file = os.path.normpath(f"{excel_parent}{os.sep}{excel_name}.db")
-    if os.path.exists(store.db_file):
+    }
+    if os.path.exists(store.sqlite_file):
         try:
-            os.remove(store.db_file)
+            os.remove(store.sqlite_file)
         except:
-            update_status(f'Unable to remove "{store.db_file}".')
-            store.db_file = os.path.normpath(f"{excel_parent}{os.sep}{excel_name}_{store.timestamp}.db")
-    update_status(f'Writing results to "{store.db_file}".')
-    conn = sqlite3.connect(store.db_file)
+            update_status(f'Unable to remove "{store.sqlite_file}".')
+            store.sqlite_file = os.path.normpath(
+                f"{store.output_path}{os.sep}{store.basename}_2.db"
+            )
+    update_status(f'Writing results to SQLite database "{store.sqlite_file}".')
+    conn = sqlite3.connect(store.sqlite_file)
     triage_sheets = [
         (store.doc_summary_worksheet, "Document Summary", "summary"),
         (store.metadata_worksheet, "Metadata", "metadata"),
@@ -2925,7 +1836,7 @@ def write_to_sqlite(store):
             (store.ink_worksheet, "Ink XML Files", "ink"),
             (store.errors_worksheet, "Errors", "errors"),
         ]
-    for sheet, sheet_name, layout in triage_sheets:
+    for sheet, sheet_name, _ in triage_sheets:
         if sheet:
             cols = ["id INTEGER PRIMARY KEY AUTOINCREMENT"]
             new_sheet, new_name = restructure_sheet(sheet, sheet_name)
@@ -2938,11 +1849,11 @@ def write_to_sqlite(store):
             pk_stmt = f"CREATE TABLE IF NOT EXISTS {new_name} (\n    {all_cols}\n);"
             cursor = conn.cursor()
             cursor.execute(pk_stmt)
-            df.to_sql(new_name, conn, if_exists='append', index=False)
+            df.to_sql(new_name, conn, if_exists="append", index=False)
             del new_sheet
             del sheet
     if not store.triage_files:
-        for sheet, sheet_name, layout in full_sheets:
+        for sheet, sheet_name, _ in full_sheets:
             if sheet:
                 cols = ["id INTEGER PRIMARY KEY AUTOINCREMENT"]
                 new_sheet, new_name = restructure_sheet(sheet, sheet_name)
@@ -2954,8 +1865,8 @@ def write_to_sqlite(store):
                 all_cols = ",\n    ".join(cols)
                 pk_stmt = f"CREATE TABLE IF NOT EXISTS {new_name} (\n    {all_cols}\n);"
                 cursor = conn.cursor()
-                cursor.execute(pk_stmt)                
-                df.to_sql(new_name, conn, if_exists='append', index=False)
+                cursor.execute(pk_stmt)
+                df.to_sql(new_name, conn, if_exists="append", index=False)
                 del new_sheet
                 del sheet
     if all(
@@ -3002,8 +1913,9 @@ def write_to_sqlite(store):
             store.rsids_worksheet,
             store.archive_files_worksheet,
             store.ink_worksheet,
-        ]):
-            timeline_view_stmt = """
+        ]
+    ):
+        timeline_view_stmt = """
             CREATE VIEW "Timeline View" AS
             SELECT file_name AS "File Name", created_date AS "Timestamp", 'created' AS "Type", NULL AS "Value", 'Metadata' AS "Source"
             FROM metadata WHERE timestamp IS NOT NULL AND timestamp != ''
@@ -3036,19 +1948,32 @@ def write_to_sqlite(store):
             FROM ink_xml_files WHERE timestamp_utc IS NOT NULL AND timestamp_utc != ''
             ORDER BY "Timestamp" ASC;
             """
-            conn.execute(timeline_view_stmt)
+        conn.execute(timeline_view_stmt)
     try:
         conn.close()
-        status = True
+        update_status(f'All SQLite data written to "{store.sqlite_file}".')
     except:
-        pass
-    return status
+        update_status(f'SQLite database could not be written to "{store.sqlite_file}".')
+
 
 def restructure_sheet(sheet, sheet_name):
     if sheet:
-        new_sheet = {re.sub(r'[^a-z0-9]', '_', k.lower().replace('<', '').replace('>', '').replace('(','').replace(')','').replace(',','')): v for k, v in sheet.items()}
-        new_name = sheet_name.lower().replace(' ','_')
+        new_sheet = {
+            re.sub(
+                r"[^a-z0-9]",
+                "_",
+                k.lower()
+                .replace("<", "")
+                .replace(">", "")
+                .replace("(", "")
+                .replace(")", "")
+                .replace(",", ""),
+            ): v
+            for k, v in sheet.items()
+        }
+        new_name = sheet_name.lower().replace(" ", "_")
         return new_sheet, new_name
+
 
 def write_tips(writer):
     workbook = writer.book
@@ -3255,10 +2180,10 @@ def generate_visual_timeline(writer, sheet):
             "date_axis": True,
             "min": min_date,
             "max": max_date,
-            #"major_unit": 120,
+            # "major_unit": 120,
             "major_unit": major_unit_days,
             "major_unit_type": "days",
-            #"minor_unit": 30,
+            # "minor_unit": 30,
             "minor_unit": max(1, major_unit_days // 4),
             "minor_unit_type": "days",
             "num_format": "yyyy-mm-dd",
@@ -3307,13 +2232,16 @@ def update_cli(msg, level="info", color=__clr__, store: DataStore = None):
     store.logger.log(log_level, msg)
 
 
-def process_cli(files, triage_files, hash_files, excel_file, store: DataStore):
+def process_cli(files, triage_files, hash_files, store: DataStore):
     docxErrorCount = 0
     store.start_time = dt.now().strftime(__dtfmt__)
     update_cli(f"{__appname__}", store=store)
     update_cli(f"Command line: {' '.join(sys.argv)}", store=store)
-    update_cli(f"Output File Path: {os.path.dirname(excel_file)}", store=store)
-    update_cli(f"Excel output file: {os.path.basename(excel_file)}", store=store)
+    update_cli(f"Output File Path: {store.output_path}", store=store)
+    if store.excel:
+        update_cli(f"Excel output file: {store.excel_file}", store=store)
+    if store.sqlite:
+        update_cli(f"SQLite DB file: {store.sqlite_file}", store=store)
     update_cli(f"Log file: {os.path.abspath(store.log_file)}", store=store)
     update_cli(f"The following {len(files)} files are being processed:", store=store)
     joiner = f"\n{dt.now().strftime(__dtfmt__)} -     "
@@ -3345,13 +2273,9 @@ def process_cli(files, triage_files, hash_files, excel_file, store: DataStore):
         if remaining != 0:
             remaining -= 1
     if store.excel:
-        write_to_excel(excel_file, triage_files, store)
+        write_to_excel(store.excel_file, store.triage_files, store)
     if store.sqlite:
-        status = write_to_sqlite(store)
-        if status:
-            update_cli(f'All data written to "{store.db_file}".', store=store)
-        else:
-            update_cli(f'SQLite database could not be written to "{store.db_file}".', store=store)
+        write_to_sqlite(store)
     update_cli(f'{"="*24}', store=store)
     if docxErrorCount > 0:
         clr = __red__
@@ -3416,19 +2340,18 @@ def cli_log(output_path, verbose=False, store: DataStore = None):
     return log
 
 
-def stop_cli(triage_files, excel_file, store: DataStore = None):
+def stop_cli(store: DataStore):
     update_cli("Processing stopped", store=store)
-    update_cli("Attempting to write current results to Excel", store=store)
+    if store.excel:
+        update_cli("Attempting to write current results to Excel", store=store)
+    if store.sqlite:
+        update_cli("Attempting to write current results to SQLite", store=store)
     docxErrorCount = len(store.errors_worksheet["Error"])
     try:
         if store.excel:
-            write_to_excel(excel_file, triage_files, store)
+            write_to_excel(store.excel_file, store.triage_files, store)
         if store.sqlite:
-            status = write_to_sqlite(store)
-            if status:
-                update_cli(f'All data written to "{store.db_file}".', store=store)
-            else:
-                update_cli(f'SQLite database could not be written to "{store.db_file}".', store=store)
+            write_to_sqlite(store)
         if docxErrorCount > 0:
             clr = __red__
         else:
@@ -3466,6 +2389,24 @@ def reset_vars(store: DataStore):
     store.reset_vars()
 
 
+def read_ingest(file):
+    all_files = []
+    exists = []
+    no_files = []
+    if file:
+        with open(file, "r", encoding="utf-8-sig") as content:
+            ingest_data = content.readlines()
+            for line in ingest_data:
+                all_files.append(os.path.normpath(line.strip()))
+            for f in all_files:
+                if os.path.exists(f):
+                    exists.append(f)
+                else:
+                    no_files.append(f)
+            all_files = exists
+    return all_files, no_files
+
+
 def gui():
     store = DataStore()
     try:
@@ -3494,16 +2435,11 @@ def main():
     arg_parse.add_argument(
         "-e", "--excel", action="store_true", help="outputs data to an Excel document"
     )
-    arg_parse.add_argument(
-        "-g",
-        "--gui",
-        action="store_true",
-        help="launch the gui"
-    )
+    arg_parse.add_argument("-g", "--gui", action="store_true", help="launch the gui")
     arg_parse.add_argument(
         "--hash",
         help="hash the doc zip contents",
-        action="store_true", 
+        action="store_true",
     )
     arg_parse.add_argument(
         "-o",
@@ -3535,6 +2471,10 @@ def main():
         default=False,
     )
     file_source = arg_parse.add_mutually_exclusive_group(required=False)
+    file_source.add_argument(
+        "--ingest",
+        help="text file with a list of files to ingest",
+    )
     file_source.add_argument("--dir", help="directory to process")
     file_source.add_argument(
         "--files", help="individual files to be processed", nargs="*"
@@ -3553,46 +2493,70 @@ def main():
 
     if not args.gui:
         if not args.output:
+            arg_parse.error("The -o/--output option is required")
+        if not os.path.exists(args.output) or not os.path.isdir(args.output):
             arg_parse.error(
-                "The -o/--output option is required"
+                f"The output path {args.output} does not exist. Check your path and try again"
             )
-        if not (args.dir or args.files):
-            arg_parse.error(
-                "One of --files or --dir is required"
-            )
+        output_path = os.path.normpath(os.path.abspath(args.output))
+        store.output_path = output_path
+        if not (args.dir or args.files or args.ingest):
+            arg_parse.error("One of --files, --dir, or --ingest is required")
         if not (args.triage or args.full):
-            arg_parse.error(
-                "One of --triage or --full is required"
-            )
+            arg_parse.error("One of --triage or --full is required")
+        if not args.triage:
+            store.triage_files = False
         if not (args.excel or args.sqlite):
-            arg_parse.error(
-                "One of --excel or --sqlite is required"
-            )
-        if not os.path.exists(os.path.abspath(os.path.dirname(args.output))):
-            arg_parse.error(
-                f"The path {os.path.abspath(os.path.dirname(args.output))} does not exist. Please check your path and try again."
-            )
+            arg_parse.error("One of --excel or --sqlite is required")
+        if args.hash:
+            store.hash_files = True
         if args.excel or args.sqlite:
-            store.logger = cli_log(
-                os.path.abspath(os.path.dirname(args.output)), args.verbose, store=store
-            )
+            store.logger = cli_log(output_path, args.verbose, store=store)
             if args.excel:
                 store.excel = True
-            elif args.sqlite:
+                store.excel_file = f"{output_path}{os.sep}{store.basename}.xlsx"
+            if args.sqlite:
                 store.sqlite = True
+                store.sqlite_file = f"{output_path}{os.sep}{store.basename}.db"
         if args.files:
             file_list = args.files
+            missing = []
+            exists = []
+            for f in file_list:
+                if os.path.exists(f):
+                    exists.append(f)
+                else:
+                    missing.append(f)
+            file_list = exists
             store.filenames = file_list
+            if missing:
+                update_cli(
+                    f"The following {len(missing)} file(s) do not exist:",
+                    color=__red__,
+                    store=store,
+                )
+                joiner = f"\n{dt.now().strftime(__dtfmt__)} -     "
+                update_cli("    " + joiner.join(missing), color=__red__, store=store)
+            if len(file_list) > 1:
+                update_cli(
+                    f"The following {len(file_list)} files have been loaded:",
+                    store=store,
+                )
+            else:
+                update_cli(
+                    f"The following {len(file_list)} file has been loaded:", store=store
+                )
+            joiner = f"\n{dt.now().strftime(__dtfmt__)} -     "
+            update_cli("    " + joiner.join(file_list), store=store)
             try:
                 process_cli(
                     file_list,
-                    args.triage,
-                    args.hash,
-                    os.path.abspath(args.output),
+                    store.triage_files,
+                    store.hash_files,
                     store,
                 )
             except KeyboardInterrupt:
-                stop_cli(args.triage, os.path.abspath(args.output), store)
+                stop_cli(store)
             except Exception as e:
                 update_cli(
                     f"Error trying to process files - {e}",
@@ -3616,16 +2580,65 @@ def main():
             try:
                 process_cli(
                     file_list,
-                    args.triage,
-                    args.hash,
-                    os.path.abspath(args.output),
+                    store.triage_files,
+                    store.hash_files,
                     store,
                 )
             except KeyboardInterrupt:
-                stop_cli(args.triage, os.path.abspath(args.output), store)
+                stop_cli(store)
             except Exception as e:
                 update_cli(
                     f"Error trying to process directory - {e}",
+                    level="error",
+                    color=__red__,
+                    store=store,
+                )
+        if args.ingest:
+            if not os.path.exists(args.ingest) or not os.path.isfile(args.ingest):
+                arg_parse.error(
+                    f"The file {args.ingest} does not exist. Please check your path and try again."
+                )
+            file_list, missing = read_ingest(args.ingest)
+            store.filenames = file_list
+            if missing:
+                update_cli(
+                    f"The following {len(missing)} file(s) do not exist:",
+                    color=__red__,
+                    store=store,
+                )
+                joiner = f"\n{dt.now().strftime(__dtfmt__)} -     "
+                update_cli("    " + joiner.join(missing), color=__red__, store=store)
+            if len(file_list) > 1:
+                update_cli(
+                    f"The following {len(file_list)} files have been loaded:",
+                    store=store,
+                )
+            elif len(file_list) == 1:
+                update_cli(
+                    f"The following {len(file_list)} file has been loaded:", store=store
+                )
+            else:
+                update_cli(
+                    "No files were loaded. Please check the file paths and try again.",
+                    level="error",
+                    color=__red__,
+                    store=store,
+                )
+                return
+            joiner = f"\n{dt.now().strftime(__dtfmt__)} -     "
+            update_cli("    " + joiner.join(file_list), store=store)
+            try:
+                process_cli(
+                    file_list,
+                    args.triage,
+                    args.hash,
+                    store,
+                )
+            except KeyboardInterrupt:
+                stop_cli(store)
+            except Exception as e:
+                update_cli(
+                    f"Error trying to process files - {e}",
                     level="error",
                     color=__red__,
                     store=store,
