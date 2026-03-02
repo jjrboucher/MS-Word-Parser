@@ -1356,7 +1356,6 @@ def process_docx(filename, triage, hashing, store: DataStore):
             else store.comments_worksheet
         )
         for comment in filename.get_comments():
-            update_status(f"    Processing comment: {comment}", level=level)
             values = [
                 this_file,  # Filename
                 comment[3],  # Author
