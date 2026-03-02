@@ -28,8 +28,8 @@ class DataStore:
         self.output_path = None
         self.errors_worksheet = {"File Name": [], "Error": []}
         self.timestamp = dt.now().strftime("%Y%m%d_%H%M%S")
-        self.basename = f"ms-word-parser-log-{self.timestamp}"
-        self.log_file = f"ms-word-parser-log-{self.timestamp}.log"
+        self.basename = f"ms-word-parser-{self.timestamp}"
+        self.log_file = f"ms-word-parser-{self.timestamp}.log"
         self.ms_word_gui = None
         self.start_time = None
         self.color_fmt = None
@@ -131,6 +131,9 @@ class DataStore:
         }
         self.triage_files = True
         self.hash_files = False
+        self.total = 0
+        self.remaining = 0
+        self.done = 0
 
     def reset_vars(self):
         """Reset variables"""
@@ -162,3 +165,6 @@ class DataStore:
         self.timeline = False
         self.triage_files = True
         self.hash_files = False
+        self.total = 0
+        self.remaining = 0
+        self.done = 0

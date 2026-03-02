@@ -9,6 +9,7 @@ import re
 import logging
 import subprocess
 import argparse
+import threading
 from datetime import datetime as dt, timedelta
 from pathlib import Path
 import warnings
@@ -71,6 +72,22 @@ except ModuleNotFoundError:
         tip_processingOptions,
         tip_guiWorkFlow,
     )
+
+if sys.platform == "win32":
+    import msvcrt
+    def _read_key():
+        return msvcrt.getwch()
+else:
+    import tty, termios
+    def _read_key():
+        fd = sys.stdin.fileno()
+        old = termios.tcgetattr(fd)
+        try:
+            tty.setraw(fd)
+            return sys.stdin.read(1)
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old)        
+
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -2245,8 +2262,28 @@ def update_cli(msg, level="info", color=__clr__, store: DataStore = None):
     else:
         store.logger.log(log_level, msg)
 
+def start_keypress_listener(status_callback, quit_key="q", status_key="s"):
+    stop_event = threading.Event()
+    def _listen():
+        while not stop_event.is_set():
+            key = _read_key()
+            if key == status_key:
+                status_callback()
+            elif key == quit_key:
+                print("[QUIT KEY (q) PRESSED - STANDBY ...] Attempting to write already processed data")
+                stop_event.set()
+    thread = threading.Thread(target=_listen, daemon=True)
+    thread.start()
+    return stop_event
 
 def process_cli(files, triage_files, hash_files, store: DataStore, ingest=False):
+    def print_status():
+        print(f"[STATUS] File: {f} | {store.done} / {store.total} | {round((int(store.done) / int(store.total) * 100), 2)} %")
+    stop_event = start_keypress_listener(
+        status_callback=print_status,
+        status_key="s",
+        quit_key="q",
+    )
     docxErrorCount = 0
     store.start_time = dt.now().strftime(__dtfmt__)
     update_cli(f"{__appname__}", store=store)
@@ -2299,9 +2336,13 @@ def process_cli(files, triage_files, hash_files, store: DataStore, ingest=False)
     update_cli(f"Script executed: {store.start_time}", store=store)
     update_cli("Summary of files parsed:", store=store)
     update_cli(f'{"="*36}', store=store)
-
-    remaining = len(files)
+    store.remaining = len(files)
+    store.total = len(files)
+    store.done = 0
     for f in files:
+        if stop_event.is_set():
+            stop_cli(store)
+            return
         try:
             f = os.path.abspath(str(f))
             with Docx(f, triage_files, hash_files, store=store) as doc:
@@ -2318,8 +2359,9 @@ def process_cli(files, triage_files, hash_files, store: DataStore, ingest=False)
             )
             store.errors_worksheet["File Name"].append(f)
             store.errors_worksheet["Error"].append(docxError)
-        if remaining != 0:
-            remaining -= 1
+        if store.remaining != 0:
+            store.remaining -= 1
+            store.done += 1
     if store.excel:
         write_to_excel(store.excel_file, store.triage_files, store)
     if store.sqlite:
@@ -2487,6 +2529,7 @@ def main():
     )
     arg_parse.add_argument("-g", "--gui", action="store_true", help="launch the gui")
     arg_parse.add_argument(
+        "-H",
         "--hash",
         help="hash the doc zip contents",
         action="store_true",
@@ -2509,6 +2552,7 @@ def main():
         help="save data to an sqlite database",
     )
     arg_parse.add_argument(
+        "-T",
         "--timeline",
         action="store_true",
         help="produce a timeline view in SQLite or Timeline Sheets in Excel",
@@ -2518,7 +2562,7 @@ def main():
         "--verbose",
         action="count",
         default=0,
-        help="Output to STDOUT as well as log",
+        help="Output to STDOUT as well as log, -v: INFO, -vv: DEBUG",
     )
     file_source = arg_parse.add_mutually_exclusive_group(required=False)
     file_source.add_argument(
