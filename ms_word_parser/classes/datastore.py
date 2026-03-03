@@ -158,8 +158,8 @@ class DataStore:
         self.output_path = None
         self.errors_worksheet = {"File Name": [], "Error": []}
         self.timestamp = dt.now().strftime("%Y%m%d_%H%M%S")
-        self.log_file = f"ms-word-parser-log-{self.timestamp}.log"
-        self.basename = f"ms-word-parser-log-{self.timestamp}"
+        self.log_file = f"ms-word-parser-{self.timestamp}.log"
+        self.basename = f"ms-word-parser-{self.timestamp}"
         self.sqlite = False
         self.excel = False
         self.timeline = False

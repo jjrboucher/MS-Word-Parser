@@ -4,6 +4,7 @@ import xml.etree.ElementTree as ET
 import zipfile
 from zipfile import BadZipFile
 from datetime import datetime as dt
+#from pathlib import PurePosixPath
 
 try:
     from classes.datastore import DataStore
@@ -65,8 +66,10 @@ class Docx:
             "pc": "http://schemas.microsoft.com/office/infopath/2007/PartnerControls",
             "pic": "http://schemas.openxmlformats.org/drawingml/2006/picture",
             "r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+            "Relationships": "http://schemas.openxmlformats.org/package/2006/relationships",
             "sc": "Microsoft.SharePoint.Taxonomy.ContentTypeSync",
             "sp": "http://schemas.microsoft.com/sharepoint/v3",
+            "Types": "http://schemas.openxmlformats.org/package/2006/content-types",
             "v": "urn:schemas-microsoft-com:vml",
             "vt": "http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes",
             "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
@@ -159,6 +162,8 @@ class Docx:
         self.extended_xml_content = None
         self.comments_ids_content = None
         self.custom_xml_content = None
+        self.content_types_content = None
+        self.xml_rels_content = None
 
     def __find_binary_string(self):
 
@@ -202,7 +207,7 @@ class Docx:
                 # excessively long filenames and results in an error. This avoids that error.
                 filename = self.binary_content[filename_start:filename_end].decode(
                     "ascii"
-                )
+                ).strip().replace("\x00", "")
             extrafield_start = filename_end
             extrafield_end = extrafield_start + extrafield_len
             extrafield = self.binary_content[extrafield_start:extrafield_end]
@@ -269,19 +274,31 @@ class Docx:
             "extended_xml_content": "word/commentsExtended.xml",
             "comments_ids_content": "word/commentsIds.xml",
             "custom_xml_content": "docProps/custom.xml",
+            "content_types_content": "[Content_Types].xml",
+            "xml_rels_content": "word/_rels/document.xml.rels",
         }
 
         modified_time = None
         compression_types = {0: "Store (None)", 8: "DEFLATE"}
+        zip_contents = []
+        zip_names = []
         try:
             with zipfile.ZipFile(self.msword_file, "r") as zipref:
                 zip_filenames = zipref.namelist()
+                for name in zip_filenames:
+                    if name.endswith(".xml") or name.endswith(".rels"):
+                        zip_names.append(name)
+                zip_filenames = zip_names
+                del zip_names
                 zip_info = zipref.infolist()
+                for file in zip_info:
+                    if file.filename.endswith(".xml") or file.filename.endswith(".rels"):
+                        zip_contents.append(file)
+                zip_info = zip_contents
+                del zip_contents
                 for xml in zip_info:
                     md5hash = None
                     xml_name = xml.filename
-                    if xml_name not in self.extra_fields:
-                        xml_name = xml_name.replace("/", "\\")
                     xml_files[xml_name] = blank.copy()
                     if (
                         "customXml/item" in xml_name
@@ -292,9 +309,12 @@ class Docx:
                     if "ink/ink" in xml_name and xml_name not in self.ink_files:
                         self.ink_files.append(xml_name)
                     if self.hashing:
-                        with zipref.open(xml_name) as xml_file:
-                            content = xml_file.read()
-                            md5hash = self.hash(content)
+                        try:
+                            with zipref.open(xml_name) as xml_file:
+                                content = xml_file.read()
+                                md5hash = self.hash(content)
+                        except:
+                            pass
                     m_time = xml.date_time
                     if m_time not in ((1980, 1, 1, 0, 0, 0), (1980, 0, 0, 0, 0, 0)):
                         modified_time = dt(*m_time).strftime(__dtfmt__)
@@ -308,12 +328,25 @@ class Docx:
                     xml_files[xml_name]["Zip Create Version"] = xml.create_version
                     xml_files[xml_name]["Zip Extract Version"] = xml.extract_version
                     xml_files[xml_name]["Zip Flag Bits"] = f"{xml.flag_bits:#0{6}x}"
-                    xml_files[xml_name]["Zip Extra Fields Length"] = self.extra_fields[
-                        xml_name
-                    ][0]
-                    xml_files[xml_name]["Zip Extra Fields Bytes"] = self.extra_fields[
-                        xml_name
-                    ][1]
+                    if xml_name in self.extra_fields:
+                        xml_files[xml_name]["Zip Extra Fields Length"] = self.extra_fields[
+                            xml_name
+                        ][0]
+                        xml_files[xml_name]["Zip Extra Fields Bytes"] = self.extra_fields[
+                            xml_name
+                        ][1]
+                    else:
+                        xml_name_modified = xml_name.replace("/", "\\")
+                        if xml_name_modified in self.extra_fields:
+                            xml_files[xml_name]["Zip Extra Fields Length"] = self.extra_fields[
+                                xml_name_modified
+                            ][0]
+                            xml_files[xml_name]["Zip Extra Fields Bytes"] = self.extra_fields[
+                                xml_name_modified
+                            ][1]
+                        else:
+                            xml_files[xml_name]["Zip Extra Fields Length"] = 0
+                            xml_files[xml_name]["Zip Extra Fields Bytes"] = 'nil'
                 for attrib, file_path in xml_map.items():
                     alt_path = file_path.replace("/", "\\")
                     target = file_path if file_path in zip_filenames else alt_path
@@ -485,6 +518,27 @@ class Docx:
             return all_extensible_comments
         return None
 
+    def get_content_types(self):
+        extentions = []
+        types = []
+        part_names = []        
+        if self.content_types_content:
+            x = ET.fromstring(self.content_types_content)
+            extensions = [node.get('Extension') for node in x.findall('Types:Default', self.namespaces)]
+            types = [node.get('ContentType') for node in x.findall('Types:Default', self.namespaces)]
+            part_names = [node.get('PartName') for node in x.findall('Types:Override', self.namespaces)]
+        return extensions, types, part_names
+
+    def get_xml_rels(self):
+        rels = {}
+        if self.xml_rels_content:
+            x = ET.fromstring(self.xml_rels_content)
+            rels = {
+                node.get("Target"): [node.get("Id"), node.get("Type").split("/")[-1]]
+                for node in x.findall("Relationships:Relationship", self.namespaces)
+            }
+        return rels
+
     def __extract_all_rsids_from_settings_xml(self):
         """
         function to extract all RSIDs at the beginning of the class.
@@ -540,16 +594,21 @@ class Docx:
         """
         :return: Hyperlink values in document.xml
         """
-        doc_hyperlinks = []
+        all_hyperlinks = []
         doc = ET.fromstring(self.document_xml_content)
         for hyperlink in doc.findall(f".//{{{self.namespaces['w']}}}hyperlink"):
             link_text = hyperlink.findall(f".//{{{self.namespaces['w']}}}t")
             hyperlinks = ",".join(link.text for link in link_text if link.text)
             hyperlinks = hyperlinks.replace("http", "hxxp")
-            rel_id = hyperlink.get(f"{{{self.namespaces['r']}}}id", "")
-            doc_hyperlinks.append([hyperlinks, rel_id])
-        all_hyperlinks = "|".join(f"{url}: {rel}" for url, rel in doc_hyperlinks)
-        return all_hyperlinks
+            rel_id = hyperlink.get(f"{{{self.namespaces['r']}}}id", None)
+            if rel_id:
+                all_hyperlinks.append([hyperlinks, rel_id])
+        rels = self.get_xml_rels()
+        for k, v in rels.items():
+            if v[1] == "hyperlink":
+                all_hyperlinks.append([k.replace("http", "hxxp"), v[0]])
+        formatted_hyperlinks = " | ".join(f"{url}: {rel}" for url, rel in all_hyperlinks)
+        return formatted_hyperlinks
 
     def filename(self):
         """

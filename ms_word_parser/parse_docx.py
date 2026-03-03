@@ -980,12 +980,12 @@ class UiMainWindow:
                 docxErrorCount += 1  # increment error count by 1.
                 self.numOfErrors.setText(str(docxErrorCount))
                 update_status(
-                    f"Error trying to process {f}. Skipping. Error: {docxError}",
+                    f"Error trying to process {f}. Skipping. Error: {str(docxError)}",
                     level="error",
                     color=red,
                 )
                 self.store.errors_worksheet["File Name"].append(f)
-                self.store.errors_worksheet["Error"].append(docxError)
+                self.store.errors_worksheet["Error"].append(str(docxError))
             if remaining != 0:
                 remaining -= 1
             self.numRemaining.setText(str(remaining))
@@ -1804,9 +1804,12 @@ def write_to_excel(excel_file, triage_files, store: DataStore):
                 level="info",
             )
             store.timeline_worksheet = generate_timeline(store)
-            process_and_write(store.timeline_worksheet, "Timeline", "timeline")
-            generate_visual_timeline(writer, store.timeline_worksheet)
-            update_status('"Visual Timeline" written.', level="info")
+            if isinstance(store.timeline_worksheet, pd.DataFrame) and not (store.timeline_worksheet).empty:
+                process_and_write(store.timeline_worksheet, "Timeline", "timeline")
+                generate_visual_timeline(writer, store.timeline_worksheet)
+                update_status('"Visual Timeline" written.', level="info")
+            else:
+                update_status('"Timeline Worksheet" is empty. No data written.', level="info")
         write_tips(writer)
         update_status('"Tips" worksheet written.', level="info")
         update_status(f"All Excel data written to {store.excel_file}", level="info")
@@ -2142,6 +2145,8 @@ def generate_timeline(store):
 
 
 def generate_visual_timeline(writer, sheet):
+    if isinstance(sheet, pd.DataFrame) and sheet.empty:
+        return
     counts = sheet["Timestamp"].value_counts().sort_index()
     counts.index = counts.index.strftime("%Y-%m-%d %H:%M:%S")
     tl_chart = counts.reset_index()
@@ -2351,13 +2356,13 @@ def process_cli(files, triage_files, hash_files, store: DataStore, ingest=False)
             # to the error log.
             docxErrorCount += 1  # increment error count by 1.
             update_cli(
-                f"Error trying to process {f}. Skipping. Error: {docxError}",
+                f"Error trying to process {f}. Skipping. Error: {str(docxError)}",
                 level="error",
                 color=__red__,
                 store=store,
             )
             store.errors_worksheet["File Name"].append(f)
-            store.errors_worksheet["Error"].append(docxError)
+            store.errors_worksheet["Error"].append(str(docxError))
         if store.remaining != 0:
             store.remaining -= 1
             store.done += 1
