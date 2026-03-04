@@ -104,7 +104,7 @@ class DataStore:
             "Timestamp (UTC)": "datetime64[ns]",
             "Timestamp": "datetime64[ns]",
             "Title": "string",
-            "Total Editing Time": "string",
+            "Total Editing Time": "Int32",
             "Type": "string",
             "Uncompressed Size (bytes)": "Int32",
             "Unique rsidR": "Int32",
@@ -134,6 +134,7 @@ class DataStore:
         self.total = 0
         self.remaining = 0
         self.done = 0
+        self.file = ""
 
     def reset_vars(self):
         """Reset variables"""
@@ -168,3 +169,4 @@ class DataStore:
         self.total = 0
         self.remaining = 0
         self.done = 0
+        self.file = ""

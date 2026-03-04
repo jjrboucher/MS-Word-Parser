@@ -75,10 +75,24 @@ except ModuleNotFoundError:
 
 if sys.platform == "win32":
     import msvcrt
+
     def _read_key():
         return msvcrt.getwch()
+
+    def _restore_terminal():
+        pass
+
 else:
-    import tty, termios
+    import tty, termios, atexit
+
+    _fd = sys.stdin.fileno()
+    _old = termios.tcgetattr(_fd)
+
+    def _restore_terminal():
+        termios.tcsetattr(_fd, termios.TCSADRAIN, _old)
+
+    atexit.register(_restore_terminal)
+
     def _read_key():
         fd = sys.stdin.fileno()
         old = termios.tcgetattr(fd)
@@ -86,7 +100,7 @@ else:
             tty.setraw(fd)
             return sys.stdin.read(1)
         finally:
-            termios.tcsetattr(fd, termios.TCSADRAIN, old)        
+            termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -100,7 +114,7 @@ __clr__ = "\033[1;m"
 __version__ = "3.0.0"
 __appname__ = f"MS Word Parser v{__version__}"
 __source__ = "https://github.com/jjrboucher/MS-Word-Parser"
-__date__ = "01 Mar 2026"
+__date__ = "03 Mar 2026"
 __author__ = (
     "Jacques Boucher - jjrboucher@gmail.com\nCorey Forman - corey@digitalsleuth.ca"
 )
@@ -1804,12 +1818,17 @@ def write_to_excel(excel_file, triage_files, store: DataStore):
                 level="info",
             )
             store.timeline_worksheet = generate_timeline(store)
-            if isinstance(store.timeline_worksheet, pd.DataFrame) and not (store.timeline_worksheet).empty:
+            if (
+                isinstance(store.timeline_worksheet, pd.DataFrame)
+                and not (store.timeline_worksheet).empty
+            ):
                 process_and_write(store.timeline_worksheet, "Timeline", "timeline")
                 generate_visual_timeline(writer, store.timeline_worksheet)
                 update_status('"Visual Timeline" written.', level="info")
             else:
-                update_status('"Timeline Worksheet" is empty. No data written.', level="info")
+                update_status(
+                    '"Timeline Worksheet" is empty. No data written.', level="info"
+                )
         write_tips(writer)
         update_status('"Tips" worksheet written.', level="info")
         update_status(f"All Excel data written to {store.excel_file}", level="info")
@@ -2266,26 +2285,38 @@ def update_cli(msg, level="info", color=__clr__, store: DataStore = None):
     else:
         store.logger.log(log_level, msg)
 
+
 def start_keypress_listener(status_callback, quit_key="q", status_key="s"):
     stop_event = threading.Event()
+
     def _listen():
         while not stop_event.is_set():
             key = _read_key()
             if key == status_key:
                 status_callback()
             elif key == quit_key:
-                print("[QUIT KEY (q) PRESSED - STANDBY ...] Attempting to write already processed data")
+                print(
+                    f"{dt.now().strftime(__dtfmt__)} | QUIT     | Quit (q) pressed - attempting to write already processed data"
+                )
                 stop_event.set()
+
     thread = threading.Thread(target=_listen, daemon=True)
     thread.start()
     return stop_event
 
+
 def process_cli(files, triage_files, hash_files, store: DataStore, ingest=False):
     def print_status():
-        print(f"[STATUS] File: {f} | {store.done} / {store.total} | {round((int(store.done) / int(store.total) * 100), 2)} %")
+        if store.file == "":
+            print(f"{dt.now().strftime(__dtfmt__)} | FILE     | No File Loaded Yet")
+        else:
+            print(
+                f"{dt.now().strftime(__dtfmt__)} | FILE     | {store.file} - {store.done} / {store.total} | {round((int(store.done) / int(store.total) * 100), 2)} %"
+            )
+
     stop_event = start_keypress_listener(
         status_callback=print_status,
-        status_key="s",
+        status_key=" ",
         quit_key="q",
     )
     docxErrorCount = 0
@@ -2349,6 +2380,7 @@ def process_cli(files, triage_files, hash_files, store: DataStore, ingest=False)
             return
         try:
             f = os.path.abspath(str(f))
+            store.file = f
             with Docx(f, triage_files, hash_files, store=store) as doc:
                 process_docx(doc, triage_files, hash_files, store)
         except Exception as docxError:
@@ -2395,6 +2427,7 @@ def process_cli(files, triage_files, hash_files, store: DataStore, ingest=False)
         )
     )
     update_cli(f"Total processing time: {run_time}", color=__green__, store=store)
+    stop_event.set()
 
 
 class ColorFormatter(logging.Formatter):
