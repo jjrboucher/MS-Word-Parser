@@ -883,13 +883,15 @@ class UiMainWindow:
         self.aboutWindow.setWindowFlags(
             self.aboutWindow.windowFlags() & ~Qt.WindowType.WindowMinMaxButtonsHint
         )
+        sqliteUrl = 'https://github.com/jjrboucher/MS-Word-Parser/tree/master/sqlite_queries'
         githubLink = f'<a href="{__source__}">View the source on GitHub</a>'
+        sqliteLink = f'<a href="{sqliteUrl}">Sample SQLite queries</a>'
         self.aboutWindow.setWindowTitle("About")
         self.aboutWindow.aboutLabel.setText(
             f"Version: {__appname__}\nLast Updated: {__date__}\n\nAuthors:\n{__author__}"
         )
         self.aboutWindow.urlLabel.setOpenExternalLinks(True)
-        self.aboutWindow.urlLabel.setText(githubLink)
+        self.aboutWindow.urlLabel.setText(f"{githubLink}&nbsp;&nbsp;&nbsp;&nbsp;{sqliteLink}")
         self.aboutWindow.aboutLabel.setFont(self.text_font)
         self.aboutWindow.urlLabel.setFont(self.text_font)
         self.aboutWindow.show()
