@@ -4,7 +4,7 @@ import xml.etree.ElementTree as ET
 import zipfile
 from zipfile import BadZipFile
 from datetime import datetime as dt
-#from pathlib import PurePosixPath
+
 
 try:
     from classes.datastore import DataStore
