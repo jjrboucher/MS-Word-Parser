@@ -114,7 +114,7 @@ __clr__ = "\033[1;m"
 __version__ = "3.0.0"
 __appname__ = f"MS Word Parser v{__version__}"
 __source__ = "https://github.com/jjrboucher/MS-Word-Parser"
-__date__ = "04 Mar 2026"
+__date__ = "09 Mar 2026"
 __author__ = (
     "Jacques Boucher - jjrboucher@gmail.com\nCorey Forman - corey@digitalsleuth.ca"
 )
@@ -883,7 +883,9 @@ class UiMainWindow:
         self.aboutWindow.setWindowFlags(
             self.aboutWindow.windowFlags() & ~Qt.WindowType.WindowMinMaxButtonsHint
         )
-        sqliteUrl = 'https://github.com/jjrboucher/MS-Word-Parser/tree/master/sqlite_queries'
+        sqliteUrl = (
+            "https://github.com/jjrboucher/MS-Word-Parser/tree/master/sqlite_queries"
+        )
         githubLink = f'<a href="{__source__}">View the source on GitHub</a>'
         sqliteLink = f'<a href="{sqliteUrl}">Sample SQLite queries</a>'
         self.aboutWindow.setWindowTitle("About")
@@ -891,7 +893,9 @@ class UiMainWindow:
             f"Version: {__appname__}\nLast Updated: {__date__}\n\nAuthors:\n{__author__}"
         )
         self.aboutWindow.urlLabel.setOpenExternalLinks(True)
-        self.aboutWindow.urlLabel.setText(f"{githubLink}&nbsp;&nbsp;&nbsp;&nbsp;{sqliteLink}")
+        self.aboutWindow.urlLabel.setText(
+            f"{githubLink}&nbsp;&nbsp;&nbsp;&nbsp;{sqliteLink}"
+        )
         self.aboutWindow.aboutLabel.setFont(self.text_font)
         self.aboutWindow.urlLabel.setFont(self.text_font)
         self.aboutWindow.show()
@@ -1919,15 +1923,8 @@ def write_to_sqlite(store):
                 df.to_sql(new_name, conn, if_exists="append", index=False)
                 del new_sheet
                 del sheet
-    if all(
-        [
-            store.comments_worksheet,
-            store.comments_ids_worksheet,
-            store.extended_worksheet,
-            store.extensible_worksheet,
-        ]
-    ):
-        agg_view_stmt = """
+    if store.comments_worksheet:
+        agg_view_base = """
         CREATE VIEW "Aggregated Comments" AS
         SELECT DISTINCT C.file_name,
         C.author,
@@ -1935,70 +1932,127 @@ def write_to_sqlite(store):
         C.timestamp_utc,
         C.comment_id,
         C.comment_paraid,
-        C.paraid_text,
+        C.paraid_text
+        """
+        if any(
+            [
+                store.comments_ids_worksheet,
+                store.extended_worksheet,
+                store.extensible_worksheet,
+            ]
+        ):
+            agg_view_base = agg_view_base.strip() + ","
+        if store.comments_ids_worksheet:
+            cid_base = """
+        CID.durableid
+        """
+        else:
+            cid_base = """ """
+        if store.extended_worksheet:
+            ec_base = """
         EC.paraidparent,
-                CASE EC.done
-                        WHEN 0 THEN "FALSE"
-                        WHEN 1 THEN "TRUE"
-                END AS done,
-                CID.durableid,
-                EC2.dateutc,
-                EC2.reactiontype,
-                EC2.reactiondateutc,
-                EC2.uri,
-                EC2.userid,
-                EC2.userprovider,
-                EC2.username
+        CASE EC.done
+                WHEN 0 THEN "FALSE"
+                WHEN 1 THEN "TRUE"
+        END AS done
+        """
+            if store.comments_ids_worksheet:
+                cid_base = cid_base.strip() + ","
+        else:
+            ec_base = """ """
+        if store.extensible_worksheet:
+            ec2_base = """
+        EC2.dateutc,
+        EC2.reactiontype,
+        EC2.reactiondateutc,
+        EC2.uri,
+        EC2.userid,
+        EC2.userprovider,
+        EC2.username
+        """
+            if store.extended_worksheet:
+                ec_base = ec_base.strip() + ","
+        else:
+            ec2_base = """ """
+        join = """
         FROM comments AS C
+        """
+        if store.comments_worksheet and store.extended_worksheet:
+            join += """
         LEFT JOIN (SELECT file_name, paraid, paraidparent, done FROM extended_comments) AS EC ON C.comment_paraid == EC.paraid AND C.file_name == EC.file_name
+        """
+        if store.comments_worksheet and store.comments_ids_worksheet:
+            join += """
         LEFT JOIN (SELECT file_name, paraid, durableid FROM comments_ids) AS CID ON C.comment_paraid == CID.paraid AND C.file_name == CID.file_name
+        """
+        if store.comments_ids_worksheet and store.extensible_worksheet:
+            join += """
         LEFT JOIN (SELECT file_name, durableid, dateutc, reactiontype, reactiondateutc, uri, userid, userprovider, username FROM extensible_comments) AS EC2 ON CID.durableid == EC2.durableid AND CID.file_name == EC2.file_name
         """
+        agg_view_stmt = f"{agg_view_base}{cid_base}{ec_base}{ec2_base}{join}"
         conn.execute(agg_view_stmt)
-    if all(
-        [
-            store.metadata_worksheet,
-            store.comments_worksheet,
-            store.extensible_worksheet,
-            store.rsids_worksheet,
-            store.archive_files_worksheet,
-            store.ink_worksheet,
-        ]
-    ):
-        timeline_view_stmt = """
-            CREATE VIEW "Timeline View" AS
-            SELECT file_name AS "File Name", created_date AS "Timestamp", 'created' AS "Type", NULL AS "Value", 'Metadata' AS "Source"
-            FROM metadata WHERE timestamp IS NOT NULL AND timestamp != ''
-            UNION ALL
-            SELECT file_name, modified_date, 'modified', NULL, 'Metadata'
-            FROM metadata WHERE modified_date IS NOT NULL AND modified_date != ''
-            UNION ALL
-            SELECT file_name, last_printed_date, 'last printed', NULL, 'Metadata'
-            FROM metadata WHERE last_printed_date IS NOT NULL AND last_printed_date != ''
-            UNION ALL
-            SELECT file_name, timestamp_utc, 'comment', paraid_text, 'Comments'
-            FROM comments WHERE timestamp_utc IS NOT NULL AND timestamp_utc != ''
-            UNION ALL
-            SELECT file_name, dateutc, 'durableid', durableid, 'Extensible Comments'
-            FROM extensible_comments WHERE dateutc IS NOT NULL AND dateutc != ''
-            UNION ALL
-            SELECT file_name, reactiondateutc, 'reaction', NULL, 'Extensible Comments'
-            FROM extensible_comments WHERE reactiondateutc IS NOT NULL AND reactiondateutc != ''
-            UNION ALL
-            SELECT file_name, file_created_date, 'created - rsid', (rsid_type || ' - ' || rsid_value), 'RSIDs'
-            FROM rsids WHERE file_created_date IS NOT NULL AND file_created_date != ''
-            UNION ALL
-            SELECT file_name, file_modified_date, 'modified - rsid', (rsid_type || ' - ' || rsid_value), 'RSIDs'
-            FROM rsids WHERE file_modified_date IS NOT NULL AND file_modified_date != ''
-            UNION ALL
-            SELECT file_name, modified_time_local_utc_redmond_washington, 'modified - archive file', archive_file, 'Archive Files'
-            FROM archive_files WHERE modified_time_local_utc_redmond_washington IS NOT NULL AND modified_time_local_utc_redmond_washington != ''
-            UNION ALL
-            SELECT file_name, timestamp_utc, 'ink file', ink_xml_file, 'Ink XML Files'
-            FROM ink_xml_files WHERE timestamp_utc IS NOT NULL AND timestamp_utc != ''
-            ORDER BY "Timestamp" ASC;
-            """
-        conn.execute(timeline_view_stmt)
+    timeline_base = """
+        CREATE VIEW "Timeline View" AS
+        SELECT file_name AS "File Name", created_date AS "Timestamp", 'created' AS "Type", NULL AS "Value", 'Metadata' AS "Source"
+        FROM metadata WHERE timestamp IS NOT NULL AND timestamp != ''
+        UNION ALL
+        SELECT file_name, modified_date, 'modified', NULL, 'Metadata'
+        FROM metadata WHERE modified_date IS NOT NULL AND modified_date != ''
+        UNION ALL
+        SELECT file_name, last_printed_date, 'last printed', NULL, 'Metadata'
+        FROM metadata WHERE last_printed_date IS NOT NULL AND last_printed_date != ''
+        """
+    if store.rsids_worksheet:
+        rsids_base = """
+        UNION ALL
+        SELECT file_name, file_created_date, 'created - rsid', (rsid_type || ' - ' || rsid_value), 'RSIDs'
+        FROM rsids WHERE file_created_date IS NOT NULL AND file_created_date != ''
+        UNION ALL
+        SELECT file_name, file_modified_date, 'modified - rsid', (rsid_type || ' - ' || rsid_value), 'RSIDs'
+        FROM rsids WHERE file_modified_date IS NOT NULL AND file_modified_date != ''
+        """
+    else:
+        rsids_base = """ """
+    if store.archive_files_worksheet:
+        archive_base = """
+        UNION ALL
+        SELECT file_name, modified_time_local_utc_redmond_washington, 'modified - archive file', archive_file, 'Archive Files'
+        FROM archive_files WHERE modified_time_local_utc_redmond_washington IS NOT NULL AND modified_time_local_utc_redmond_washington != ''
+        """
+    else:
+        archive_base = """ """
+    if store.comments_worksheet:
+        comment_base = """
+        UNION ALL
+        SELECT file_name, timestamp_utc, 'comment', paraid_text, 'Comments'
+        FROM comments WHERE timestamp_utc IS NOT NULL AND timestamp_utc != ''
+        """
+    else:
+        comment_base = """ """
+    if store.extensible_worksheet:
+        extensible_comm_base = """
+        UNION ALL
+        SELECT file_name, dateutc, 'durableid', durableid, 'Extensible Comments'
+        FROM extensible_comments WHERE dateutc IS NOT NULL AND dateutc != ''
+        UNION ALL
+        SELECT file_name, reactiondateutc, 'reaction', NULL, 'Extensible Comments'
+        FROM extensible_comments WHERE reactiondateutc IS NOT NULL AND reactiondateutc != ''
+        """
+    else:
+        extensible_comm_base = """ """
+    if store.ink_worksheet:
+        ink_base = """
+        UNION ALL
+        SELECT file_name, timestamp_utc, 'ink file', ink_xml_file, 'Ink XML Files'
+        FROM ink_xml_files WHERE timestamp_utc IS NOT NULL AND timestamp_utc != ''
+        """
+    else:
+        ink_base = """ """
+    final = """
+        ORDER BY "Timestamp" ASC;
+        """
+    timeline_view_stmt = f"{timeline_base}{rsids_base}{archive_base}{comment_base}{extensible_comm_base}{ink_base}{final}"
+    conn.execute(timeline_view_stmt)
     try:
         conn.close()
         update_status(
