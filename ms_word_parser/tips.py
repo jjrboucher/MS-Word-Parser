@@ -16,7 +16,7 @@ tip_scriptOverview = {
 Input: You can select one or more MS Word files within a folder or alternatively select a root folder and the script will recursively add all MS Word files it finds from that point in the hierarchy.\n
     Also, you can select a text file containing full file paths to specific documents (each on a separate line) and use the "Add Ingest" feature to process those files.\n
 Output: The results will be saved to a Microsoft Excel file or SQLite database, depending on if you select "To Excel", "To SQLite", or both options. The output files will have four or more worksheets / tables depending on the processing option you select.\n
-The script will also output a log file in the output folder. The output files will bear the following naming convention:\n\n
+The script will also output a log file in the output folder. The output files will bear the following naming convention:\n
     ms-word-parser-YYYYMMDD_HHMMSS.log\n
     ms-word-parser-YYYYMMDD_HHMMSS.db\n
     ms-word-parser-YYYYMMDD_HHMMSS.xlsx\n\n""",
