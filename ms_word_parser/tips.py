@@ -14,25 +14,37 @@ tip_scriptOverview = {
     "Title": "Overview",
     "Text": """Purpose: Conduct a forensic analysis of one or more Microsoft Word docx/dotx/dotm files.\n
 Input: You can select one or more MS Word files within a folder or alternatively select a root folder and the script will recursively add all MS Word files it finds from that point in the hierarchy.\n
-Output: The results will be saved to a Microsoft Excel file. You will be prompted to provide a file name of the Excel file and where you want to save it. The Excel file will have four or more worksheets depending on the processing option you select.\n
-The script will also output a log file in the same folder as the Excel file and will bear the following naming convention: DOCx_Parser_Log_YYYYMMDD_HHMMSS.log.\n\n""",
+    Also, you can select a text file containing full file paths to specific documents (each on a separate line) and use the "Add Ingest" feature to process those files.\n
+Output: The results will be saved to a Microsoft Excel file or SQLite database, depending on if you select "To Excel", "To SQLite", or both options. The output files will have four or more worksheets / tables depending on the processing option you select.\n
+The script will also output a log file in the output folder. The output files will bear the following naming convention:\n\n
+    ms-word-parser-YYYYMMDD_HHMMSS.log\n
+    ms-word-parser-YYYYMMDD_HHMMSS.db\n
+    ms-word-parser-YYYYMMDD_HHMMSS.xlsx\n\n""",
 }
 tip_excelWorksheets = {
     "Title": "Worksheets",
-    "Text": """Doc_Summary: This worksheet will have one row for each file processed. It will contain a summary of the artifacts relating to the documents (e.g., MD5 hash, number of rsidR, RSID Root, number of paragraph tags (w:p), run tags (w:r), text tags (w:t).\n
+    "Text": """Document Summary: This worksheet will have one row for each file processed. It will contain a summary of the artifacts relating to the documents (e.g., MD5 hash, number of rsidR, RSID Root, number of paragraph tags (w:p), run tags (w:r), text tags (w:t).\n
 Metadata: This worksheet will have one row for each file processed. It will contain metadata such as the author of the document, the date created, who last modified it, the last modified date, revision count, editing time, etc. It’s important to note that there have been instances where the metadata relating to the number of pages/lines/characters have been inaccurate. This is not a flaw in the script. Rather, it was found that the metadata within the document was wrong. To correct this, the document had to be opened and resaved. But in doing so, you are changing the last time it was modified, and by whom.\n
 Comments: This worksheet will have zero or more rows for each file. If there are any comments in the document, each comment will occupy one row. Any reply to a comment will be in its own row. It will contain the comment ID number, the timestamp of the comment, the author, the author’s initials, and the comment itself.\n
+Extended Comments: This worksheet will contain additional data related to the comments parent paraId and whether the comment has been marked as resolved or "done".\n
+Extensible Comments: Where comments can be "reacted to", these types of reactions and their metadata are included here. The metadata includes the reaction, userId, userProvider, and userName of the individual who reacted to the comment.\n
 RSIDs: This worksheet will have multiple rows for each file. Each row will be a unique RSID Type and value, as well as how many times that RSID appears in the document. The rsidR value denotes Revision Save Identifier. Each time there is a save action, a new rsidR value is generated and any text from that session will have that rsidR value attached to it. This allows you to identify what text was typed within a given editing session (a given rsidR value).\n
 Large documents can result in hundreds of rows, as they will contain many different RSID values. Excel limits the number of rows in a spreadsheet to just over 1 million. The script will break up the RSIDs worksheet into multiple worksheets if necessary, with 1 million rows in each. Each RSIDs worksheet will include a number (1, 2, 3, etc.) in the worksheet name.\n
 Archive Files: This worksheet will have multiple rows for each file. Microsoft Word docx files are compound files. In fact, they are nothing more than a ZIP compressed file with multiple files within it. This worksheet will extract the name of each file within the compound file and include its name, the modified time of the file within the compound file (which in most cases should be “nil”), the uncompressed size of the file, and various ZIP file attributes for that specific file within the compound file.\n
+Ink XML Files: When a document contains Ink drawings, metadata for the ink can be found on this worksheet.\n
+Item XML Files: The item*.xml files within a Word document can contain unique data structures and metadata. When present, that data can be found on this worksheet.\n
+Custom Properties: If a document has custom*.xml files, the data within is typically unique to the environment for where the document was created. When available, it is parsed out and put on this worksheet.\n
 Excel Tips: This worksheet will contain analysis tips.\n\n""",
 }
 tip_processingOptions = {
     "Title": "Processing Options",
     "Text": """Triage: Triage mode will produce the Doc_Summary, Metadata, Comments, and Excel Tips worksheets only. If you are examining 10K, 20K or more MS Word documents collected as part of your investigation, you are going to want to start with triage mode. This will run faster, as there is less parsing. It does not produce the RSIDs or Archive Files worksheets, which can account for a lot of data.
 Conduct your initial review using this triage mode and identify documents that you want to reprocess with the full parsing option.\n
-Full: The Full parsing option will produce all of the worksheets covered earlier. If processing a large number of files, it can result in a large Excel document. In a test case with 17,500 files, it produced 25 worksheets of RSID values, and an Excel document that was ½ Gig in size. For this reason, it is recommended that you start with triage and only use the Full parsing on select files identified as a result of the triage exercise.\n
-Hash Files: If you select this option, the script will hash each file it processes, as well as hash each file within the DOCx compound file (found in the worksheet “Archive Files”).  You may want to use this option to capture the MD5 hash of each file to attest to the integrity of the file later on, as well as to use to identify duplicate files.\n\n""",
+Full: The Full parsing option will produce all of the worksheets covered earlier. If processing a large number of files, it can result in a large Excel document. In a test case with 17,500 files, it produced 25 worksheets of RSID values, and an Excel document that was ½ Gig in size. For this reason, it is recommended that you start with triage if you prefer an Excel document and only use the Full parsing on select files identified as a result of the triage exercise. You can, however, use "To SQLite" with "Full" and it will result in a significantly smaller output and quicker processing times.\n
+Hash Files: If you select this option, the script will hash each file it processes, as well as hash each file within the DOCx compound file (found in the worksheet “Archive Files”).  You may want to use this option to capture the MD5 hash of each file to attest to the integrity of the file later on, as well as to use to identify duplicate files.\n
+Timeline: This will generate a timeline of all events which have timestamps and put them into a separate worksheet (if To Excel is chosen), and will generate an SQLite view (if To SQLite is chosen).\n
+To Excel: This will output all of the processed information into an Excel Spreadsheet in the location selected by Output Path.\n
+To SQLite: This will output all of the processed information into an SQLite database in the location selected by Output Path.\n\n""",
 }
 tip_guiWorkFlow = {
     "Title": "GUI Workflow",
@@ -42,6 +54,5 @@ The Processing Status window will identify how many files were passed to the scr
 Stop: If you click on the stop button, it will stop processing. The Excel file will be written up to the last file to be processed. The log file will also be written.\n
 Reset: If you want to run the script again, you can click on the Reset button and select a new output file and new files to process.\n
 Open Log File: Opens the log file.\n
-Open Excel File: Opens the Excel file.\n
 Open Output Path: Open the output path folder.""",
 }
