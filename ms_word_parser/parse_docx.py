@@ -2344,7 +2344,6 @@ def update_cli(msg, level="info", color=__clr__, store: DataStore = None):
 
 def start_keypress_listener(status_callback, quit_key="q", status_key="s"):
     stop_event = threading.Event()
-
     def _listen():
         while not stop_event.is_set():
             key = _read_key()
@@ -2355,7 +2354,6 @@ def start_keypress_listener(status_callback, quit_key="q", status_key="s"):
                     f"{dt.now().strftime(__dtfmt__)} | QUIT     | Quit (q) pressed - attempting to write already processed data"
                 )
                 stop_event.set()
-
     thread = threading.Thread(target=_listen, daemon=True)
     thread.start()
     return stop_event
@@ -2697,6 +2695,8 @@ def main():
             arg_parse.error("One of --excel or --sqlite is required")
         if args.hash:
             store.hash_files = True
+        if args.timeline:
+            store.timeline = True
         if args.excel or args.sqlite:
             store.logger = cli_log(output_path, verbose=args.verbose, store=store)
             if args.excel:
