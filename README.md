@@ -124,6 +124,9 @@ Files under customXml bearing the names item1.xml, item2.xml, etc.
 #### custom_properties
 Custom properties
 
+#### errors
+Contains the list of files the application could not process, and an associated error.
+
 #### Excel Tips
 This worksheet will contain analysis tips.
 
