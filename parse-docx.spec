@@ -1,6 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-__version__ = '3.0.0'
+__version__ = '3.0.1'
 
 a = Analysis(
     ['ms_word_parser/parse_docx.py'],
