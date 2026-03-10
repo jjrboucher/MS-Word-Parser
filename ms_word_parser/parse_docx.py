@@ -83,7 +83,9 @@ if sys.platform == "win32":
         pass
 
 else:
-    import tty, termios, atexit
+    import tty
+    import termios
+    import atexit
 
     _fd = sys.stdin.fileno()
     _old = termios.tcgetattr(_fd)
@@ -111,10 +113,10 @@ black = QColor(0, 0, 0)
 __red__ = "\033[1;31m"
 __green__ = "\033[1;32m"
 __clr__ = "\033[1;m"
-__version__ = "3.0.0"
+__version__ = "3.0.1"
 __appname__ = f"MS Word Parser v{__version__}"
 __source__ = "https://github.com/jjrboucher/MS-Word-Parser"
-__date__ = "09 Mar 2026"
+__date__ = "10 Mar 2026"
 __author__ = (
     "Jacques Boucher - jjrboucher@gmail.com\nCorey Forman - corey@digitalsleuth.ca"
 )
@@ -1445,8 +1447,6 @@ def process_docx(filename, triage, hashing, store: DataStore):
             "RSID Type",
             "RSID Value",
             "Count in document.xml",
-            "File Created Date",
-            "File Modified Date",
         ]
         store.rsids_worksheet = (
             {k: [] for k in headers}
@@ -1454,8 +1454,6 @@ def process_docx(filename, triage, hashing, store: DataStore):
             else store.rsids_worksheet
         )
         file_idx = store.metadata_worksheet["File Name"].index(this_file)
-        created_dt = store.metadata_worksheet["Created Date"][file_idx]
-        modified_dt = store.metadata_worksheet["Modified Date"][file_idx]
         rsid_lookups = [
             ("rsidR", filename.rsidr_in_document_xml),
             ("rsidP", filename.rsidp_in_document_xml),
@@ -1475,8 +1473,6 @@ def process_docx(filename, triage, hashing, store: DataStore):
                 cols[2].append(label)
                 cols[3].append(k)
                 cols[4].append(v)
-                cols[5].append(created_dt)
-                cols[6].append(modified_dt)
         all_people = filename.get_people()
         if all_people:
             update_status(
@@ -1492,7 +1488,6 @@ def process_docx(filename, triage, hashing, store: DataStore):
                 values = [this_file, each_person[0], each_person[1], each_person[2]]
                 for k, v in zip(headers, values):
                     store.people_worksheet[k].append(v)
-
         extensible_comments = filename.get_extensible_comments()
         if extensible_comments:
             update_status("    Processing extensible comments data", level=level)
@@ -1675,7 +1670,7 @@ def write_to_excel(excel_file, triage_files, store: DataStore):
         "extended": [(0, 0, 52), (1, None, 20)],
         "comments_ids": [(0, 0, 52), (1, None, 14)],
         "people": [(0, 0, 52), (1, 2, 20), (3, 3, 52)],
-        "rsids": [(0, 0, 52), (1, 3, 18), (4, 4, 26), (5, None, 20)],
+        "rsids": [(0, 0, 52), (1, 3, 18), (4, 4, 26)],
         "custom": [(0, 0, 52), (1, None, 40)],
         "archive": [(0, 0, 52), (1, 2, 36), (3, 3, 50), (4, 10, 30), (11, 11, 44)],
         "item": [(0, 0, 52), (1, 1, 30), (2, 2, 255)],
@@ -2002,17 +1997,6 @@ def write_to_sqlite(store):
         SELECT file_name, last_printed_date, 'last printed', NULL, 'Metadata'
         FROM metadata WHERE last_printed_date IS NOT NULL AND last_printed_date != ''
         """
-    if store.rsids_worksheet:
-        rsids_base = """
-        UNION ALL
-        SELECT file_name, file_created_date, 'created - rsid', (rsid_type || ' - ' || rsid_value), 'RSIDs'
-        FROM rsids WHERE file_created_date IS NOT NULL AND file_created_date != ''
-        UNION ALL
-        SELECT file_name, file_modified_date, 'modified - rsid', (rsid_type || ' - ' || rsid_value), 'RSIDs'
-        FROM rsids WHERE file_modified_date IS NOT NULL AND file_modified_date != ''
-        """
-    else:
-        rsids_base = """ """
     if store.archive_files_worksheet:
         archive_base = """
         UNION ALL
@@ -2051,7 +2035,7 @@ def write_to_sqlite(store):
     final = """
         ORDER BY "Timestamp" ASC;
         """
-    timeline_view_stmt = f"{timeline_base}{rsids_base}{archive_base}{comment_base}{extensible_comm_base}{ink_base}{final}"
+    timeline_view_stmt = f"{timeline_base}{archive_base}{comment_base}{extensible_comm_base}{ink_base}{final}"
     conn.execute(timeline_view_stmt)
     try:
         conn.close()
