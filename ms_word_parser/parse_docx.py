@@ -155,6 +155,8 @@ WORKER_SHEET_ATTRS = [
     "track_changes_worksheet",
     "range_permissions_worksheet",
     "irm_worksheet",
+    "headers_footers_worksheet",
+    "footnotes_endnotes_worksheet",
     "ink_worksheet",
 ]
 EXCEL_MAX_CELL_LEN = 32767  # Excel per-cell text limit
@@ -1005,7 +1007,12 @@ class UiMainWindow:
         self.contentsWindow.show()
 
     def update_status(self, msg, level="info", color=None):
-        levels = {"info": logging.INFO, "error": logging.ERROR, "debug": logging.DEBUG}
+        levels = {
+            "info": logging.INFO,
+            "warning": logging.WARNING,
+            "error": logging.ERROR,
+            "debug": logging.DEBUG,
+        }
         log_level = levels[level]
         if level in {"info", "error"}:
             if self.store.ms_word_gui:
@@ -1319,6 +1326,8 @@ def process_docx(filename, triage, hashing, store: DataStore):
         "Protection Enabled",
         "Track Changes Enabled",
         "Encrypted",
+        "Different First Page",
+        "Different Odd/Even Pages",
     ]
     if not hashing:
         headers.pop(1)
@@ -1331,6 +1340,8 @@ def process_docx(filename, triage, hashing, store: DataStore):
     spelling, grammar = filename.get_proof_state()
     protection_enabled = filename.get_document_protection()
     track_changes_enabled = filename.get_track_changes_status()
+    different_first_page = filename.get_different_first_page()
+    different_odd_even_pages = filename.get_different_odd_even_pages()
     if hashing:
         values = [
             this_file,
@@ -1352,6 +1363,8 @@ def process_docx(filename, triage, hashing, store: DataStore):
             protection_enabled,
             track_changes_enabled,
             filename.is_encrypted,
+            different_first_page,
+            different_odd_even_pages,
         ]
     else:
         values = [
@@ -1373,6 +1386,8 @@ def process_docx(filename, triage, hashing, store: DataStore):
             protection_enabled,
             track_changes_enabled,
             filename.is_encrypted,
+            different_first_page,
+            different_odd_even_pages,
         ]
     for k, v in zip(headers, values):
         store.doc_summary_worksheet[k].append(v)
@@ -1794,6 +1809,42 @@ def process_docx(filename, triage, hashing, store: DataStore):
             for k, v in zip(headers, values):
                 store.irm_worksheet[k].append(v)
 
+        headers_footers = filename.get_headers_footers()
+        if headers_footers:
+            update_status("    Processing headers and footers", level=level)
+            headers = [
+                "File Name",
+                "Part",
+                "Kind",
+                "Reference Type",
+                "Section",
+                "Text",
+                "Field Codes",
+            ]
+            store.headers_footers_worksheet = (
+                {h: [] for h in headers}
+                if not store.headers_footers_worksheet
+                else store.headers_footers_worksheet
+            )
+            for part, kind, ref_type, section, text, field_codes in headers_footers:
+                values = [this_file, part, kind, ref_type, section, text, field_codes]
+                for k, v in zip(headers, values):
+                    store.headers_footers_worksheet[k].append(v)
+
+        footnotes_endnotes = filename.get_footnotes_endnotes()
+        if footnotes_endnotes:
+            update_status("    Processing footnotes and endnotes", level=level)
+            headers = ["File Name", "Type", "ID", "Referenced", "Text", "Field Codes"]
+            store.footnotes_endnotes_worksheet = (
+                {h: [] for h in headers}
+                if not store.footnotes_endnotes_worksheet
+                else store.footnotes_endnotes_worksheet
+            )
+            for note_type, note_id, referenced, text, field_codes in footnotes_endnotes:
+                values = [this_file, note_type, note_id, referenced, text, field_codes]
+                for k, v in zip(headers, values):
+                    store.footnotes_endnotes_worksheet[k].append(v)
+
         if filename.item_files:
             xml_content = filename.get_all_content(filename.item_files)
             if xml_content:
@@ -2100,6 +2151,23 @@ def write_to_excel(excel_file, triage_files, store: DataStore):
             (7, 7, 14),
             (8, None, 20),
         ],
+        "headers_footers": [
+            (0, 0, 52),
+            (1, 1, 26),
+            (2, 2, 10),
+            (3, 3, 16),
+            (4, 4, 10),
+            (5, 5, 60),
+            (6, 6, 20),
+        ],
+        "footnotes_endnotes": [
+            (0, 0, 52),
+            (1, 1, 12),
+            (2, 2, 8),
+            (3, 3, 12),
+            (4, 4, 70),
+            (5, 5, 20),
+        ],
         "rsids": [(0, 0, 52), (1, 3, 18), (4, 4, 26)],
         "custom": [(0, 0, 52), (1, None, 40)],
         "archive": [(0, 0, 52), (1, 2, 36), (3, 3, 50), (4, 10, 30), (11, 11, 44)],
@@ -2204,6 +2272,16 @@ def write_to_excel(excel_file, triage_files, store: DataStore):
                     "range_permissions",
                 ),
                 (store.irm_worksheet, "Rights Management", "irm"),
+                (
+                    store.headers_footers_worksheet,
+                    "Headers and Footers",
+                    "headers_footers",
+                ),
+                (
+                    store.footnotes_endnotes_worksheet,
+                    "Footnotes and Endnotes",
+                    "footnotes_endnotes",
+                ),
                 (store.rsids_worksheet, "RSIDs", "rsids"),
                 (store.custom_xml_worksheet, "Custom Properties", "custom"),
                 (store.archive_files_worksheet, "Archive Files", "archive"),
@@ -2330,6 +2408,12 @@ def write_to_sqlite(store):
                 "range_permissions",
             ),
             (store.irm_worksheet, "Rights Management", "irm"),
+            (store.headers_footers_worksheet, "Headers and Footers", "headers_footers"),
+            (
+                store.footnotes_endnotes_worksheet,
+                "Footnotes and Endnotes",
+                "footnotes_endnotes",
+            ),
             (store.rsids_worksheet, "RSIDs", "rsids"),
             (store.custom_xml_worksheet, "Custom Properties", "custom"),
             (store.archive_files_worksheet, "Archive Files", "archive"),
@@ -2884,7 +2968,6 @@ def process_cli(files, triage_files, hash_files, store: DataStore, ingest=False)
         triage_files,
         hash_files,
         store,
-        gui_mode=False,
         log_fn=lambda msg, level="info", color=__clr__: update_cli(
             msg, level=level, color=color, store=store
         ),
@@ -2959,6 +3042,11 @@ def cli_log(output_path, verbose=0, store: DataStore = None):
     stream_level = verbosity.get(verbose, logging.DEBUG)
     if stream_level is not None:
         store.color_fmt = ColorFormatter()
+        if hasattr(sys.stdout, "reconfigure"):
+            try:
+                sys.stdout.reconfigure(errors="replace")
+            except (ValueError, OSError):
+                pass
         stream_handler = logging.StreamHandler(stream=sys.stdout)
         stream_handler.setLevel(stream_level)
         stream_handler.setFormatter(store.color_fmt)

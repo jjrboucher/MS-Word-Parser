@@ -1,6 +1,7 @@
 import hashlib
 import re
 import struct
+import zlib
 from collections import Counter
 import xml.etree.ElementTree as ET
 import zipfile
@@ -43,6 +44,8 @@ class Docx:
         self.store = store
         self.item_files = []
         self.ink_files = []
+        self.header_files = []
+        self.footer_files = []
         self.xml_files = {}
         self.protection_state = {"enabled": False}
         self.is_encrypted = False
@@ -98,6 +101,7 @@ class Docx:
         }
         self._parsed = {}
         self._zip = None
+        self._header_index = None
         self.has_ink = False
         self.has_comments = False
         self.msword_file = msword_file
@@ -198,6 +202,8 @@ class Docx:
             "custom_xml_content",
             "content_types_content",
             "xml_rels_content",
+            "footnotes_xml_content",
+            "endnotes_xml_content",
         ):
             setattr(self, attrib, "")
         self.ns_lookup = {
@@ -325,6 +331,8 @@ class Docx:
         self.custom_xml_content = None
         self.content_types_content = None
         self.xml_rels_content = None
+        self.footnotes_xml_content = None
+        self.endnotes_xml_content = None
         self._parsed = {}
         if self._zip is not None:
             self._zip.close()
@@ -340,6 +348,102 @@ class Docx:
             self._parsed[content] = tree
         return tree
 
+    def __qn(self, ns, tag):
+        """
+        Qualifies a tag with the a provided namespace
+        """
+        return f"{{{self.namespaces[ns]}}}{tag}"
+
+    def __locate_header_index(self):
+        """
+        Scans the doc header bytes once for every file header signature
+        Used to attempt to recover data from a broken docx file
+        """
+        if self._header_index is not None:
+            return self._header_index
+        index = {}
+        with open(self.msword_file, "rb") as fh:
+            data = fh.read()
+        pos = 0
+        while True:
+            pos = data.find(b"PK\x03\x04", pos)
+            if pos == -1 or pos + 30 > len(data):
+                break
+            namelen, extralen = struct.unpack("<HH", data[pos + 26 : pos + 30])
+            name_start = pos + 30
+            name_end = name_start + namelen
+            if name_end > len(data):
+                pos += 4
+                continue
+            try:
+                name = data[name_start:name_end].decode("utf-8")
+            except UnicodeDecodeError:
+                pos += 4
+                continue
+            index.setdefault(name, []).append(pos)
+            pos += 4
+        self._header_index = index
+        return index
+
+    def __recover_bytes(self, info):
+        """
+        Attempts to read a docx's data directly from the raw archive
+        bytes when the central directory's recorded header_offset is stale.
+        The recovered data is only trusted once its size and CRC32 match
+        what the central directory recorded for this doc.
+        """
+        candidates = self.__locate_header_index().get(info.filename, [])
+        with open(self.msword_file, "rb") as fh:
+            for offset in candidates:
+                fh.seek(offset + 26)
+                namelen, extralen = struct.unpack("<HH", fh.read(4))
+                fh.seek(offset + 30 + namelen + extralen)
+                compressed = fh.read(info.compress_size)
+                if len(compressed) != info.compress_size:
+                    continue
+                try:
+                    if info.compress_type == zipfile.ZIP_STORED:
+                        raw = compressed
+                    elif info.compress_type == zipfile.ZIP_DEFLATED:
+                        raw = zlib.decompressobj(-15).decompress(compressed)
+                    else:
+                        continue  # unsupported compression method for recovery
+                except zlib.error:
+                    continue
+                if len(raw) == info.file_size and zlib.crc32(raw) == info.CRC:
+                    return raw
+        return None
+
+    def __zip_read(self, xml_name):
+        """
+        Reads a zip bytes, falling back to raw-offset recovery
+        (i.e.: __recover_bytes) when the archive's central directory
+        offsets don't match reality.
+        """
+        try:
+            with self._zip.open(xml_name) as f:
+                return f.read()
+        except Exception:
+            info = self._zip.getinfo(xml_name)
+            recovered = self.__recover_bytes(info)
+            if recovered is None:
+                raise
+            self.store.logger.warning(
+                f"{self.msword_file}: {xml_name} had a corrupted zip central "
+                f"directory entry (invalid header offset) - recovered its content "
+                f"via raw signature scan, verified against the recorded CRC32/size."
+            )
+            return recovered
+
+    def __read_extra_field(self, fh, header_offset):
+        try:
+            fh.seek(header_offset + 26)
+            filename_len, extrafield_len = struct.unpack("<2H", fh.read(4))
+            fh.seek(header_offset + 30 + filename_len)
+            return fh.read(extrafield_len)
+        except (OSError, struct.error):
+            return None
+
     def __xml_extra_bytes(self):
         """
         ref: https://en.wikipedia.org/wiki/ZIP_(file_format)#Local_file_header
@@ -351,12 +455,16 @@ class Docx:
         infolist = self._zip.infolist()
         with open(self.msword_file, "rb") as msword_binary:
             for info in infolist:
-                msword_binary.seek(info.header_offset + 26)
-                filename_len, extrafield_len = struct.unpack(
-                    "<2H", msword_binary.read(4)
-                )
-                msword_binary.seek(info.header_offset + 30 + filename_len)
-                extrafield = msword_binary.read(extrafield_len)
+                extrafield = self.__read_extra_field(msword_binary, info.header_offset)
+                if extrafield is None:
+                    for offset in self.__locate_header_index().get(info.filename, []):
+                        extrafield = self.__read_extra_field(msword_binary, offset)
+                        if extrafield is not None:
+                            break
+                if extrafield is None:
+                    extras[info.filename] = ["N/A", "corrupt zip header offset"]
+                    continue
+                extrafield_len = len(extrafield)
                 extrafield_hex_as_text = [f"{h:02x}" for h in extrafield]
 
                 if not extrafield:
@@ -377,7 +485,6 @@ class Docx:
                     # This is so that we don't end up with hundreds of characters in a cell in Excel,
                     # as some extra fields can be several hundred values long.
                     # But so far, most are 0x00, with only the first few being values other than hex 0x00.
-
         return extras
 
     def __load_xml(self, xml_file):
@@ -417,6 +524,8 @@ class Docx:
             "custom_xml_content": "docProps/custom.xml",
             "content_types_content": "[Content_Types].xml",
             "xml_rels_content": "word/_rels/document.xml.rels",
+            "footnotes_xml_content": "word/footnotes.xml",
+            "endnotes_xml_content": "word/endnotes.xml",
         }
 
         modified_time = None
@@ -447,13 +556,21 @@ class Docx:
                     self.item_files.append(xml_name)
                 if "ink/ink" in xml_name and xml_name not in self.ink_files:
                     self.ink_files.append(xml_name)
+                if re.fullmatch(r"word/header\d+\.xml", xml_name):
+                    self.header_files.append(xml_name)
+                elif re.fullmatch(r"word/footer\d+\.xml", xml_name):
+                    self.footer_files.append(xml_name)
                 target_attrib = path_to_attrib.get(xml_name)
                 if self.hashing or target_attrib:
                     try:
-                        with zipref.open(xml_name) as xml_file:
-                            content = xml_file.read()
-                    except Exception:
+                        content = self.__zip_read(xml_name)
+                    except Exception as e:
                         content = None
+                        if target_attrib == "document_xml_content":
+                            raise Exception(
+                                f"Unable to read {xml_name} from archive - "
+                                f"archive appears corrupted: {e}"
+                            ) from e
                     if self.hashing and content is not None:
                         md5hash = self.hash(content)
                     if target_attrib:
@@ -998,10 +1115,7 @@ class Docx:
         """
         Extracts tracked changes revisions from document.xml
         """
-        w = self.namespaces["w"]
-
-        def qn(tag):
-            return f"{{{w}}}{tag}"
+        qn = lambda tag: self.__qn("w", tag)
 
         def text_of(element, text_tag):
             return "".join(t.text or "" for t in element.findall(f".//{qn(text_tag)}"))
@@ -1090,11 +1204,7 @@ class Docx:
         """
         Extracts w:permStart/w:permEnd permissions from document.xml.
         """
-        w = self.namespaces["w"]
-
-        def qn(tag):
-            return f"{{{w}}}{tag}"
-
+        qn = lambda tag: self.__qn("w", tag)
         if not self.document_xml_content:
             return []
         doc = self.__parse(self.document_xml_content)
@@ -1148,6 +1258,148 @@ class Docx:
         Returns the IRM info extracted from the OLE container.
         """
         return self.irm_info
+
+    def __flatten_text_with_separators(self, part_xml):
+        qn = lambda tag: self.__qn("w", tag)
+        boundary_tags = {qn("tab"), qn("ptab"), qn("br"), qn("p"), qn("tc")}
+        chunks = []
+        need_sep = False
+        for element in part_xml.iter():
+            tag = element.tag
+            if tag in boundary_tags:
+                if chunks:
+                    need_sep = True
+            elif tag == qn("t") and element.text:
+                if need_sep:
+                    chunks.append(" | ")
+                    need_sep = False
+                chunks.append(element.text)
+        return "".join(chunks)
+
+    def __extract_field_codes(self, part_xml):
+        w = self.namespaces["w"]
+        codes = []
+        for instr in part_xml.findall(f".//{{{w}}}instrText"):
+            code = (instr.text or "").strip().split()[:1]
+            if code and code[0] not in codes:
+                codes.append(code[0])
+        return ", ".join(codes) if codes else None
+
+    def get_headers_footers(self):
+        qn = lambda tag: self.__qn("w", tag)
+        parts = sorted(self.header_files) + sorted(self.footer_files)
+        if not parts:
+            return []
+
+        id_to_target = {}
+        if self.xml_rels_content:
+            rels_xml = self.__parse(self.xml_rels_content)
+            for rel in rels_xml.findall("Relationships:Relationship", self.namespaces):
+                target = rel.get("Target")
+                if target:
+                    id_to_target[rel.get("Id")] = (
+                        target if target.startswith("word/") else f"word/{target}"
+                    )
+
+        references = {}
+        if self.document_xml_content:
+            doc = self.__parse(self.document_xml_content)
+            for i, sectpr in enumerate(doc.findall(f".//{qn('sectPr')}"), start=1):
+                for tag in (qn("headerReference"), qn("footerReference")):
+                    for ref in sectpr.findall(tag):
+                        rid = ref.get(self.__qn("r", "id"))
+                        ref_type = ref.get(qn("type"), "default")
+                        target = id_to_target.get(rid)
+                        if target:
+                            references.setdefault(target, []).append((i, ref_type))
+
+        rows = []
+        for part in parts:
+            kind = "Header" if "header" in part.rsplit("/", 1)[-1] else "Footer"
+            refs = references.get(part, [])
+            sections = ", ".join(str(i) for i, _ in refs) or None
+            ref_types = ", ".join(t for _, t in refs) or None
+
+            text = None
+            field_codes = None
+            content = self.__load_xml(part)
+            if content:
+                try:
+                    part_xml = ET.fromstring(content)
+                except ET.ParseError:
+                    part_xml = None
+                if part_xml is not None:
+                    text = self.__flatten_text_with_separators(part_xml)
+                    field_codes = self.__extract_field_codes(part_xml)
+
+            rows.append((part, kind, ref_types, sections, text, field_codes))
+
+        return rows
+
+    def get_footnotes_endnotes(self):
+        qn = lambda tag: self.__qn("w", tag)
+        rows = []
+        for kind, file_attr, root_tag, note_tag, ref_tag in (
+            (
+                "Footnote",
+                "footnotes_xml_content",
+                "footnotes",
+                "footnote",
+                "footnoteReference",
+            ),
+            (
+                "Endnote",
+                "endnotes_xml_content",
+                "endnotes",
+                "endnote",
+                "endnoteReference",
+            ),
+        ):
+            content = getattr(self, file_attr, "")
+            if not content:
+                continue
+            try:
+                notes_xml = ET.fromstring(content)
+            except ET.ParseError:
+                continue
+
+            referenced_ids = set()
+            if self.document_xml_content:
+                doc = self.__parse(self.document_xml_content)
+                for ref in doc.findall(f".//{qn(ref_tag)}"):
+                    referenced_ids.add(ref.get(qn("id")))
+
+            for note in notes_xml.findall(qn(note_tag)):
+                if note.get(qn("type")) is not None:
+                    continue
+                note_id = note.get(qn("id"))
+                text = self.__flatten_text_with_separators(note)
+                field_codes = self.__extract_field_codes(note)
+                rows.append(
+                    (kind, note_id, note_id in referenced_ids, text, field_codes)
+                )
+
+        return rows
+
+    def get_different_first_page(self):
+        if not self.document_xml_content:
+            return False
+        w = self.namespaces["w"]
+        doc = self.__parse(self.document_xml_content)
+        for element in doc.findall(f".//{{{w}}}titlePg"):
+            val = element.get(f"{{{w}}}val")
+            if val is None or val.lower() in ("1", "true", "on"):
+                return True
+        return False
+
+    def get_different_odd_even_pages(self):
+        w = self.namespaces["w"]
+        xml = self.__parse(self.settings_xml_content)
+        element = xml.find(f"{{{w}}}evenAndOddHeaders")
+        if element is None:
+            return False
+        val = element.get(f"{{{w}}}val")
+        return True if val is None else val.lower() in ("1", "true", "on")
 
     def adjust_timestamp(self, ts):
         if ts:

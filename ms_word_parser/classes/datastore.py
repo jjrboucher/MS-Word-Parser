@@ -21,6 +21,8 @@ class DataStore:
         self.track_changes_worksheet = {}
         self.range_permissions_worksheet = {}
         self.irm_worksheet = {}
+        self.headers_footers_worksheet = {}
+        self.footnotes_endnotes_worksheet = {}
         self.item_worksheet = {}
         self.ink_worksheet = {}
         self.timeline_worksheet = {}
@@ -66,6 +68,8 @@ class DataStore:
             "Created Date": "datetime64[ns]",
             "dateUtc": "datetime64[ns]",
             "Description": "string",
+            "Different First Page": "boolean",
+            "Different Odd/Even Pages": "boolean",
             "Doc Security": "Int32",
             "Done": "boolean",
             "durableId": "string",
@@ -100,6 +104,7 @@ class DataStore:
             "providerId": "string",
             "reactionDateUtc": "datetime64[ns]",
             "reactionType": "string",
+            "Referenced": "boolean",
             "Revision": "Int32",
             "RSID Root": "string",
             "RSID Type": "string",
@@ -164,6 +169,8 @@ class DataStore:
         self.track_changes_worksheet = {}
         self.range_permissions_worksheet = {}
         self.irm_worksheet = {}
+        self.headers_footers_worksheet = {}
+        self.footnotes_endnotes_worksheet = {}
         self.item_worksheet = {}
         self.ink_worksheet = {}
         self.timeline_worksheet = {}
