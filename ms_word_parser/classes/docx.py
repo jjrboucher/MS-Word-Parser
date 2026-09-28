@@ -1,10 +1,12 @@
 import hashlib
+import re
 import struct
+from collections import Counter
 import xml.etree.ElementTree as ET
 import zipfile
 from zipfile import BadZipFile
 from datetime import datetime as dt
-
+import olefile
 
 try:
     from classes.datastore import DataStore
@@ -21,7 +23,7 @@ class Docx:
     app_version, application, category, characters, characters_with_spaces, company, content_status, created, creator,
     description, filename, keywords, last_modified_by, last_printed, lines, manager, modified, pages, paragraph_tags,
     paragraphs, revision, runs_tags, security, subject, template, text_tags, title, total_editing_time, words,
-    xml_files, xml_hash, xml_size
+    xml_files
     """
 
     def __init__(
@@ -42,6 +44,9 @@ class Docx:
         self.item_files = []
         self.ink_files = []
         self.xml_files = {}
+        self.protection_state = {"enabled": False}
+        self.is_encrypted = False
+        self.irm_info = {}
         self.namespaces = {
             "a": "http://schemas.openxmlformats.org/drawingml/2006/main",
             "aink": "http://schemas.microsoft.com/office/drawing/2016/ink",
@@ -91,11 +96,25 @@ class Docx:
             "xsd": "http://www.w3.org/2001/XMLSchema",
             "xsi": "http://www.w3.org/2001/XMLSchema-instance",
         }
+        self._parsed = {}
+        self._zip = None
         self.has_ink = False
         self.has_comments = False
         self.msword_file = msword_file
         self.hashing = hashing
-        self.header_offsets, self.binary_content = self.__find_binary_string()
+        if not zipfile.is_zipfile(msword_file):
+            try:
+                is_ole = olefile.isOleFile(msword_file)
+            except (FileNotFoundError, OSError) as e:
+                raise Exception(f"Error accessing {msword_file}: {e}") from e
+            if not is_ole:
+                raise Exception(
+                    f"Error accessing {msword_file}: File is not a zip file"
+                )
+            self.is_encrypted = True
+            self.__init_encrypted()
+            return
+        self._zip = zipfile.ZipFile(msword_file, "r")
         self.extra_fields = self.__xml_extra_bytes()
         self.__load_all_xml()
         self.rsidRs = self.__extract_all_rsids_from_settings_xml()
@@ -130,23 +149,165 @@ class Docx:
             "SharedDoc": [self.app_xml_content, "default"],
             "HyperlinksChanged": [self.app_xml_content, "default"],
         }
-        x = ET.fromstring(self.document_xml_content)
+        x = self.__parse(self.document_xml_content)
         self.p_tags = x.findall(".//w:p", self.namespaces)
         self.r_tags = x.findall(".//w:r", self.namespaces)
         self.t_tags = x.findall(".//w:t", self.namespaces)
         self.tr_tags = x.findall(".//w:tr", self.namespaces)
-        self.shapedata = x.findall(".//v:shape", self.namespaces)
+        ## TODO self.shapedata = x.findall(".//v:shape", self.namespaces)
         self.drawing_tags = x.findall(".//w:drawing", self.namespaces)
         if self.drawing_tags or self.ink_files:
             self.has_ink = True
         if not triage:  # if not run in triage mode, do full parsing
-            self.rsidR_in_document_xml = self.__rsids_in_document_xml("rsidR")
-            self.rsidRPr = self.__rsids_in_document_xml("rsidRPr")
-            self.rsidP = self.__rsids_in_document_xml("rsidP")
-            self.rsidRDefault = self.__rsids_in_document_xml("rsidRDefault")
-            self.rsidTr = self.__rsids_in_document_xml("rsidTr")
-            self.para_id = self.__rsids_in_document_xml("paraId")
-            self.text_id = self.__rsids_in_document_xml("textId")
+            counts = self.__count_rsids()
+            self.rsidR_in_document_xml = {r: counts["rsidR"][r] for r in self.rsidRs}
+            self.rsidRPr = dict(counts["rsidRPr"])
+            self.rsidP = dict(counts["rsidP"])
+            self.rsidRDefault = dict(counts["rsidRDefault"])
+            self.rsidTr = dict(counts["rsidTr"])
+            self.para_id = dict(counts["paraId"])
+            self.text_id = dict(counts["textId"])
+
+    def __init_encrypted(self):
+        self._parsed[""] = ET.fromstring("<empty/>")
+        self.extra_fields = {}
+        self.xml_files = {}
+        self.rsidRs = ""
+        self.rsidR_in_document_xml = {}
+        self.rsidRPr = {}
+        self.rsidP = {}
+        self.rsidRDefault = {}
+        self.rsidTr = {}
+        self.para_id = {}
+        self.text_id = {}
+        self.p_tags = []
+        self.r_tags = []
+        self.t_tags = []
+        self.tr_tags = []
+        self.drawing_tags = []
+        for attrib in (
+            "core_xml_content",
+            "app_xml_content",
+            "document_xml_content",
+            "comments_xml_content",
+            "settings_xml_content",
+            "people_xml_content",
+            "extensible_xml_content",
+            "extended_xml_content",
+            "comments_ids_content",
+            "custom_xml_content",
+            "content_types_content",
+            "xml_rels_content",
+        ):
+            setattr(self, attrib, "")
+        self.ns_lookup = {
+            "title": ["", "dc"],
+            "subject": ["", "dc"],
+            "creator": ["", "dc"],
+            "keywords": ["", "cp"],
+            "description": ["", "dc"],
+            "revision": ["", "cp"],
+            "created": ["", "dcterms"],
+            "modified": ["", "dcterms"],
+            "lastModifiedBy": ["", "cp"],
+            "lastPrinted": ["", "cp"],
+            "category": ["", "cp"],
+            "contentStatus": ["", "cp"],
+            "language": ["", "dc"],
+            "version": ["", "cp"],
+            "Template": ["", "default"],
+            "TotalTime": ["", "default"],
+            "Pages": ["", "default"],
+            "Words": ["", "default"],
+            "Characters": ["", "default"],
+            "Application": ["", "default"],
+            "DocSecurity": ["", "default"],
+            "Lines": ["", "default"],
+            "Paragraphs": ["", "default"],
+            "CharactersWithSpaces": ["", "default"],
+            "AppVersion": ["", "default"],
+            "Manager": ["", "default"],
+            "Company": ["", "default"],
+            "SharedDoc": ["", "default"],
+            "HyperlinksChanged": ["", "default"],
+        }
+        self.irm_info = self.__extract_irm_info()
+
+    def __extract_irm_info(self):
+        """
+        Reads the IRM license out of the OLE container if present.
+        """
+        stream_path = [
+            "\x06DataSpaces",
+            "TransformInfo",
+            "DRMEncryptedTransform",
+            "\x06Primary",
+        ]
+        try:
+            ole = olefile.OleFileIO(self.msword_file)
+        except Exception:
+            return {}
+        try:
+            if not ole.exists(stream_path):
+                return {}
+            data = ole.openstream(stream_path).read()
+        except Exception:
+            return {}
+        finally:
+            ole.close()
+
+        start = data.find(b"<XrML")
+        end = data.find(b"</XrML>")
+        if start == -1 or end == -1:
+            return {}
+        try:
+            license_xml = ET.fromstring(data[start : end + len(b"</XrML>")])
+        except ET.ParseError:
+            return {}
+
+        def text_of(path):
+            element = license_xml.find(path)
+            return element.text if element is not None else None
+
+        def xrml_time(path):
+            value = text_of(path)
+            if value and re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}", value):
+                value += ":00"
+            return value
+
+        template_raw = text_of(".//DESCRIPTOR/OBJECT/NAME")
+        template_name = template_description = None
+        if template_raw:
+            match = re.search(
+                r"NAME (?P<name>[^:]*):DESCRIPTION (?P<description>.*?);?\s*$",
+                template_raw,
+                re.S,
+            )
+            if match:
+                template_name = match.group("name").strip()
+                template_description = match.group("description").strip()
+            else:
+                template_name = template_raw.strip()
+
+        server = license_xml.find(
+            ".//DISTRIBUTIONPOINT/OBJECT[@type='License-Acquisition-URL']/ADDRESS"
+        )
+        tenant = license_xml.find(".//SECURITYLEVEL[@name='Tenant-ID']")
+        sdk = license_xml.find(".//SECURITYLEVEL[@name='SDK']")
+
+        return {
+            "owner": text_of(".//WORK/METADATA/OWNER/OBJECT/NAME"),
+            "issuer": text_of("./BODY/ISSUER/OBJECT/NAME"),
+            "organization": text_of(".//ISSUEDPRINCIPALS/PRINCIPAL/OBJECT/NAME"),
+            "template_name": template_name,
+            "template_description": template_description,
+            "rms_server": server.text if server is not None else None,
+            "tenant_id": tenant.get("value") if tenant is not None else None,
+            "sdk_version": sdk.get("value") if sdk is not None else None,
+            "issued": xrml_time("./BODY/ISSUEDTIME"),
+            "valid_from": xrml_time("./BODY/VALIDITYTIME/FROM"),
+            "valid_until": xrml_time("./BODY/VALIDITYTIME/UNTIL"),
+        }
 
     def __enter__(self):
         return self
@@ -164,89 +325,69 @@ class Docx:
         self.custom_xml_content = None
         self.content_types_content = None
         self.xml_rels_content = None
+        self._parsed = {}
+        if self._zip is not None:
+            self._zip.close()
+            self._zip = None
 
-    def __find_binary_string(self):
-
-        pkzip_header = b"PK\x03\x04"
-        with open(self.msword_file, "rb") as msword_binary:  # read the file as binary
-            content = msword_binary.read()
-        matches = []  # list of offsets where header is found
-        index = 0
-
-        while index < len(content):  # iterate over the list
-            index = content.find(pkzip_header, index)  # search for
-            if index == -1:  # no more items in the list.
-                break
-            matches.append(index)
-            index += 1
-
-        return (
-            matches,
-            content,
-        )  # returns the list of offsets of each header, and the binary file.
+    def __parse(self, content):
+        """
+        Parse all XML content once and store data for lookup
+        """
+        tree = self._parsed.get(content)
+        if tree is None:
+            tree = ET.fromstring(content)
+            self._parsed[content] = tree
+        return tree
 
     def __xml_extra_bytes(self):
         """
         ref: https://en.wikipedia.org/wiki/ZIP_(file_format)#Local_file_header
 
-        return: list [xml file name, # of bytes in extra field, truncated bytes]
+        return: {archive member name: [# of bytes in extra field, truncated bytes]}
         """
-        filename = ""
         extras = {}
         truncate_extra_field = 20  # extra field can be several hundred bytes, mostly 0x00. This grabs the first 20.
+        infolist = self._zip.infolist()
+        with open(self.msword_file, "rb") as msword_binary:
+            for info in infolist:
+                msword_binary.seek(info.header_offset + 26)
+                filename_len, extrafield_len = struct.unpack(
+                    "<2H", msword_binary.read(4)
+                )
+                msword_binary.seek(info.header_offset + 30 + filename_len)
+                extrafield = msword_binary.read(extrafield_len)
+                extrafield_hex_as_text = [f"{h:02x}" for h in extrafield]
 
-        for offset in self.header_offsets:
-            (
-                filename_len,
-                extrafield_len,
-            ) = struct.unpack("<2H", self.binary_content[offset + 26 : offset + 30])
-            filename_start = offset + 30
-            filename_end = offset + 30 + filename_len
-            if filename_end - filename_start < 256:
-                # some DOCx files somehow produce false positives of
-                # excessively long filenames and results in an error. This avoids that error.
-                filename = self.binary_content[filename_start:filename_end].decode(
-                    "ascii"
-                ).strip().replace("\x00", "")
-            extrafield_start = filename_end
-            extrafield_end = extrafield_start + extrafield_len
-            extrafield = self.binary_content[extrafield_start:extrafield_end]
-            extrafield_hex_as_text = []
-
-            for h in extrafield:
-                extrafield_hex_as_text.append(f"{h:02x}")
-
-            if not extrafield:
-                extras[filename] = [extrafield_len, "nil"]
-            elif (
-                extrafield_len <= truncate_extra_field
-            ):  # field size larger than truncate value
-                extras[filename] = [
-                    extrafield_len,
-                    f"0x{''.join(extrafield_hex_as_text)}",
-                ]
-            else:
-                extras[filename] = [
-                    extrafield_len,
-                    f"0x{''.join(extrafield_hex_as_text[0:truncate_extra_field])}",
-                ]  # adds only
-                # the select # of characters as specified in the variable truncate_extra_field. This is so that
-                # we don't end up with hundreds of characters in a cell in Excel, as some extra fields can be
-                # several hundred values long. But so far, most are 0x00, with only the first few being values other
-                # than hex 0x00.
+                if not extrafield:
+                    extras[info.filename] = [extrafield_len, "nil"]
+                elif (
+                    extrafield_len <= truncate_extra_field
+                ):  # field size larger than truncate value
+                    extras[info.filename] = [
+                        extrafield_len,
+                        f"0x{''.join(extrafield_hex_as_text)}",
+                    ]
+                else:
+                    extras[info.filename] = [
+                        extrafield_len,
+                        f"0x{''.join(extrafield_hex_as_text[0:truncate_extra_field])}",
+                    ]
+                    # adds only the select # of characters as specified in the variable truncate_extra_field.
+                    # This is so that we don't end up with hundreds of characters in a cell in Excel,
+                    # as some extra fields can be several hundred values long.
+                    # But so far, most are 0x00, with only the first few being values other than hex 0x00.
 
         return extras
 
     def __load_xml(self, xml_file):
-        content = ""
-        if (
-            xml_file in self.get_xml_files()
-        ):  # if the file exists, read it and return its content
-            if "comments.xml" in xml_file:
-                self.has_comments = True
-            with zipfile.ZipFile(self.msword_file, "r") as zipref:
-                with zipref.open(xml_file) as xmlFile:
-                    content = xmlFile.read()
+        try:
+            with self._zip.open(xml_file) as xmlFile:
+                content = xmlFile.read()
+        except KeyError:  # not present in the archive
+            return ""
+        if "comments.xml" in xml_file:
+            self.has_comments = True
         return content
 
     def __load_all_xml(self):
@@ -280,83 +421,79 @@ class Docx:
 
         modified_time = None
         compression_types = {0: "Store (None)", 8: "DEFLATE"}
-        zip_contents = []
-        zip_names = []
+        for attrib in xml_map:
+            setattr(self, attrib, "")
+        path_to_attrib = {}
+        for attrib, file_path in xml_map.items():
+            path_to_attrib[file_path] = attrib
+            path_to_attrib[file_path.replace("/", "\\")] = attrib
+
         try:
-            with zipfile.ZipFile(self.msword_file, "r") as zipref:
-                zip_filenames = zipref.namelist()
-                for name in zip_filenames:
-                    if name.endswith(".xml") or name.endswith(".rels"):
-                        zip_names.append(name)
-                zip_filenames = zip_names
-                del zip_names
-                zip_info = zipref.infolist()
-                for file in zip_info:
-                    if file.filename.endswith(".xml") or file.filename.endswith(".rels"):
-                        zip_contents.append(file)
-                zip_info = zip_contents
-                del zip_contents
-                for xml in zip_info:
-                    md5hash = None
-                    xml_name = xml.filename
-                    xml_files[xml_name] = blank.copy()
-                    if (
-                        "customXml/item" in xml_name
-                        and "Props" not in xml_name
-                        and xml_name not in self.item_files
-                    ):
-                        self.item_files.append(xml_name)
-                    if "ink/ink" in xml_name and xml_name not in self.ink_files:
-                        self.ink_files.append(xml_name)
-                    if self.hashing:
-                        try:
-                            with zipref.open(xml_name) as xml_file:
-                                content = xml_file.read()
-                                md5hash = self.hash(content)
-                        except:
-                            pass
-                    m_time = xml.date_time
-                    if m_time not in ((1980, 1, 1, 0, 0, 0), (1980, 0, 0, 0, 0, 0)):
-                        modified_time = dt(*m_time).strftime(__dtfmt__)
-                    xml_files[xml_name]["MD5"] = md5hash
-                    xml_files[xml_name]["Modified Time"] = modified_time
-                    xml_files[xml_name]["File Size"] = xml.file_size
-                    xml_files[xml_name][
-                        "Zip Compression"
-                    ] = f'{str(xml.compress_type)}: {compression_types.get(xml.compress_type, "Unidentified")}'
-                    xml_files[xml_name]["Zip Create System"] = xml.create_system
-                    xml_files[xml_name]["Zip Create Version"] = xml.create_version
-                    xml_files[xml_name]["Zip Extract Version"] = xml.extract_version
-                    xml_files[xml_name]["Zip Flag Bits"] = f"{xml.flag_bits:#0{6}x}"
-                    if xml_name in self.extra_fields:
-                        xml_files[xml_name]["Zip Extra Fields Length"] = self.extra_fields[
-                            xml_name
-                        ][0]
-                        xml_files[xml_name]["Zip Extra Fields Bytes"] = self.extra_fields[
-                            xml_name
-                        ][1]
-                    else:
-                        xml_name_modified = xml_name.replace("/", "\\")
-                        if xml_name_modified in self.extra_fields:
-                            xml_files[xml_name]["Zip Extra Fields Length"] = self.extra_fields[
-                                xml_name_modified
-                            ][0]
-                            xml_files[xml_name]["Zip Extra Fields Bytes"] = self.extra_fields[
-                                xml_name_modified
-                            ][1]
-                        else:
-                            xml_files[xml_name]["Zip Extra Fields Length"] = 0
-                            xml_files[xml_name]["Zip Extra Fields Bytes"] = 'nil'
-                for attrib, file_path in xml_map.items():
-                    alt_path = file_path.replace("/", "\\")
-                    target = file_path if file_path in zip_filenames else alt_path
-                    if target in zip_filenames:
-                        if "comments.xml" in target:
+            zipref = self._zip
+            zip_info = [
+                info
+                for info in zipref.infolist()
+                if info.filename.endswith(".xml") or info.filename.endswith(".rels")
+            ]
+            for xml in zip_info:
+                md5hash = None
+                xml_name = xml.filename
+                xml_files[xml_name] = blank.copy()
+                if (
+                    "customXml/item" in xml_name
+                    and "Props" not in xml_name
+                    and xml_name not in self.item_files
+                ):
+                    self.item_files.append(xml_name)
+                if "ink/ink" in xml_name and xml_name not in self.ink_files:
+                    self.ink_files.append(xml_name)
+                target_attrib = path_to_attrib.get(xml_name)
+                if self.hashing or target_attrib:
+                    try:
+                        with zipref.open(xml_name) as xml_file:
+                            content = xml_file.read()
+                    except Exception:
+                        content = None
+                    if self.hashing and content is not None:
+                        md5hash = self.hash(content)
+                    if target_attrib:
+                        if "comments.xml" in xml_name:
                             self.has_comments = True
-                        content = zipref.read(target)
-                        setattr(self, attrib, content)
+                        setattr(
+                            self, target_attrib, content if content is not None else ""
+                        )
+                m_time = xml.date_time
+                if m_time not in ((1980, 1, 1, 0, 0, 0), (1980, 0, 0, 0, 0, 0)):
+                    modified_time = dt(*m_time).strftime(__dtfmt__)
+                xml_files[xml_name]["MD5"] = md5hash
+                xml_files[xml_name]["Modified Time"] = modified_time
+                xml_files[xml_name]["File Size"] = xml.file_size
+                xml_files[xml_name][
+                    "Zip Compression"
+                ] = f'{str(xml.compress_type)}: {compression_types.get(xml.compress_type, "Unidentified")}'
+                xml_files[xml_name]["Zip Create System"] = xml.create_system
+                xml_files[xml_name]["Zip Create Version"] = xml.create_version
+                xml_files[xml_name]["Zip Extract Version"] = xml.extract_version
+                xml_files[xml_name]["Zip Flag Bits"] = f"{xml.flag_bits:#0{6}x}"
+                if xml_name in self.extra_fields:
+                    xml_files[xml_name]["Zip Extra Fields Length"] = self.extra_fields[
+                        xml_name
+                    ][0]
+                    xml_files[xml_name]["Zip Extra Fields Bytes"] = self.extra_fields[
+                        xml_name
+                    ][1]
+                else:
+                    xml_name_modified = xml_name.replace("/", "\\")
+                    if xml_name_modified in self.extra_fields:
+                        xml_files[xml_name]["Zip Extra Fields Length"] = (
+                            self.extra_fields[xml_name_modified][0]
+                        )
+                        xml_files[xml_name]["Zip Extra Fields Bytes"] = (
+                            self.extra_fields[xml_name_modified][1]
+                        )
                     else:
-                        setattr(self, attrib, "")
+                        xml_files[xml_name]["Zip Extra Fields Length"] = 0
+                        xml_files[xml_name]["Zip Extra Fields Bytes"] = "nil"
             self.xml_files = xml_files
         except (BadZipFile, FileNotFoundError) as e:
             raise Exception(f"Error accessing {self.msword_file}: {e}") from e
@@ -371,7 +508,7 @@ class Docx:
         xmlcontent = self.ns_lookup[attrib][0]
         ns = self.namespaces[self.ns_lookup[attrib][1]]
         if xmlcontent:
-            content = ET.fromstring(xmlcontent)
+            content = self.__parse(xmlcontent)
             ns_extract = content.find(f"{{{ns}}}{attrib}")
             meta_content = ns_extract.text if ns_extract is not None else None
         else:
@@ -519,15 +656,18 @@ class Docx:
         return None
 
     def get_content_types(self):
-        extentions = []
-        types = []
-        part_names = []        
+        entries = []
         if self.content_types_content:
             x = ET.fromstring(self.content_types_content)
-            extensions = [node.get('Extension') for node in x.findall('Types:Default', self.namespaces)]
-            types = [node.get('ContentType') for node in x.findall('Types:Default', self.namespaces)]
-            part_names = [node.get('PartName') for node in x.findall('Types:Override', self.namespaces)]
-        return extensions, types, part_names
+            for node in x.findall("Types:Default", self.namespaces):
+                entries.append(
+                    ("Default", node.get("Extension"), node.get("ContentType"))
+                )
+            for node in x.findall("Types:Override", self.namespaces):
+                entries.append(
+                    ("Override", node.get("PartName"), node.get("ContentType"))
+                )
+        return entries
 
     def get_xml_rels(self):
         rels = {}
@@ -545,7 +685,7 @@ class Docx:
         :return:
         """
         rsids = []
-        x = ET.fromstring(self.settings_xml_content)
+        x = self.__parse(self.settings_xml_content)
         rsid_tags = x.findall(".//w:rsid", self.namespaces)
         for tag in rsid_tags:
             rsid_tag = tag.get(f"{{{self.namespaces['w']}}}val", None)
@@ -553,49 +693,42 @@ class Docx:
                 rsids.append(rsid_tag)
         return "" if not rsids else rsids
 
-    def __rsids_in_document_xml(self, rsid):
+    def __count_rsids(self):
         """
-        :param rsid tag name (e.g. "rsidRPr", "rsidP", "rsidRDefault")
-        The function accepts an rsid tag name as a parameter (e.g. rsidRPr, rsidP, rsidDefault).
-        It searches document.xml for a pattern to find all instances of that rsid tag.
-        It creates a dictionary that contains each unique rsid value as the key, and the count of how many times
-        that rsid is in document.xml.
-        E.g., {"00123456": 4, "00234567": 0, "00345678":11}
+        Single pass over the p, r, t and tr tags in document.xml counting each rsid attribute
+        (rsidR, rsidRPr, rsidP, rsidRDefault, rsidTr, paraId, textId).
 
-        :return: dictionary where the key is unique RSIDs, and the value is a count of the occurrences of that rsid
-        in document.xml
+        :return: {attribute name: Counter of rsid value -> occurrences in document.xml}
         """
-        rsids = {}
-        all_rsids = []
-        ns_list = {
-            "rsidR": self.namespaces["w"],
-            "rsidRDefault": self.namespaces["w"],
-            "rsidRPr": self.namespaces["w"],
-            "rsidP": self.namespaces["w"],
-            "rsidTr": self.namespaces["w"],
-            "paraId": self.namespaces["w14"],
-            "textId": self.namespaces["w14"],
+        w = self.namespaces["w"]
+        w14 = self.namespaces["w14"]
+        keys = {
+            "rsidR": f"{{{w}}}rsidR",
+            "rsidRDefault": f"{{{w}}}rsidRDefault",
+            "rsidRPr": f"{{{w}}}rsidRPr",
+            "rsidP": f"{{{w}}}rsidP",
+            "rsidTr": f"{{{w}}}rsidTr",
+            "paraId": f"{{{w14}}}paraId",
+            "textId": f"{{{w14}}}textId",
         }
+        counts = {name: Counter() for name in keys}
         for entry in (self.p_tags, self.r_tags, self.t_tags, self.tr_tags):
             for item in entry:
-                other_rsid = item.get(f"{{{ns_list[rsid]}}}{rsid}", None)
-                if other_rsid:
-                    all_rsids.append(other_rsid)
-        unique_rsids = set(all_rsids)
-        if rsid == "rsidR":
-            for each in self.rsidRs:
-                rsids[each] = all_rsids.count(each)
-        else:
-            for each_rsid in unique_rsids:
-                rsids[each_rsid] = all_rsids.count(each_rsid)
-        return rsids
+                attrib = item.attrib
+                if not attrib:
+                    continue
+                for name, key in keys.items():
+                    value = attrib.get(key)
+                    if value:
+                        counts[name][value] += 1
+        return counts
 
     def hyperlinks(self):
         """
         :return: Hyperlink values in document.xml
         """
         all_hyperlinks = []
-        doc = ET.fromstring(self.document_xml_content)
+        doc = self.__parse(self.document_xml_content)
         for hyperlink in doc.findall(f".//{{{self.namespaces['w']}}}hyperlink"):
             link_text = hyperlink.findall(f".//{{{self.namespaces['w']}}}t")
             hyperlinks = ",".join(link.text for link in link_text if link.text)
@@ -607,7 +740,9 @@ class Docx:
         for k, v in rels.items():
             if v[1] == "hyperlink":
                 all_hyperlinks.append([k.replace("http", "hxxp"), v[0]])
-        formatted_hyperlinks = " | ".join(f"{url}: {rel}" for url, rel in all_hyperlinks)
+        formatted_hyperlinks = " | ".join(
+            f"{url}: {rel}" for url, rel in all_hyperlinks
+        )
         return formatted_hyperlinks
 
     def filename(self):
@@ -623,90 +758,13 @@ class Docx:
         if self.hashing:  # if hashing option was selected
             filehash = hashlib.md5()
             if content is None:
-                filehash.update(self.binary_content)
+                with open(self.msword_file, "rb") as msword_binary:
+                    for chunk in iter(lambda: msword_binary.read(1024 * 1024), b""):
+                        filehash.update(chunk)
             else:
                 filehash.update(content)
             return filehash.hexdigest().upper()
         return None  # if no hashing was selected.
-
-    def get_xml_files(self):
-        """
-        :return: A dictionary in the following format:
-        {XML filename: [file hash,
-                        modified date,
-                        file size,
-                        ZIP compression type,
-                        ZIP Create System,
-                        ZIP Created Version,
-                        ZIP Extract Version,
-                        ZIP Flag Bits (hex),
-                        ZIP extra values (hex as text)
-        }
-        """
-        compression_types = {0: "Store (None)", 8: "DEFLATE"}
-        md5hash = None
-        with zipfile.ZipFile(self.msword_file, "r") as zip_file:
-            xml_files = {}
-            for file_info in zip_file.infolist():
-                if (
-                    "customXml/item" in file_info.filename
-                    and "Props" not in file_info.filename
-                    and file_info.filename not in self.item_files
-                ):
-                    self.item_files.append(file_info.filename)
-                if (
-                    "ink/ink" in file_info.filename
-                    and file_info.filename not in self.ink_files
-                ):
-                    self.ink_files.append(file_info.filename)
-                with zipfile.ZipFile(self.msword_file, "r") as zip_ref:
-                    try:
-                        with zip_ref.open(file_info.filename) as xml_file:
-                            if self.hashing:  # if hashing option selected
-                                md5hash = self.hash(xml_file.read())
-                            else:
-                                md5hash = "Option Not Selected"  # else return blank for hash value.
-                    except BadZipFile:
-                        pass
-                    except OSError as exc:
-                        raise Exception(
-                            "Error processing the zip file header - likely offset is incorrect."
-                        ) from exc
-                m_time = file_info.date_time
-                if m_time in ((1980, 1, 1, 0, 0, 0), (1980, 0, 0, 0, 0, 0)):
-                    modified_time = None
-                else:
-                    modified_time = dt(*m_time).strftime(__dtfmt__)
-                fname = file_info.filename
-                if fname not in self.extra_fields:
-                    fname = fname.replace("/", "\\")
-                xml_files[file_info.filename] = [
-                    md5hash,
-                    modified_time,
-                    file_info.file_size,
-                    f'{str(file_info.compress_type)}: {compression_types.get(file_info.compress_type, "Unidentified")}',
-                    file_info.create_system,
-                    file_info.create_version,
-                    file_info.extract_version,
-                    f"{file_info.flag_bits:#0{6}x}",
-                    self.extra_fields[fname][0],
-                    self.extra_fields[fname][1],
-                ]
-            return xml_files
-
-    def xml_hash(self, xmlfile: str):
-        """
-        :param: xmlfile
-        :return: the hash of a specified XML file
-        """
-        return self.xml_files[xmlfile]["MD5"]
-
-    def xml_size(self, xmlfile: str):
-        """
-        :param: xmlfile
-        :return: the size of a specified XML file
-        """
-        return self.xml_files[xmlfile]["File Size"]
 
     def paragraph_tags(self):
         """
@@ -736,7 +794,7 @@ class Docx:
         """
         :return: rsidRoot from settings.xml
         """
-        x = ET.fromstring(self.settings_xml_content)
+        x = self.__parse(self.settings_xml_content)
         rsid_root_entry = x.findall(".//w:rsidRoot", self.namespaces)
         root = None
         for entry in [rsid_root_entry]:
@@ -751,7 +809,7 @@ class Docx:
         """
         :return: the w14, w15, and w16 docId's from settings.xml
         """
-        x = ET.fromstring(self.settings_xml_content)
+        x = self.__parse(self.settings_xml_content)
         w14_id = w15_id = w16_id = "None"
         w14_ns = x.find(f"{{{self.namespaces['w14']}}}docId")
         if w14_ns is not None:
@@ -840,7 +898,7 @@ class Docx:
         )
 
     def get_proof_state(self):
-        xml = ET.fromstring(self.settings_xml_content)
+        xml = self.__parse(self.settings_xml_content)
         proof_state = xml.find(f"{{{self.namespaces['w']}}}proofState")
         spelling = grammar = "None"
         if proof_state is not None:
@@ -912,17 +970,184 @@ class Docx:
             return content
         return None
 
+    def get_document_protection(self):
+        enabled = False
+        xml = self.__parse(self.settings_xml_content)
+        protect_state = xml.find(f"{{{self.namespaces['w']}}}documentProtection")
+        if protect_state is not None:
+            for k, v in protect_state.attrib.items():
+                k = k.replace(f"{{{self.namespaces['w']}}}", "")
+                if k == "enforcement" and v.lower() in ("1", "true", "on"):
+                    self.protection_state["enabled"] = True
+                    enabled = True
+                self.protection_state[k] = v
+        return enabled
+
+    def get_track_changes_status(self):
+        """
+        Status of Track Changes setting.
+        """
+        xml = self.__parse(self.settings_xml_content)
+        element = xml.find(f"{{{self.namespaces['w']}}}trackChanges")
+        if element is None:
+            return False
+        val = element.get(f"{{{self.namespaces['w']}}}val")
+        return True if val is None else val.lower() in ("1", "true", "on")
+
+    def get_track_changes(self):
+        """
+        Extracts tracked changes revisions from document.xml
+        """
+        w = self.namespaces["w"]
+
+        def qn(tag):
+            return f"{{{w}}}{tag}"
+
+        def text_of(element, text_tag):
+            return "".join(t.text or "" for t in element.findall(f".//{qn(text_tag)}"))
+
+        def attrs(element):
+            return element.get(qn("author")), element.get(qn("date"))
+
+        if not self.document_xml_content:
+            return []
+        doc = self.__parse(self.document_xml_content)
+        changes = []
+
+        # Insertions, deletions, and moved text
+        for tag, label, text_tag in (
+            ("ins", "Insertion", "t"),
+            ("del", "Deletion", "delText"),
+            ("moveTo", "Move To", "t"),
+            ("moveFrom", "Move From", "delText"),
+        ):
+            for element in doc.findall(f".//{qn(tag)}"):
+                author, date = attrs(element)
+                changes.append((label, author, date, text_of(element, text_tag)))
+        for run in doc.findall(f".//{qn('r')}"):
+            rpr_change = run.find(f"{qn('rPr')}/{qn('rPrChange')}")
+            if rpr_change is not None:
+                author, date = attrs(rpr_change)
+                changes.append(("Formatting", author, date, text_of(run, "t")))
+        for para in doc.findall(f".//{qn('p')}"):
+            ppr_change = para.find(f"{qn('pPr')}/{qn('pPrChange')}")
+            if ppr_change is not None:
+                author, date = attrs(ppr_change)
+                changes.append(
+                    ("Paragraph Formatting", author, date, text_of(para, "t"))
+                )
+            mark_rpr = para.find(f"{qn('pPr')}/{qn('rPr')}")
+            if mark_rpr is not None:
+                for tag, label in (
+                    ("ins", "Paragraph Mark Inserted"),
+                    ("del", "Paragraph Mark Deleted"),
+                ):
+                    marker = mark_rpr.find(qn(tag))
+                    if marker is not None:
+                        author, date = attrs(marker)
+                        changes.append((label, author, date, text_of(para, "t")))
+                mark_rpr_change = mark_rpr.find(qn("rPrChange"))
+                if mark_rpr_change is not None:
+                    author, date = attrs(mark_rpr_change)
+                    changes.append(
+                        ("Paragraph Mark Formatting", author, date, text_of(para, "t"))
+                    )
+        for table in doc.findall(f".//{qn('tbl')}"):
+            tblpr_change = table.find(f"{qn('tblPr')}/{qn('tblPrChange')}")
+            if tblpr_change is not None:
+                author, date = attrs(tblpr_change)
+                changes.append(("Table Formatting", author, date, None))
+        for row in doc.findall(f".//{qn('tr')}"):
+            trpr_change = row.find(f"{qn('trPr')}/{qn('trPrChange')}")
+            if trpr_change is not None:
+                author, date = attrs(trpr_change)
+                changes.append(("Table Row Formatting", author, date, None))
+        for cell in doc.findall(f".//{qn('tc')}"):
+            tcpr = cell.find(qn("tcPr"))
+            if tcpr is None:
+                continue
+            tcpr_change = tcpr.find(qn("tcPrChange"))
+            if tcpr_change is not None:
+                author, date = attrs(tcpr_change)
+                changes.append(
+                    ("Table Cell Formatting", author, date, text_of(cell, "t"))
+                )
+            for tag, label in (
+                ("cellIns", "Table Cell Inserted"),
+                ("cellDel", "Table Cell Deleted"),
+            ):
+                marker = tcpr.find(qn(tag))
+                if marker is not None:
+                    author, date = attrs(marker)
+                    changes.append((label, author, date, text_of(cell, "t")))
+        for sectpr_change in doc.findall(f".//{qn('sectPr')}/{qn('sectPrChange')}"):
+            author, date = attrs(sectpr_change)
+            changes.append(("Section Formatting", author, date, None))
+
+        return changes
+
+    def get_range_permissions(self):
+        """
+        Extracts w:permStart/w:permEnd permissions from document.xml.
+        """
+        w = self.namespaces["w"]
+
+        def qn(tag):
+            return f"{{{w}}}{tag}"
+
+        if not self.document_xml_content:
+            return []
+        doc = self.__parse(self.document_xml_content)
+
+        editors = {}
+        texts = {}
+        order = []
+        open_ids = []
+
+        for element in doc.iter():
+            tag = element.tag
+            if tag == qn("permStart"):
+                pid = element.get(qn("id"))
+                editors[pid] = element.get(qn("ed")) or element.get(qn("edGrp"))
+                texts[pid] = []
+                order.append(pid)
+                open_ids.append(pid)
+            elif tag == qn("permEnd"):
+                pid = element.get(qn("id"))
+                if pid in open_ids:
+                    open_ids.remove(pid)
+            elif tag == qn("p"):
+                for pid in open_ids:
+                    if texts[pid]:
+                        texts[pid].append("\n")
+            elif tag == qn("t"):
+                for pid in open_ids:
+                    texts[pid].append(element.text or "")
+
+        return [(pid, editors[pid], "".join(texts[pid])) for pid in order]
+
     def get_ink(self):
         ts_data = []
         for ink_file in self.ink_files:
             load_ink = self.__load_xml(ink_file)
             xml = ET.fromstring(load_ink)
+            ts = None
             for element in xml.iter():
                 tag = element.tag.split("}")[-1] if "}" in element.tag else element.tag
                 if tag == "timestamp":
-                    (ts_ns, ts_id), (timestring, ts) = element.attrib.items()
+                    for name, value in element.attrib.items():
+                        attr_name = name.split("}")[-1] if "}" in name else name
+                        if attr_name == "timeString":
+                            ts = value
+                            break
             ts_data.append([ink_file, ts])
         return ts_data
+
+    def get_irm_info(self):
+        """
+        Returns the IRM info extracted from the OLE container.
+        """
+        return self.irm_info
 
     def adjust_timestamp(self, ts):
         if ts:
