@@ -2856,7 +2856,12 @@ def get_files(folder_path, recursive=False):
 def update_cli(msg, level="info", color=__clr__, store: DataStore = None):
     if store is None:
         return
-    levels = {"info": logging.INFO, "error": logging.ERROR, "debug": logging.DEBUG}
+    levels = {
+        "info": logging.INFO,
+        "warning": logging.WARNING,
+        "error": logging.ERROR,
+        "debug": logging.DEBUG,
+    }
     log_level = levels[level]
     if isinstance(store.color_fmt, ColorFormatter):
         store.color_fmt.set_color(color)
