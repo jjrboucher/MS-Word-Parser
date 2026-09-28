@@ -12,10 +12,17 @@ class DataStore:
         self.rsids_worksheet = {}
         self.comments_worksheet = {}
         self.people_worksheet = {}
+        self.protection_worksheet = {}
         self.extensible_worksheet = {}
         self.extended_worksheet = {}
         self.comments_ids_worksheet = {}
         self.custom_xml_worksheet = {}
+        self.content_types_worksheet = {}
+        self.track_changes_worksheet = {}
+        self.range_permissions_worksheet = {}
+        self.irm_worksheet = {}
+        self.headers_footers_worksheet = {}
+        self.footnotes_endnotes_worksheet = {}
         self.item_worksheet = {}
         self.ink_worksheet = {}
         self.timeline_worksheet = {}
@@ -61,9 +68,12 @@ class DataStore:
             "Created Date": "datetime64[ns]",
             "dateUtc": "datetime64[ns]",
             "Description": "string",
+            "Different First Page": "boolean",
+            "Different Odd/Even Pages": "boolean",
             "Doc Security": "Int32",
             "Done": "boolean",
             "durableId": "string",
+            "Encrypted": "boolean",
             "File Created Date": "datetime64[ns]",
             "File Modified Date": "datetime64[ns]",
             "File Name": "string",
@@ -74,6 +84,7 @@ class DataStore:
             "Hyperlinks": "string",
             "Initials": "string",
             "Ink XML File": "string",
+            "Issued (UTC)": "datetime64[ns]",
             "Item XML File": "string",
             "Keywords": "string",
             "Language": "string",
@@ -89,9 +100,11 @@ class DataStore:
             "paraId Text": "string",
             "paraId": "string",
             "paraIdParent": "string",
+            "Protection Enabled": "boolean",
             "providerId": "string",
             "reactionDateUtc": "datetime64[ns]",
             "reactionType": "string",
+            "Referenced": "boolean",
             "Revision": "Int32",
             "RSID Root": "string",
             "RSID Type": "string",
@@ -105,6 +118,7 @@ class DataStore:
             "Timestamp": "datetime64[ns]",
             "Title": "string",
             "Total Editing Time": "Int32",
+            "Track Changes Enabled": "boolean",
             "Type": "string",
             "Uncompressed Size (bytes)": "Int32",
             "Unique rsidR": "Int32",
@@ -112,13 +126,15 @@ class DataStore:
             "userId": "string",
             "userName": "string",
             "userProvider": "string",
+            "Valid From (UTC)": "datetime64[ns]",
+            "Valid Until (UTC)": "datetime64[ns]",
             "Value": "string",
             "Version": "string",
             "Words": "Int32",
             "ZIP Compression Type": "string",
             "ZIP Create System": "Int32",
             "ZIP Created Version": "Int32",
-            "ZIP Extra Characters (truncated)": "string",
+            "ZIP Extra Bytes (truncated)": "string",
             "ZIP Extra Flag (len)": "Int32",
             "ZIP Extract Version": "Int32",
             "ZIP Flag Bits (hex)": "string",
@@ -144,10 +160,17 @@ class DataStore:
         self.rsids_worksheet = {}
         self.comments_worksheet = {}
         self.people_worksheet = {}
+        self.protection_worksheet = {}
         self.extensible_worksheet = {}
         self.extended_worksheet = {}
         self.comments_ids_worksheet = {}
         self.custom_xml_worksheet = {}
+        self.content_types_worksheet = {}
+        self.track_changes_worksheet = {}
+        self.range_permissions_worksheet = {}
+        self.irm_worksheet = {}
+        self.headers_footers_worksheet = {}
+        self.footnotes_endnotes_worksheet = {}
         self.item_worksheet = {}
         self.ink_worksheet = {}
         self.timeline_worksheet = {}

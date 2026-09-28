@@ -1,13 +1,13 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-__version__ = '3.0.1'
+__version__ = '3.1.0'
 
 a = Analysis(
     ['ms_word_parser/parse_docx.py'],
     pathex=[],
     binaries=[],
     datas=[],
-    hiddenimports=[],
+    hiddenimports=["ms_word_parser.gui"],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
