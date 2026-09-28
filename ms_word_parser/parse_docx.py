@@ -128,6 +128,8 @@ __author__ = (
     "Jacques Boucher - jjrboucher@gmail.com\nCorey Forman - corey@digitalsleuth.ca"
 )
 __dtfmt__ = "%Y-%m-%d %H:%M:%S"
+DOCX_EXTENSIONS = {".docx", ".dotx", ".dotm", ".docm"}
+EXCEL_MAX_CELL_LEN = 32767  # Excel per-cell text limit
 EXTRA_INDEXES = {
     "document_summary": ["md5_hash", "rsid_root"],
     "metadata": ["author", "last_modified_by", "rsid_root"],
@@ -159,7 +161,6 @@ WORKER_SHEET_ATTRS = [
     "footnotes_endnotes_worksheet",
     "ink_worksheet",
 ]
-EXCEL_MAX_CELL_LEN = 32767  # Excel per-cell text limit
 
 
 class AboutWindow(QWidget):
@@ -2837,9 +2838,6 @@ def generate_visual_timeline(writer, sheet):
     chart.set_plotarea({"border": {"none": True}, "fill": {"color": "#ffffff"}})
     chart.set_size({"width": 1400, "height": 500})
     worksheet.insert_chart("D2", chart)
-
-
-DOCX_EXTENSIONS = {".docx", ".dotx", ".dotm", ".docm"}
 
 
 def get_files(folder_path, recursive=False):
