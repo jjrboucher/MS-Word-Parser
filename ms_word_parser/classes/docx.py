@@ -489,8 +489,7 @@ class Docx:
 
     def __load_xml(self, xml_file):
         try:
-            with self._zip.open(xml_file) as xmlFile:
-                content = xmlFile.read()
+            content = self.__zip_read(xml_file)
         except KeyError:  # not present in the archive
             return ""
         if "comments.xml" in xml_file:
