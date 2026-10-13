@@ -497,7 +497,7 @@ def process_docx(filename, triage, hashing, store: DataStore):
                 else store.extended_worksheet
             )
             for comment in extended_comments:
-                values = [this_file, comment[0], comment[1], bool(int(comment[2]))]
+                values = [this_file, comment[0], comment[1], comment[2]]
                 for k, v in zip(headers, values):
                     store.extended_worksheet[k].append(v)
 

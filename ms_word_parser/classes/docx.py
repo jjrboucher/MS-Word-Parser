@@ -1,4 +1,6 @@
 import hashlib
+import io
+import posixpath
 import re
 import struct
 import zlib
@@ -15,6 +17,99 @@ except ModuleNotFoundError:
     from ms_word_parser.classes.datastore import DataStore
 
 __dtfmt__ = "%Y-%m-%d %H:%M:%S"
+
+
+class _RecoverZip:
+    def __init__(self, path, entries, dropped):
+        self._path = path
+        self._entries = entries
+        self._by_name = {info.filename: (info, offset) for info, offset in entries}
+        self.dropped = dropped
+
+    @classmethod
+    def from_file(cls, path):
+        entries, dropped = [], []
+        with open(path, "rb") as fh:
+            fh.seek(0, 2)
+            size = fh.tell()
+            pos = 0
+            while pos + 30 <= size:
+                fh.seek(pos)
+                head = fh.read(30)
+                if head[:4] != b"PK\x03\x04":
+                    break
+                version, flags, method, mtime, mdate, crc, csize, usize, nlen, elen = (
+                    struct.unpack("<HHHHHIIIHH", head[4:])
+                )
+                if (flags & 0x08 and not csize) or csize == 0xFFFFFFFF:
+                    break
+                name = fh.read(nlen).decode(
+                    "utf-8" if flags & 0x800 else "cp437", "replace"
+                )
+                extra = fh.read(elen)
+                data_start = pos + 30 + nlen + elen
+                compressed = fh.read(csize)
+                raw = None
+                if len(compressed) == csize:
+                    try:
+                        if method == zipfile.ZIP_STORED:
+                            raw = compressed
+                        elif method == zipfile.ZIP_DEFLATED:
+                            raw = zlib.decompressobj(-15).decompress(compressed)
+                    except zlib.error:
+                        pass
+                if raw is not None and len(raw) == usize and zlib.crc32(raw) == crc:
+                    info = zipfile.ZipInfo(name)
+                    info.date_time = (
+                        (mdate >> 9) + 1980,
+                        (mdate >> 5) & 0xF,
+                        mdate & 0x1F,
+                        mtime >> 11,
+                        (mtime >> 5) & 0x3F,
+                        (mtime & 0x1F) * 2,
+                    )
+                    info.compress_type = method
+                    info.flag_bits = flags
+                    info.extract_version = version
+                    info.create_version = None
+                    info.create_system = None
+                    info.CRC = crc
+                    info.compress_size = csize
+                    info.file_size = usize
+                    info.header_offset = pos
+                    info.extra = extra
+                    entries.append((info, data_start))
+                else:
+                    dropped.append(name)
+                if data_start + csize > size:
+                    break
+                pos = data_start + csize
+        if not any(info.filename == "word/document.xml" for info, _ in entries):
+            return None
+        return cls(path, entries, dropped)
+
+    def infolist(self):
+        return [info for info, _ in self._entries]
+
+    def getinfo(self, name):
+        try:
+            return self._by_name[name][0]
+        except KeyError:
+            raise KeyError(f"There is no item named {name!r} in the archive") from None
+
+    def open(self, name):
+        info = self.getinfo(name)
+        offset = self._by_name[name][1]
+        with open(self._path, "rb") as fh:
+            fh.seek(offset)
+            compressed = fh.read(info.compress_size)
+        if info.compress_type == zipfile.ZIP_DEFLATED:
+            compressed = zlib.decompressobj(-15).decompress(compressed)
+        return io.BytesIO(compressed)
+
+    def close(self):
+        self._entries = []
+        self._by_name = {}
 
 
 class Docx:
@@ -102,23 +197,32 @@ class Docx:
         self._parsed = {}
         self._zip = None
         self._header_index = None
+        self._recovery_logged = set()
         self.has_ink = False
         self.has_comments = False
         self.msword_file = msword_file
         self.hashing = hashing
-        if not zipfile.is_zipfile(msword_file):
+        if zipfile.is_zipfile(msword_file):
+            try:
+                self._zip = zipfile.ZipFile(msword_file, "r")
+            except BadZipFile:
+                self._zip = self.__salvage_zip()
+                if self._zip is None:
+                    raise
+        else:
             try:
                 is_ole = olefile.isOleFile(msword_file)
             except (FileNotFoundError, OSError) as e:
                 raise Exception(f"Error accessing {msword_file}: {e}") from e
-            if not is_ole:
+            if is_ole:
+                self.is_encrypted = True
+                self.__init_encrypted()
+                return
+            self._zip = self.__salvage_zip()
+            if self._zip is None:
                 raise Exception(
                     f"Error accessing {msword_file}: File is not a zip file"
                 )
-            self.is_encrypted = True
-            self.__init_encrypted()
-            return
-        self._zip = zipfile.ZipFile(msword_file, "r")
         self.extra_fields = self.__xml_extra_bytes()
         self.__load_all_xml()
         self.rsidRs = self.__extract_all_rsids_from_settings_xml()
@@ -428,12 +532,61 @@ class Docx:
             recovered = self.__recover_bytes(info)
             if recovered is None:
                 raise
-            self.store.logger.warning(
-                f"{self.msword_file}: {xml_name} had a corrupted zip central "
-                f"directory entry (invalid header offset) - recovered its content "
-                f"via raw signature scan, verified against the recorded CRC32/size."
-            )
+            if xml_name not in self._recovery_logged:
+                self._recovery_logged.add(xml_name)
+                self.store.logger.warning(
+                    f"{self.msword_file}: {xml_name} had a corrupted zip central "
+                    f"directory entry (invalid header offset) - recovered its content "
+                    f"via raw signature scan, verified against the recorded CRC32/size."
+                )
             return recovered
+
+    def __salvage_zip(self):
+        salvaged = _RecoverZip.from_file(self.msword_file)
+        if salvaged is None:
+            return None
+        for name in salvaged.dropped:
+            self.store.logger.warning(
+                f"{self.msword_file}: {name} could not be verified against its "
+                f"local file header CRC32/size (truncated or damaged data) - skipped."
+            )
+        self.store.logger.warning(
+            f"{self.msword_file}: archive has no usable central directory "
+            f"(truncated or incomplete file) - recovered "
+            f"{len(salvaged.infolist())} part(s) from their local file headers, "
+            f"each verified against its recorded CRC32/size."
+        )
+        return salvaged
+
+    def __resolve_target(self, target):
+        if target.startswith("/"):
+            return target.lstrip("/")
+        if target.startswith("word/"):
+            return target
+        return posixpath.normpath(posixpath.join("word", target))
+
+    def __related_part(self, rel_type):
+        try:
+            rels = ET.fromstring(self.__zip_read("word/_rels/document.xml.rels"))
+        except Exception:
+            return None
+        for rel in rels.iter(self.__qn("Relationships", "Relationship")):
+            if rel.get("TargetMode") == "External" or not rel.get("Target"):
+                continue
+            if rel.get("Type", "").rsplit("/", 1)[-1] != rel_type:
+                continue
+            path = self.__resolve_target(rel.get("Target"))
+            try:
+                self._zip.getinfo(path)
+            except KeyError:
+                continue
+            return path
+        return None
+
+    def __settings(self):
+        if not self.settings_xml_content:
+            return ET.Element("settings")
+        return self.__parse(self.settings_xml_content)
 
     def __read_extra_field(self, fh, header_offset):
         try:
@@ -526,6 +679,9 @@ class Docx:
             "footnotes_xml_content": "word/footnotes.xml",
             "endnotes_xml_content": "word/endnotes.xml",
         }
+        settings_part = self.__related_part("settings")
+        if settings_part:
+            xml_map["settings_xml_content"] = settings_part
 
         modified_time = None
         compression_types = {0: "Store (None)", 8: "DEFLATE"}
@@ -718,7 +874,11 @@ class Docx:
             extended_comments = xml.findall(".//w15:commentEx", self.namespaces)
             for values in extended_comments:
                 paraId = values.get(f"{{{self.namespaces['w15']}}}paraId")
-                done = values.get(f"{{{self.namespaces['w15']}}}done")
+                done = values.get(f"{{{self.namespaces['w15']}}}done", "0").lower() in (
+                    "1",
+                    "true",
+                    "on",
+                )
                 paraIdParent = values.get(
                     f"{{{self.namespaces['w15']}}}paraIdParent", "IS_PARENT"
                 )
@@ -801,7 +961,7 @@ class Docx:
         :return:
         """
         rsids = []
-        x = self.__parse(self.settings_xml_content)
+        x = self.__settings()
         rsid_tags = x.findall(".//w:rsid", self.namespaces)
         for tag in rsid_tags:
             rsid_tag = tag.get(f"{{{self.namespaces['w']}}}val", None)
@@ -910,7 +1070,7 @@ class Docx:
         """
         :return: rsidRoot from settings.xml
         """
-        x = self.__parse(self.settings_xml_content)
+        x = self.__settings()
         rsid_root_entry = x.findall(".//w:rsidRoot", self.namespaces)
         root = None
         for entry in [rsid_root_entry]:
@@ -925,7 +1085,7 @@ class Docx:
         """
         :return: the w14, w15, and w16 docId's from settings.xml
         """
-        x = self.__parse(self.settings_xml_content)
+        x = self.__settings()
         w14_id = w15_id = w16_id = "None"
         w14_ns = x.find(f"{{{self.namespaces['w14']}}}docId")
         if w14_ns is not None:
@@ -1014,7 +1174,7 @@ class Docx:
         )
 
     def get_proof_state(self):
-        xml = self.__parse(self.settings_xml_content)
+        xml = self.__settings()
         proof_state = xml.find(f"{{{self.namespaces['w']}}}proofState")
         spelling = grammar = "None"
         if proof_state is not None:
@@ -1088,7 +1248,7 @@ class Docx:
 
     def get_document_protection(self):
         enabled = False
-        xml = self.__parse(self.settings_xml_content)
+        xml = self.__settings()
         protect_state = xml.find(f"{{{self.namespaces['w']}}}documentProtection")
         if protect_state is not None:
             for k, v in protect_state.attrib.items():
@@ -1103,7 +1263,7 @@ class Docx:
         """
         Status of Track Changes setting.
         """
-        xml = self.__parse(self.settings_xml_content)
+        xml = self.__settings()
         element = xml.find(f"{{{self.namespaces['w']}}}trackChanges")
         if element is None:
             return False
@@ -1296,9 +1456,7 @@ class Docx:
             for rel in rels_xml.findall("Relationships:Relationship", self.namespaces):
                 target = rel.get("Target")
                 if target:
-                    id_to_target[rel.get("Id")] = (
-                        target if target.startswith("word/") else f"word/{target}"
-                    )
+                    id_to_target[rel.get("Id")] = self.__resolve_target(target)
 
         references = {}
         if self.document_xml_content:
@@ -1393,7 +1551,7 @@ class Docx:
 
     def get_different_odd_even_pages(self):
         w = self.namespaces["w"]
-        xml = self.__parse(self.settings_xml_content)
+        xml = self.__settings()
         element = xml.find(f"{{{w}}}evenAndOddHeaders")
         if element is None:
             return False
