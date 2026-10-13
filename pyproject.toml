@@ -9,7 +9,6 @@ exclude = ["debian*", "binaries*", "build*", "dist*", "archive*"]
 name = "ms-word-parser"
 version = "3.1.0"
 dependencies = [
-    "PyQt6",
     "pandas",
     "xlsxwriter",
     "olefile",
@@ -30,9 +29,13 @@ classifiers = [
   "Operating System :: OS Independent"
 ]
 
+[project.optional-dependencies]
+gui = ["PyQt6"]
+
 [project.urls]
 Homepage = "https://github.com/jjrboucher/MS-Word-Parser"
 References = "https://github.com/jjrboucher/MS-Word-Parser/tree/master/Resources"
 
 [project.scripts]
 parse-docx = "ms_word_parser.parse_docx:main"
+parse-docx-gui = "ms_word_parser.parse_docx:launch_gui"
