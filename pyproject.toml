@@ -11,7 +11,7 @@ version = "3.1.0"
 dependencies = [
     "pandas",
     "xlsxwriter",
-    "olefile"
+    "olefile",
 ]
 requires-python = ">=3.9"
 authors = [
