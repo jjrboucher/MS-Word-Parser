@@ -565,23 +565,25 @@ class Docx:
             return target
         return posixpath.normpath(posixpath.join("word", target))
 
-    def __related_part(self, rel_type):
+    def __related_parts(self, rel_types):
+        parts = {}
         try:
             rels = ET.fromstring(self.__zip_read("word/_rels/document.xml.rels"))
         except Exception:
-            return None
+            return parts
         for rel in rels.iter(self.__qn("Relationships", "Relationship")):
-            if rel.get("TargetMode") == "External" or not rel.get("Target"):
+            rel_type = rel.get("Type", "").rsplit("/", 1)[-1]
+            if rel_type not in rel_types or rel_type in parts:
                 continue
-            if rel.get("Type", "").rsplit("/", 1)[-1] != rel_type:
+            if rel.get("TargetMode") == "External" or not rel.get("Target"):
                 continue
             path = self.__resolve_target(rel.get("Target"))
             try:
                 self._zip.getinfo(path)
             except KeyError:
                 continue
-            return path
-        return None
+            parts[rel_type] = path
+        return parts
 
     def __settings(self):
         if not self.settings_xml_content:
@@ -679,9 +681,18 @@ class Docx:
             "footnotes_xml_content": "word/footnotes.xml",
             "endnotes_xml_content": "word/endnotes.xml",
         }
-        settings_part = self.__related_part("settings")
-        if settings_part:
-            xml_map["settings_xml_content"] = settings_part
+        related_attribs = {
+            "settings": "settings_xml_content",
+            "comments": "comments_xml_content",
+            "people": "people_xml_content",
+            "footnotes": "footnotes_xml_content",
+            "endnotes": "endnotes_xml_content",
+            "commentsExtended": "extended_xml_content",
+            "commentsIds": "comments_ids_content",
+            "commentsExtensible": "extensible_xml_content",
+        }
+        for rel_type, part in self.__related_parts(related_attribs).items():
+            xml_map[related_attribs[rel_type]] = part
 
         modified_time = None
         compression_types = {0: "Store (None)", 8: "DEFLATE"}
@@ -729,7 +740,7 @@ class Docx:
                     if self.hashing and content is not None:
                         md5hash = self.hash(content)
                     if target_attrib:
-                        if "comments.xml" in xml_name:
+                        if target_attrib == "comments_xml_content":
                             self.has_comments = True
                         setattr(
                             self, target_attrib, content if content is not None else ""
