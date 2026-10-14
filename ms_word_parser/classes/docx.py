@@ -17,6 +17,27 @@ except ModuleNotFoundError:
     from ms_word_parser.classes.datastore import DataStore
 
 __dtfmt__ = "%Y-%m-%d %H:%M:%S"
+_DEFAULT_DOCUMENT = "word/document.xml"
+
+
+def _officedocument_targets(rels):
+    targets = []
+    for rel in rels.iter(f"{{{Docx.namespaces['Relationships']}}}Relationship"):
+        if rel.get("TargetMode") == "External" or not rel.get("Target"):
+            continue
+        if rel.get("Type", "").rsplit("/", 1)[-1] == "officeDocument":
+            targets.append(posixpath.normpath(rel.get("Target").lstrip("/")))
+    return targets
+
+
+def _is_word_document(archive, name):
+    try:
+        with archive.open(name) as f:
+            for _, element in ET.iterparse(f, events=("start",)):
+                return element.tag == f"{{{Docx.namespaces['w']}}}document"
+    except Exception:
+        pass
+    return False
 
 
 class _RecoverZip:
@@ -84,9 +105,22 @@ class _RecoverZip:
                 if data_start + csize > size:
                     break
                 pos = data_start + csize
-        if not any(info.filename == "word/document.xml" for info, _ in entries):
+        recovered = cls(path, entries, dropped)
+        if not recovered.has_word_document():
             return None
-        return cls(path, entries, dropped)
+        return recovered
+
+    def has_word_document(self):
+        candidates = [_DEFAULT_DOCUMENT]
+        try:
+            with self.open("_rels/.rels") as f:
+                candidates = _officedocument_targets(ET.parse(f).getroot()) + candidates
+        except Exception:
+            pass
+        return any(
+            name in self._by_name and _is_word_document(self, name)
+            for name in candidates
+        )
 
     def infolist(self):
         return [info for info, _ in self._entries]
@@ -122,6 +156,56 @@ class Docx:
     xml_files
     """
 
+    namespaces = {
+        "a": "http://schemas.openxmlformats.org/drawingml/2006/main",
+        "aink": "http://schemas.microsoft.com/office/drawing/2016/ink",
+        "b": "http://schemas.openxmlformats.org/officeDocument/2006/bibliography",
+        "ct": "http://schemas.microsoft.com/office/2006/metadata/contentType",
+        "cp": "http://schemas.openxmlformats.org/package/2006/metadata/core-properties",
+        "cprop": "http://schemas.openxmlformats.org/officeDocument/2006/custom-properties",
+        "cr": "http://schemas.microsoft.com/office/comments/2020/reactions",
+        "cx": "http://schemas.microsoft.com/office/drawing/2014/chartex",
+        "dc": "http://purl.org/dc/elements/1.1/",
+        "dcterms": "http://purl.org/dc/terms/",
+        "dcmitype": "http://purl.org/dc/dcmitype/",
+        "default": "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties",
+        "ds": "http://schemas.openxmlformats.org/officeDocument/2006/customXml",
+        "inkml": "http://www.w3.org/2003/InkML",
+        "m": "http://schemas.openxmlformats.org/officeDocument/2006/math",
+        "ma": "http://schemas.microsoft.com/office/2006/metadata/properties/metaAttributes",
+        "mc": "http://schemas.openxmlformats.org/markup-compatibility/2006",
+        "o": "urn:schemas-microsoft-com:office:office",
+        "oel": "http://schemas.microsoft.com/office/2019/extlst",
+        "p": "http://schemas.microsoft.com/office/2006/metadata/properties",
+        "pc": "http://schemas.microsoft.com/office/infopath/2007/PartnerControls",
+        "pic": "http://schemas.openxmlformats.org/drawingml/2006/picture",
+        "r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+        "Relationships": "http://schemas.openxmlformats.org/package/2006/relationships",
+        "sc": "Microsoft.SharePoint.Taxonomy.ContentTypeSync",
+        "sp": "http://schemas.microsoft.com/sharepoint/v3",
+        "Types": "http://schemas.openxmlformats.org/package/2006/content-types",
+        "v": "urn:schemas-microsoft-com:vml",
+        "vt": "http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes",
+        "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
+        "w14": "http://schemas.microsoft.com/office/word/2010/wordml",
+        "w15": "http://schemas.microsoft.com/office/word/2012/wordml",
+        "w16": "http://schemas.microsoft.com/office/word/2018/wordml",
+        "w16cex": "http://schemas.microsoft.com/office/word/2018/wordml/cex",
+        "w16cid": "http://schemas.microsoft.com/office/word/2016/wordml/cid",
+        "w16du": "http://schemas.microsoft.com/office/word/2023/wordml/word16du",
+        "w16sdtdh": "http://schemas.microsoft.com/office/word/2020/wordml/sdtdatahash",
+        "wne": "http://schemas.microsoft.com/office/word/2006/wordml",
+        "wp": "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing",
+        "wpc": "http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas",
+        "wpg": "http://schemas.microsoft.com/office/word/2010/wordprocessingGroup",
+        "wpi": "http://schemas.microsoft.com/office/word/2010/wordprocessingInk",
+        "wps": "http://schemas.microsoft.com/office/word/2010/wordprocessingShape",
+        "wp14": "http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing",
+        "xs": "http://www.w3.org/2001/XMLSchema",
+        "xsd": "http://www.w3.org/2001/XMLSchema",
+        "xsi": "http://www.w3.org/2001/XMLSchema-instance",
+    }
+
     def __init__(
         self, msword_file, triage=False, hashing=True, store: DataStore = None
     ):
@@ -145,59 +229,12 @@ class Docx:
         self.protection_state = {"enabled": False}
         self.is_encrypted = False
         self.irm_info = {}
-        self.namespaces = {
-            "a": "http://schemas.openxmlformats.org/drawingml/2006/main",
-            "aink": "http://schemas.microsoft.com/office/drawing/2016/ink",
-            "b": "http://schemas.openxmlformats.org/officeDocument/2006/bibliography",
-            "ct": "http://schemas.microsoft.com/office/2006/metadata/contentType",
-            "cp": "http://schemas.openxmlformats.org/package/2006/metadata/core-properties",
-            "cprop": "http://schemas.openxmlformats.org/officeDocument/2006/custom-properties",
-            "cr": "http://schemas.microsoft.com/office/comments/2020/reactions",
-            "cx": "http://schemas.microsoft.com/office/drawing/2014/chartex",
-            "dc": "http://purl.org/dc/elements/1.1/",
-            "dcterms": "http://purl.org/dc/terms/",
-            "dcmitype": "http://purl.org/dc/dcmitype/",
-            "default": "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties",
-            "ds": "http://schemas.openxmlformats.org/officeDocument/2006/customXml",
-            "inkml": "http://www.w3.org/2003/InkML",
-            "m": "http://schemas.openxmlformats.org/officeDocument/2006/math",
-            "ma": "http://schemas.microsoft.com/office/2006/metadata/properties/metaAttributes",
-            "mc": "http://schemas.openxmlformats.org/markup-compatibility/2006",
-            "o": "urn:schemas-microsoft-com:office:office",
-            "oel": "http://schemas.microsoft.com/office/2019/extlst",
-            "p": "http://schemas.microsoft.com/office/2006/metadata/properties",
-            "pc": "http://schemas.microsoft.com/office/infopath/2007/PartnerControls",
-            "pic": "http://schemas.openxmlformats.org/drawingml/2006/picture",
-            "r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
-            "Relationships": "http://schemas.openxmlformats.org/package/2006/relationships",
-            "sc": "Microsoft.SharePoint.Taxonomy.ContentTypeSync",
-            "sp": "http://schemas.microsoft.com/sharepoint/v3",
-            "Types": "http://schemas.openxmlformats.org/package/2006/content-types",
-            "v": "urn:schemas-microsoft-com:vml",
-            "vt": "http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes",
-            "w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
-            "w14": "http://schemas.microsoft.com/office/word/2010/wordml",
-            "w15": "http://schemas.microsoft.com/office/word/2012/wordml",
-            "w16": "http://schemas.microsoft.com/office/word/2018/wordml",
-            "w16cex": "http://schemas.microsoft.com/office/word/2018/wordml/cex",
-            "w16cid": "http://schemas.microsoft.com/office/word/2016/wordml/cid",
-            "w16du": "http://schemas.microsoft.com/office/word/2023/wordml/word16du",
-            "w16sdtdh": "http://schemas.microsoft.com/office/word/2020/wordml/sdtdatahash",
-            "wne": "http://schemas.microsoft.com/office/word/2006/wordml",
-            "wp": "http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing",
-            "wpc": "http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas",
-            "wpg": "http://schemas.microsoft.com/office/word/2010/wordprocessingGroup",
-            "wpi": "http://schemas.microsoft.com/office/word/2010/wordprocessingInk",
-            "wps": "http://schemas.microsoft.com/office/word/2010/wordprocessingShape",
-            "wp14": "http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing",
-            "xs": "http://www.w3.org/2001/XMLSchema",
-            "xsd": "http://www.w3.org/2001/XMLSchema",
-            "xsi": "http://www.w3.org/2001/XMLSchema-instance",
-        }
         self._parsed = {}
         self._zip = None
         self._header_index = None
         self._recovery_logged = set()
+        self._bad_timestamps = set()
+        self._document_dir = "word"
         self.has_ink = False
         self.has_comments = False
         self.msword_file = msword_file
@@ -558,17 +595,34 @@ class Docx:
         )
         return salvaged
 
-    def __resolve_target(self, target):
+    def __resolve_target(self, target, base=None):
+        base = self._document_dir if base is None else base
         if target.startswith("/"):
             return target.lstrip("/")
-        if target.startswith("word/"):
+        if target.startswith(f"{base}/"):
             return target
-        return posixpath.normpath(posixpath.join("word", target))
+        return posixpath.normpath(posixpath.join(base, target))
 
-    def __related_parts(self, rel_types):
+    def __main_part(self):
+        try:
+            rels = ET.fromstring(self.__zip_read("_rels/.rels"))
+        except Exception:
+            return _DEFAULT_DOCUMENT
+        for path in _officedocument_targets(rels):
+            if path == _DEFAULT_DOCUMENT:
+                break
+            try:
+                self._zip.getinfo(path)
+            except KeyError:
+                continue
+            if _is_word_document(self._zip, path):
+                return path
+        return _DEFAULT_DOCUMENT
+
+    def __related_parts(self, rels_part, rel_types, base=None):
         parts = {}
         try:
-            rels = ET.fromstring(self.__zip_read("word/_rels/document.xml.rels"))
+            rels = ET.fromstring(self.__zip_read(rels_part))
         except Exception:
             return parts
         for rel in rels.iter(self.__qn("Relationships", "Relationship")):
@@ -577,7 +631,7 @@ class Docx:
                 continue
             if rel.get("TargetMode") == "External" or not rel.get("Target"):
                 continue
-            path = self.__resolve_target(rel.get("Target"))
+            path = self.__resolve_target(rel.get("Target"), base)
             try:
                 self._zip.getinfo(path)
             except KeyError:
@@ -691,8 +745,25 @@ class Docx:
             "commentsIds": "comments_ids_content",
             "commentsExtensible": "extensible_xml_content",
         }
-        for rel_type, part in self.__related_parts(related_attribs).items():
+        document_part = self.__main_part()
+        self._document_dir = posixpath.dirname(document_part)
+        rels_part = posixpath.join(
+            self._document_dir, "_rels", f"{posixpath.basename(document_part)}.rels"
+        )
+        xml_map["document_xml_content"] = document_part
+        xml_map["xml_rels_content"] = rels_part
+        for rel_type, part in self.__related_parts(rels_part, related_attribs).items():
             xml_map[related_attribs[rel_type]] = part
+        package_attribs = {
+            "core-properties": "core_xml_content",
+            "extended-properties": "app_xml_content",
+            "custom-properties": "custom_xml_content",
+        }
+        for rel_type, part in self.__related_parts(
+            "_rels/.rels", package_attribs, ""
+        ).items():
+            xml_map[package_attribs[rel_type]] = part
+        part_prefix = re.escape(f"{self._document_dir}/") if self._document_dir else ""
 
         modified_time = None
         compression_types = {0: "Store (None)", 8: "DEFLATE"}
@@ -722,9 +793,9 @@ class Docx:
                     self.item_files.append(xml_name)
                 if "ink/ink" in xml_name and xml_name not in self.ink_files:
                     self.ink_files.append(xml_name)
-                if re.fullmatch(r"word/header\d+\.xml", xml_name):
+                if re.fullmatch(part_prefix + r"header\d+\.xml", xml_name):
                     self.header_files.append(xml_name)
-                elif re.fullmatch(r"word/footer\d+\.xml", xml_name):
+                elif re.fullmatch(part_prefix + r"footer\d+\.xml", xml_name):
                     self.footer_files.append(xml_name)
                 target_attrib = path_to_attrib.get(xml_name)
                 if self.hashing or target_attrib:
@@ -1569,10 +1640,21 @@ class Docx:
         val = element.get(f"{{{w}}}val")
         return True if val is None else val.lower() in ("1", "true", "on")
 
-    def adjust_timestamp(self, ts):
+    def adjust_timestamp(self, ts, field=None):
         if ts:
             adjusted_timestamp = ts.replace("T", " ").replace("Z", "").split(".")[0]
-            if dt.fromisoformat(adjusted_timestamp).year < 2007:
+            try:
+                year = dt.fromisoformat(adjusted_timestamp).year
+            except ValueError:
+                if (field, ts) not in self._bad_timestamps:
+                    self._bad_timestamps.add((field, ts))
+                    where = f" in {field}" if field else ""
+                    self.store.logger.warning(
+                        f"{self.msword_file}: unable to parse timestamp {ts!r}"
+                        f"{where} (not ISO 8601) - leaving the value blank."
+                    )
+                return None
+            if year < 2007:
                 return None
             return adjusted_timestamp
         return None

@@ -295,9 +295,18 @@ def process_docx(filename, triage, hashing, store: DataStore):
         filename.get_metadata("subject"),
         this_rsid_root,
         filename.get_metadata("Template"),
-        filename.adjust_timestamp(filename.get_metadata("created")),
-        filename.adjust_timestamp(filename.get_metadata("modified")),
-        filename.adjust_timestamp(filename.get_metadata("lastPrinted")),
+        filename.adjust_timestamp(
+            filename.get_metadata("created"),
+            "Metadata 'Created Date' (core.xml dcterms:created)",
+        ),
+        filename.adjust_timestamp(
+            filename.get_metadata("modified"),
+            "Metadata 'Modified Date' (core.xml dcterms:modified)",
+        ),
+        filename.adjust_timestamp(
+            filename.get_metadata("lastPrinted"),
+            "Metadata 'Last Printed Date' (core.xml cp:lastPrinted)",
+        ),
         filename.get_metadata("lastModifiedBy"),
         filename.get_metadata("TotalTime"),
         filename.get_metadata("revision"),
@@ -345,7 +354,9 @@ def process_docx(filename, triage, hashing, store: DataStore):
                 this_file,  # Filename
                 comment[3],  # Author
                 comment[4],  # Initials
-                filename.adjust_timestamp(comment[2]),  # Timestamp
+                filename.adjust_timestamp(
+                    comment[2], "Comments 'Timestamp (UTC)' (comments.xml w:date)"
+                ),  # Timestamp
                 comment[0],  # ID
                 comment[1],  # paraId for later correlation
                 comment[5],  # ParaId Text
@@ -385,7 +396,10 @@ def process_docx(filename, triage, hashing, store: DataStore):
                 this_file,
                 xml,
                 xml_info["MD5"],
-                filename.adjust_timestamp(xml_info["Modified Time"]),
+                filename.adjust_timestamp(
+                    xml_info["Modified Time"],
+                    "Archive Files 'Modified Time' (zip entry date)",
+                ),
                 xml_info["File Size"],
                 xml_info["Zip Compression"],
                 xml_info["Zip Create System"],
@@ -475,9 +489,16 @@ def process_docx(filename, triage, hashing, store: DataStore):
                     values = [
                         this_file,
                         comment,
-                        filename.adjust_timestamp(data[0]),
+                        filename.adjust_timestamp(
+                            data[0],
+                            "Extensible Comments 'dateUtc' (commentsExtensible.xml)",
+                        ),
                         data[2],
-                        filename.adjust_timestamp(data[idx][0]),
+                        filename.adjust_timestamp(
+                            data[idx][0],
+                            "Extensible Comments 'reactionDateUtc' "
+                            "(commentsExtensible.xml)",
+                        ),
                         data[1],
                         data[idx][1],
                         data[idx][2],
@@ -604,7 +625,9 @@ def process_docx(filename, triage, hashing, store: DataStore):
                     this_file,
                     change_type,
                     author,
-                    filename.adjust_timestamp(date),
+                    filename.adjust_timestamp(
+                        date, "Track Changes 'Timestamp (UTC)' (document.xml w:date)"
+                    ),
                     text,
                 ]
                 for k, v in zip(headers, values):
@@ -654,9 +677,15 @@ def process_docx(filename, triage, hashing, store: DataStore):
                 irm_info.get("rms_server"),
                 irm_info.get("tenant_id"),
                 irm_info.get("sdk_version"),
-                filename.adjust_timestamp(irm_info.get("issued")),
-                filename.adjust_timestamp(irm_info.get("valid_from")),
-                filename.adjust_timestamp(irm_info.get("valid_until")),
+                filename.adjust_timestamp(
+                    irm_info.get("issued"), "Rights Management 'Issued (UTC)'"
+                ),
+                filename.adjust_timestamp(
+                    irm_info.get("valid_from"), "Rights Management 'Valid From (UTC)'"
+                ),
+                filename.adjust_timestamp(
+                    irm_info.get("valid_until"), "Rights Management 'Valid Until (UTC)'"
+                ),
             ]
             for k, v in zip(headers, values):
                 store.irm_worksheet[k].append(v)
@@ -725,7 +754,10 @@ def process_docx(filename, triage, hashing, store: DataStore):
                     values = [
                         this_file,
                         ink_file[0],
-                        filename.adjust_timestamp(ink_file[1]),
+                        filename.adjust_timestamp(
+                            ink_file[1],
+                            f"Ink XML Files 'Timestamp (UTC)' ({ink_file[0]} timeString)",
+                        ),
                     ]
                     for k, v in zip(headers, values):
                         store.ink_worksheet[k].append(v)
