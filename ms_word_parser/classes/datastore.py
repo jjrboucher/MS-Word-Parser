@@ -122,6 +122,7 @@ class DataStore:
             "Type": "string",
             "Uncompressed Size (bytes)": "Int32",
             "Unique rsidR": "Int32",
+            "Unverified Parts": "string",
             "uri": "string",
             "userId": "string",
             "userName": "string",
