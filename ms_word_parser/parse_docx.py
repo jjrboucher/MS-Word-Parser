@@ -180,6 +180,7 @@ def process_docx(filename, triage, hashing, store: DataStore):
         "Encrypted",
         "Different First Page",
         "Different Odd/Even Pages",
+        "Unverified Parts",
     ]
     if not hashing:
         headers.pop(1)
@@ -217,6 +218,7 @@ def process_docx(filename, triage, hashing, store: DataStore):
             filename.is_encrypted,
             different_first_page,
             different_odd_even_pages,
+            None,
         ]
     else:
         values = [
@@ -240,9 +242,11 @@ def process_docx(filename, triage, hashing, store: DataStore):
             filename.is_encrypted,
             different_first_page,
             different_odd_even_pages,
+            None,
         ]
     for k, v in zip(headers, values):
         store.doc_summary_worksheet[k].append(v)
+    summary_row = len(store.doc_summary_worksheet["File Name"]) - 1
     update_status("    Extracted Document Summary artifacts", level=level)
 
     # The keys will be used as the column heading in the spreadsheet
@@ -762,6 +766,9 @@ def process_docx(filename, triage, hashing, store: DataStore):
                     for k, v in zip(headers, values):
                         store.ink_worksheet[k].append(v)
 
+    store.doc_summary_worksheet["Unverified Parts"][summary_row] = (
+        ", ".join(filename.unverified_parts) or None
+    )
     update_status(f"Finished processing {this_file}", level="info")
 
 
