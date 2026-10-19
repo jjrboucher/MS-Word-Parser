@@ -41,15 +41,44 @@ def _is_word_document(archive, name):
 
 
 class _RecoverZip:
-    def __init__(self, path, entries, dropped):
+    def __init__(self, path, entries, dropped, unverified):
         self._path = path
         self._entries = entries
         self._by_name = {info.filename: (info, offset) for info, offset in entries}
         self.dropped = dropped
+        self.unverified = unverified
+
+    @staticmethod
+    def decode_member(method, compressed):
+        if method == zipfile.ZIP_STORED:
+            return compressed
+        if method == zipfile.ZIP_DEFLATED:
+            decoder = zlib.decompressobj(-15)
+            raw = decoder.decompress(compressed)
+            return raw if decoder.eof else None
+        return None
+
+    @staticmethod
+    def well_formed(raw):
+        try:
+            ET.fromstring(raw)
+        except ET.ParseError:
+            return False
+        return True
+
+    @staticmethod
+    def integrity_problem(raw, size, crc):
+        problems = []
+        computed = zlib.crc32(raw)
+        if computed != crc:
+            problems.append(f"CRC32 recorded 0x{crc:08X}, computed 0x{computed:08X}")
+        if len(raw) != size:
+            problems.append(f"size recorded {size}, decoded {len(raw)}")
+        return "; ".join(problems) or None
 
     @classmethod
     def from_file(cls, path):
-        entries, dropped = [], []
+        entries, dropped, unverified = [], [], {}
         with open(path, "rb") as fh:
             fh.seek(0, 2)
             size = fh.tell()
@@ -73,13 +102,18 @@ class _RecoverZip:
                 raw = None
                 if len(compressed) == csize:
                     try:
-                        if method == zipfile.ZIP_STORED:
-                            raw = compressed
-                        elif method == zipfile.ZIP_DEFLATED:
-                            raw = zlib.decompressobj(-15).decompress(compressed)
+                        raw = cls.decode_member(method, compressed)
                     except zlib.error:
                         pass
-                if raw is not None and len(raw) == usize and zlib.crc32(raw) == crc:
+                problem = None
+                if raw is not None:
+                    problem = cls.integrity_problem(raw, usize, crc)
+                    if problem and name.endswith((".xml", ".rels")):
+                        if not cls.well_formed(raw):
+                            raw = None
+                if raw is not None:
+                    if problem:
+                        unverified[name] = problem
                     info = zipfile.ZipInfo(name)
                     info.date_time = (
                         (mdate >> 9) + 1980,
@@ -105,7 +139,7 @@ class _RecoverZip:
                 if data_start + csize > size:
                     break
                 pos = data_start + csize
-        recovered = cls(path, entries, dropped)
+        recovered = cls(path, entries, dropped, unverified)
         if not recovered.has_word_document():
             return None
         return recovered
@@ -234,6 +268,7 @@ class Docx:
         self._header_index = None
         self._recovery_logged = set()
         self._bad_timestamps = set()
+        self.unverified_parts = []
         self._document_dir = "word"
         self.has_ink = False
         self.has_comments = False
@@ -530,10 +565,15 @@ class Docx:
         """
         Attempts to read a docx's data directly from the raw archive
         bytes when the central directory's recorded header_offset is stale.
-        The recovered data is only trusted once its size and CRC32 match
-        what the central directory recorded for this doc.
+        Returns (data, None) when its size and CRC32 match what the central
+        directory recorded, (data, problem) when it decodes completely but
+        fails that check, and (None, reason) when it can't be recovered.
         """
         candidates = self.__locate_header_index().get(info.filename, [])
+        if not candidates:
+            return None, "no local file header for it was found in the file"
+        unverified = None
+        reason = ""
         with open(self.msword_file, "rb") as fh:
             for offset in candidates:
                 fh.seek(offset + 26)
@@ -541,19 +581,25 @@ class Docx:
                 fh.seek(offset + 30 + namelen + extralen)
                 compressed = fh.read(info.compress_size)
                 if len(compressed) != info.compress_size:
+                    reason = f"its data at offset {offset} is truncated"
                     continue
                 try:
-                    if info.compress_type == zipfile.ZIP_STORED:
-                        raw = compressed
-                    elif info.compress_type == zipfile.ZIP_DEFLATED:
-                        raw = zlib.decompressobj(-15).decompress(compressed)
-                    else:
-                        continue  # unsupported compression method for recovery
-                except zlib.error:
+                    raw = _RecoverZip.decode_member(info.compress_type, compressed)
+                except zlib.error as e:
+                    reason = f"its data at offset {offset} does not decompress ({e})"
                     continue
-                if len(raw) == info.file_size and zlib.crc32(raw) == info.CRC:
-                    return raw
-        return None
+                if raw is None:
+                    reason = (
+                        f"its data at offset {offset} is an incomplete stream "
+                        f"or uses an unsupported compression method"
+                    )
+                    continue
+                problem = _RecoverZip.integrity_problem(raw, info.file_size, info.CRC)
+                if problem is None:
+                    return raw, None
+                if unverified is None:
+                    unverified = (raw, problem)
+        return unverified or (None, reason)
 
     def __zip_read(self, xml_name):
         """
@@ -564,18 +610,36 @@ class Docx:
         try:
             with self._zip.open(xml_name) as f:
                 return f.read()
-        except Exception:
+        except Exception as e:
             info = self._zip.getinfo(xml_name)
-            recovered = self.__recover_bytes(info)
+            recovered, problem = self.__recover_bytes(info)
             if recovered is None:
-                raise
+                raise Exception(
+                    f"{e} (raw signature scan could not recover it: {problem})"
+                ) from e
+            if problem is not None and not _RecoverZip.well_formed(recovered):
+                raise Exception(
+                    f"{e} (raw signature scan decoded it, but it failed its "
+                    f"integrity check ({problem}) and is not well-formed XML)"
+                ) from e
+            if problem is not None and xml_name not in self.unverified_parts:
+                self.unverified_parts.append(xml_name)
             if xml_name not in self._recovery_logged:
                 self._recovery_logged.add(xml_name)
-                self.store.logger.warning(
-                    f"{self.msword_file}: {xml_name} had a corrupted zip central "
-                    f"directory entry (invalid header offset) - recovered its content "
-                    f"via raw signature scan, verified against the recorded CRC32/size."
-                )
+                if problem is None:
+                    self.store.logger.warning(
+                        f"{self.msword_file}: {xml_name} had a corrupted zip central "
+                        f"directory entry (invalid header offset) - recovered its "
+                        f"content via raw signature scan, verified against the "
+                        f"recorded CRC32/size."
+                    )
+                else:
+                    self.store.logger.warning(
+                        f"{self.msword_file}: UNVERIFIED - {xml_name} failed its "
+                        f"integrity check ({problem}) but decoded completely, so its "
+                        f"content was used anyway and may be inaccurate - "
+                        f"(normal read failed: {e})."
+                    )
             return recovered
 
     def __salvage_zip(self):
@@ -584,14 +648,27 @@ class Docx:
             return None
         for name in salvaged.dropped:
             self.store.logger.warning(
-                f"{self.msword_file}: {name} could not be verified against its "
-                f"local file header CRC32/size (truncated or damaged data) - skipped."
+                f"{self.msword_file}: {name} could not be decoded "
+                f"(truncated or damaged data) - skipped."
             )
+        for name, problem in salvaged.unverified.items():
+            self.store.logger.warning(
+                f"{self.msword_file}: UNVERIFIED - {name} failed its integrity check "
+                f"against its local file header ({problem}) but decoded completely, "
+                f"so its content was used anyway and may be inaccurate."
+            )
+        self.unverified_parts.extend(salvaged.unverified)
+        total = len(salvaged.infolist())
+        checked = (
+            "each verified against its recorded CRC32/size"
+            if not salvaged.unverified
+            else f"{total - len(salvaged.unverified)} verified against their "
+            f"recorded CRC32/size and {len(salvaged.unverified)} UNVERIFIED"
+        )
         self.store.logger.warning(
             f"{self.msword_file}: archive has no usable central directory "
-            f"(truncated or incomplete file) - recovered "
-            f"{len(salvaged.infolist())} part(s) from their local file headers, "
-            f"each verified against its recorded CRC32/size."
+            f"(truncated or incomplete file) - recovered {total} part(s) from "
+            f"their local file headers, {checked}."
         )
         return salvaged
 
@@ -808,6 +885,10 @@ class Docx:
                                 f"Unable to read {xml_name} from archive - "
                                 f"archive appears corrupted: {e}"
                             ) from e
+                        self.store.logger.warning(
+                            f"{self.msword_file}: unable to read {xml_name} - "
+                            f"skipped: {e}"
+                        )
                     if self.hashing and content is not None:
                         md5hash = self.hash(content)
                     if target_attrib:
