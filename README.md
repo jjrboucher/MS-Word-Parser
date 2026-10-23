@@ -146,7 +146,7 @@ Files under customXml bearing the names item1.xml, item2.xml, etc.
 #### Aggregated Comment Data
 This worksheet aggregates the different comment related worksheets into a single one.
 
-#### ink_xml_files
+#### Ink XML Files
 Files with ink markings, and the date/time of the ink marking.
 
 #### Timeline
