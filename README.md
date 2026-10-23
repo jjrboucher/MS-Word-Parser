@@ -40,6 +40,8 @@ options:
 ```
 
 To use the Graphical User Interface (GUI), simply run:
+`parse-docx-gui` (preferred method)
+or
 `parse-docx -g`
 
 <img width="1138" height="375" alt="image" src="https://github.com/user-attachments/assets/8a3c657f-d6a5-4421-8723-19b18c260f2c" />
