@@ -17,10 +17,10 @@ To use the command-line version, simply run:
 ```
 $ parse-docx
 
-usage: parse-docx [-h] [-e] [-g] [-H] [-o OUTPUT] [-r] [-s] [-T] [-v] [--ingest INGEST | --dir DIR |
-                  --files [FILES ...]] [-t | -f]
+usage: parse_docx.py [-h] [-e] [-g] [-H] [-o OUTPUT] [-r] [-s] [-T] [-v] [--ingest INGEST | --dir DIR |
+                     --files [FILES ...]] [-t | -f]
 
-MS Word Parser 3.0.0
+MS Word Parser 3.1.0
 
 options:
   -h, --help           show this help message and exit
@@ -42,7 +42,7 @@ options:
 To use the Graphical User Interface (GUI), simply run:
 `parse-docx -g`
 
-<img width="1423" height="470" alt="parse-docx-gui" src="https://github.com/user-attachments/assets/f13e1575-2e7c-40df-91b5-8d0c160e0cf3" />
+<img width="1138" height="375" alt="image" src="https://github.com/user-attachments/assets/8a3c657f-d6a5-4421-8723-19b18c260f2c" />
 
 
 ### Input
@@ -95,34 +95,60 @@ Open the output path folder.
 ### Worksheets/DB Tables
 Will vary depending on files processed and processing option selected.
 
-#### Doc_Summary
+#### Document Summary
 This worksheet will have one row for each file processed. It will contain a summary of the artifacts relating to the documents (e.g., MD5 hash, number of rsidR, RSID Root, number of paragraph tags (w:p), run tags (w:r), text tags (w:t).
 
 #### Metadata
 This worksheet will have one row for each file processed. It will contain metadata such as the author of the document, the date created, who last modified it, the last modified date, revision count, editing time, etc. It’s important to note that there have been instances where the metadata relating to the number of pages/lines/characters have been inaccurate. This is not a flaw in the script. Rather, it was found that the metadata within the document was wrong. To correct this, the document had to be opened and resaved. But in doing so, you are changing the last time it was modified, and by whom.
 
-#### Comments/comments_ids, extended_comments, extensible_comments
-This worksheet will have zero or more rows for each file. If there are any comments in the document, each comment will occupy one row. Any reply to a comment will be in its own row. It will contain the comment ID number, the timestamp of the comment, the author, the author’s initials, and the comment itself.
+#### Comments,Extensible Comments, Extended Comments, Comment IDs
+These worksheets will have zero or more rows for each file. If there are any comments in the document, each comment will occupy one row. Any reply to a comment will be in its own row. It will contain the comment ID number, the timestamp of the comment, the author, the author’s initials, and the comment itself.
+
+If you select SQLite output, there is a view called "Aggregated Comments" that aggregates the four worksheets.
+
+#### People
+This worksheet can have multiple rows per file. It will contain the list of people who authored at least one comment or revision (when track changes is enabled).
+
+#### Document Protection
+If a document has document protection enabled, it will be listed in this worksheet.
+
+#### Content Types
+This worksheet contains the content of the Content_Types.xml file, which is basically a master directory of all the files within the compound MS Word file.
+
+#### Track Changes
+This worksheet will be present if a document has track changes enabled. It will contain the type of change made (insertion, deletion), the author who made the change, the associated timestamp, and the text that was changed.
+
+#### Headers and Footers
+This worksheet contains details about any headers/footers in a document. It will include the text within the header/footer.
+
+#### Footnote and Endnotes
+This worksheet contains details about any footnotes/endnotes in a document. It will include the text within the footnote/endnote
 
 #### RSIDs
 This worksheet will have multiple rows for each file. Each row will be a unique RSID Type and value, as well as how many times that RSID appears in the document. The rsidR value denotes Revision Save Identifier. Each time there is a save action, a new rsidR value is generated and any text from that session will have that rsidR value attached to it. This allows you to identify what text was typed within a given editing session (a given rsidR value). 
 
 Large documents can result in hundreds of rows, as they will contain many different RSID values. Excel limits the number of rows in a spreadsheet to just over 1 million. The script will break up the RSIDs worksheet into multiple worksheets if necessary, with 1 million rows in each. Each RSIDs worksheet will include a number (1, 2, 3, etc.) in the worksheet name.
 
+#### Custom Properties
+A user can add custom properties to a MS Word document (e.g., DocStatus: Draft, Approved, Reviewed). If custom properties are present in a document, they will be in this worksheet.
+
 #### Archive Files
 This worksheet will have multiple rows for each file. Microsoft Word docx files are compound files. In fact, they are nothing more than a ZIP compressed file with multiple files within it. This worksheet will extract the name of each file within the compound file and include its name, the modified time of the file within the compound file (which in most cases should be “nil”), the uncompressed size of the file, and various ZIP file attributes for that specific file within the compound file.
+
+#### Item XML Files
+Files under customXml bearing the names item1.xml, item2.xml, etc.
+
+#### Aggregated Comment Data
+This worksheet aggregates the different comment related worksheets into a single one.
 
 #### ink_xml_files
 Files with ink markings, and the date/time of the ink marking.
 
-#### people
-List of people in the people.xml files. Normally populated by list of people who interacted with comments (added a comment, or reacted to a comment).
+#### Timeline
+This worksheet contains all supported artifacts within a document that has an associated timestamp.
 
-#### item_xml_files
-Files under customXml bearing the names item1.xml, item2.xml, etc.
-
-#### custom_properties
-Custom properties
+#### Visual Timeline
+This worksheet plots the timeline activity on a graph.
 
 #### errors
 Contains the list of files the application could not process, and an associated error.
@@ -138,6 +164,8 @@ If applicable, the SQLite file will have the following views:
 Aggregated Comments - this resolves the relationship between the four XML files used to track comments, child comments, and reaactions to comments.
 
 Timeline - this view will contain a timeline of all timestamped artifacts.
+
+The GitHub repository also contains a collection of sample SQLite statements to assist you with your analysis. They are located here: https://github.com/jjrboucher/MS-Word-Parser/tree/master/sqlite_queries
 
 ## Suggested Workflow
 - Execute the script in triage mode first if processing a large number of files.
