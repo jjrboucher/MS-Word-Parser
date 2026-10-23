@@ -90,6 +90,9 @@ Opens the Excel file.
 #### Open Output Path
 Open the output path folder.
 
+## Documentation
+Additional documentation can be found in the GitHub repository at the following URL: https://github.com/jjrboucher/MS-Word-Parser/tree/master/Documentation
+
 ## Microsoft Excel File/SQLite File
 
 ### Worksheets/DB Tables
