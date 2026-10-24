@@ -6,7 +6,7 @@ a = Analysis(
     ['ms_word_parser/parse_docx.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[("ms_word_parser/_vendor/qt_themes/LICENSE", "ms_word_parser/_vendor/qt_themes")],
     hiddenimports=["ms_word_parser.gui"],
     hookspath=[],
     hooksconfig={},

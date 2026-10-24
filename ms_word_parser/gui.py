@@ -21,6 +21,8 @@ from PyQt6.QtGui import (
     QColor,
     QDesktopServices,
     QFont,
+    QTextCharFormat,
+    QTextCursor,
 )
 from PyQt6.QtWidgets import (
     QApplication,
@@ -37,7 +39,6 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QRadioButton,
     QStyle,
-    QStyleFactory,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -63,6 +64,14 @@ try:
         run_parallel,
         get_files,
     )
+    from scheme import (
+        CLASSIC,
+        available_schemes,
+        build_palette,
+        mix,
+        save_scheme_name,
+        saved_scheme,
+    )
 except ModuleNotFoundError:
     from ms_word_parser.classes.datastore import DataStore
     from ms_word_parser.tips import (
@@ -83,10 +92,44 @@ except ModuleNotFoundError:
         run_parallel,
         get_files,
     )
+    from ms_word_parser.scheme import (
+        CLASSIC,
+        available_schemes,
+        build_palette,
+        mix,
+        save_scheme_name,
+        saved_scheme,
+    )
 
 green = QColor(86, 208, 50)
 red = QColor(204, 0, 0)
 black = QColor(0, 0, 0)
+
+
+def _luminance(color):
+    def channel(value):
+        return value / 12.92 if value <= 0.03928 else ((value + 0.055) / 1.055) ** 2.4
+
+    return (
+        0.2126 * channel(color.redF())
+        + 0.7152 * channel(color.greenF())
+        + 0.0722 * channel(color.blueF())
+    )
+
+
+def _contrast(first, second):
+    lighter, darker = sorted((_luminance(first), _luminance(second)), reverse=True)
+    return (lighter + 0.05) / (darker + 0.05)
+
+
+def _readable(color, background, minimum=4.5):
+    target = QColor("white") if _luminance(background) < 0.5 else QColor("black")
+    adjusted = QColor(color)
+    for step in range(1, 21):
+        if _contrast(adjusted, background) >= minimum:
+            break
+        adjusted = mix(color, target, step / 20)
+    return adjusted
 
 
 class AboutWindow(QWidget):
@@ -550,17 +593,16 @@ class UiMainWindow:
         self.menuFile.addAction(self.actionAdd_Directory)
         self.menuFile.addSeparator()
         self.menuFile.addAction(self.actionExit)
-        current_style = QApplication.instance().style().objectName().lower()
-        self.styleActionGroup = QActionGroup(MainWindow)
-        self.styleActionGroup.setExclusive(True)
-        for style_name in sorted(QStyleFactory.keys()):
-            action = QAction(style_name, MainWindow)
+        self.schemeActionGroup = QActionGroup(MainWindow)
+        self.schemeActionGroup.setExclusive(True)
+        for scheme_name in available_schemes():
+            action = QAction(scheme_name, MainWindow)
             action.setCheckable(True)
-            action.setChecked(style_name.lower() == current_style)
+            action.setChecked(scheme_name == self.scheme_name)
             action.triggered.connect(
-                lambda checked, name=style_name: self._set_widget_style(name)
+                lambda checked, name=scheme_name: self._set_scheme(name)
             )
-            self.styleActionGroup.addAction(action)
+            self.schemeActionGroup.addAction(action)
             self.menuStyle.addAction(action)
         self.menuHelp.addAction(self.actionContents)
         self.menuHelp.addSeparator()
@@ -870,7 +912,7 @@ class UiMainWindow:
         self.numOfFiles.setText("0")
         self.numOfErrors.setText("0")
         self.numRemaining.setText("0")
-        self.docxOutput.setTextColor(self.default_text_color)
+        self.docxOutput.setCurrentCharFormat(QTextCharFormat())
         self.docxOutput.clear()
         self.processButton.setEnabled(False)
         self.processButton.setStyleSheet(self.disabled)
@@ -924,6 +966,7 @@ class UiMainWindow:
         )
         self.aboutWindow.aboutLabel.setFont(self.text_font)
         self.aboutWindow.urlLabel.setFont(self.text_font)
+        self.aboutWindow.setStyleSheet(self.panel_style)
         self.aboutWindow.show()
 
     def _contents(self):
@@ -943,9 +986,12 @@ class UiMainWindow:
         log_level = levels[level]
         if level in {"info", "error"}:
             if self.store.ms_word_gui:
-                self.docxOutput.setTextColor(color or self.default_text_color)
+                if color:
+                    self.docxOutput.setTextColor(self._status_color(color))
+                else:
+                    self.docxOutput.setCurrentCharFormat(QTextCharFormat())
                 self.docxOutput.append(f"{dt.now().strftime(__dtfmt__)} - {msg}")
-                self.docxOutput.setTextColor(self.default_text_color)
+                self.docxOutput.setCurrentCharFormat(QTextCharFormat())
         try:
             self.logger.log(log_level, msg)
         except (UnicodeDecodeError, UnicodeEncodeError):
@@ -1028,7 +1074,7 @@ class UiMainWindow:
         if error:
             update_status(f"Unable to write results to Excel: {error}")
         else:
-            clr = red if docxErrorCount > 0 else self.default_text_color
+            clr = red if docxErrorCount > 0 else None
             if not stopped:
                 update_status(f'{"="*24}')
             summary = (
@@ -1067,57 +1113,59 @@ class UiMainWindow:
 class MsWordGui(QMainWindow, UiMainWindow):
     """MS Word Parser GUI Class"""
 
-    disabled = """
+    sheet_names = ("disabled", "stylesheet", "scrollbar_sheet", "panel_style")
+
+    disabled_template = """
         QPushButton {
-            background-color: white; border: 1px solid black; color: grey;
+            background-color: @base@; border: 1px solid @text@; color: @dim@;
         }
         """
 
-    stylesheet = """
+    stylesheet_template = """
         QMainWindow {
-            background-color: white; color: black;
+            background-color: @window@; color: @text@;
         }
         QLineEdit {
-            background-color: white; color: black;
+            background-color: @base@; color: @text@;
         }
         QDateTimeEdit {
-            background-color: white; color: black;
+            background-color: @base@; color: @text@;
         }
         QCheckBox {
-            background: white; color:black;
+            background: @base@; color: @text@;
         }
         QMenu {
-            background-color: white; border: 1px solid black; color: black;
+            background-color: @base@; border: 1px solid @text@; color: @text@;
         }
         QMenu::item {
-            padding: 4px 20px; background-color: transparent; color: black;
+            padding: 4px 20px; background-color: transparent; color: @text@;
         }
         QMenu::item:selected {
-            background-color: #d9ebfb; color: black;
+            background-color: @highlight@; color: @highlight_text@;
         }
         QMenuBar {
-            background-color: white; color: black;
+            background-color: @window@; color: @text@;
         }
         QMenuBar::item {
-            background-color: white; color: black;
+            background-color: @window@; color: @text@;
         }
         QMenuBar::item:selected {
-            background-color: #d9ebfb; color: black;
+            background-color: @highlight@; color: @highlight_text@;
         }
         QPushButton {
-            background-color: white; border: 1px solid black; color: black;
+            background-color: @base@; border: 1px solid @text@; color: @text@;
         }
         QPushButton:hover {
-            background-color: #d9ebfb; border: 1px solid black;
+            background-color: @alternate@; border: 1px solid @text@;
         }
         QRadioButton {
-            background: white; color:black;
+            background: @base@; color: @text@;
         }
         """
-    scrollbar_sheet = """
+    scrollbar_template = """
         QScrollBar:vertical {
             border: 0px;
-            background:white;
+            background: @base@;
             width:7px;
             margin: 0px 0px 0px 0px;
         }
@@ -1125,10 +1173,10 @@ class MsWordGui(QMainWindow, UiMainWindow):
             min-height: 30px;
             border: 0px;
             border-radius: 3px;
-            background-color: #a0a0a0;
+            background-color: @handle@;
         }
         QScrollBar::handle:vertical:hover {
-            background: #808080;
+            background: @handle_hover@;
         }
         QScrollBar::add-line:vertical {
             height: 0px;
@@ -1142,18 +1190,18 @@ class MsWordGui(QMainWindow, UiMainWindow):
         }
         QScrollBar:horizontal {
             border: 0px;
-            background: white;
+            background: @base@;
             height: 7px;
             margin: 0px 0px 0px 0px;
         }
         QScrollBar::handle:horizontal {
-            background-color: #a0a0a0;
+            background-color: @handle@;
             min-width: 5px;
             border: 0px;
             border-radius: 3px;
         }
         QScrollBar::handle:horizontal:hover {
-            background: #808080;
+            background: @handle_hover@;
         }
         QScrollBar::sub-line:horizontal, QScrollBar::add-line:horizontal {
             background: none;
@@ -1170,16 +1218,133 @@ class MsWordGui(QMainWindow, UiMainWindow):
             border-right: 1px solid #e4e4e4;
         }
         """
-    panel_style = "background-color: #ffffff; color: black;"
+    panel_template = "background-color: @base@; color: @text@;"
 
-    def _set_widget_style(self, name):
-        QApplication.instance().setStyle(name)
+    dialog_template = """
+        QDialog, QMessageBox {
+            background-color: @window@; color: @text@;
+        }
+        QLabel {
+            background: transparent; color: @text@;
+        }
+        QDialog QPushButton {
+            padding: 4px 16px; min-width: 56px;
+        }
+        QToolTip {
+            background-color: @base@; color: @text@; border: 1px solid @text@;
+        }
+        """
+
+    def _build_sheets(self):
+        scheme = self.scheme
+        text, window, base = (
+            QColor(scheme.text),
+            QColor(scheme.window),
+            QColor(scheme.base),
+        )
+        colors = {
+            "window": scheme.window,
+            "base": scheme.base,
+            "alternate": scheme.alternate,
+            "text": scheme.text,
+            "highlight": scheme.highlight,
+            "highlight_text": scheme.highlight_text,
+            "dim": mix(text, window, 0.5).name(),
+            "handle": scheme.handle or mix(text, base, 0.6).name(),
+            "handle_hover": scheme.handle_hover or mix(text, base, 0.3).name(),
+        }
+        templates = {
+            "disabled": self.disabled_template,
+            "stylesheet": self.stylesheet_template,
+            "scrollbar_sheet": self.scrollbar_template,
+            "panel_style": self.panel_template,
+        }
+
+        def fill(sheet):
+            for key, value in colors.items():
+                sheet = sheet.replace(f"@{key}@", value)
+            return sheet
+
+        for name, sheet in templates.items():
+            native = f"/* native: {name} */"
+            setattr(self, name, native if scheme is CLASSIC else fill(sheet))
+        self.app_sheet = (
+            "/* native: app */"
+            if scheme is CLASSIC
+            else self.stylesheet + self.scrollbar_sheet + fill(self.dialog_template)
+        )
+        if scheme.theme is None:
+            self.error_color, self.success_color = red, green
+        else:
+            self.error_color = _readable(scheme.theme.red, base)
+            self.success_color = _readable(scheme.theme.green, base)
+
+    def _status_color(self, color):
+        if color == red:
+            return self.error_color
+        if color == green:
+            return self.success_color
+        return color
+
+    def _recolor_output(self, old_colors):
+        document = self.docxOutput.document()
+        new_colors = (self.error_color, self.success_color)
+        changes = []
+        block = document.begin()
+        while block.isValid():
+            fragments = block.begin()
+            while not fragments.atEnd():
+                fragment = fragments.fragment()
+                brush = fragment.charFormat().foreground()
+                if brush.style() != Qt.BrushStyle.NoBrush:
+                    for old, new in zip(old_colors, new_colors):
+                        if brush.color() == old:
+                            changes.append(
+                                (fragment.position(), fragment.length(), new)
+                            )
+                fragments += 1
+            block = block.next()
+        cursor = QTextCursor(document)
+        cursor.beginEditBlock()
+        for position, length, new in changes:
+            cursor.setPosition(position)
+            cursor.setPosition(position + length, QTextCursor.MoveMode.KeepAnchor)
+            fmt = QTextCharFormat()
+            fmt.setForeground(new)
+            cursor.mergeCharFormat(fmt)
+        cursor.endEditBlock()
+
+    def _set_scheme(self, name):
+        old = {getattr(self, key): key for key in self.sheet_names}
+        old_colors = (self.error_color, self.success_color)
+        self.scheme_name = name
+        self.scheme = available_schemes()[name]
+        self._build_sheets()
+        self._recolor_output(old_colors)
+        QApplication.instance().setPalette(build_palette(self.scheme))
+        QApplication.instance().setStyleSheet(self.app_sheet)
+        for widget in [self, *self.findChildren(QWidget)]:
+            key = old.get(widget.styleSheet())
+            if key:
+                widget.setStyleSheet(getattr(self, key))
+        about = getattr(self, "aboutWindow", None)
+        if about is not None:
+            about.setStyleSheet(self.panel_style)
+        save_scheme_name(name)
 
     def __init__(self, store: DataStore):
         """Call and setup the UI"""
         self.store = store
         super().__init__(store=store)
-        self.default_text_color = QColor("black")
+        self.scheme = saved_scheme()
+        self.scheme_name = next(
+            name
+            for name, scheme in available_schemes().items()
+            if scheme is self.scheme
+        )
+        self._build_sheets()
+        QApplication.instance().setPalette(build_palette(self.scheme))
+        QApplication.instance().setStyleSheet(self.app_sheet)
         style = self.style()
         dialog_icon = style.standardIcon(
             QStyle.StandardPixmap.SP_FileDialogDetailedView
@@ -1198,10 +1363,7 @@ def gui():
     except ImportError:
         pass
     ms_word_app = QApplication([__appname__, "windows:darkmode=2"])
-    theme = "windowsvista"
-    if os.sys.platform in {"linux", "darwin"}:
-        theme = "Fusion"
-    ms_word_app.setStyle(theme)
+    ms_word_app.setStyle("Fusion" if os.sys.platform in {"linux", "darwin"} else "windowsvista")
     ms_word_app.setApplicationName(__appname__)
     ms_word_app.setApplicationDisplayName(__appname__)
     style = ms_word_app.style()
