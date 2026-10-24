@@ -74,7 +74,7 @@ __clr__ = "\033[1;m"
 __version__ = "3.1.0"
 __appname__ = f"MS Word Parser v{__version__}"
 __source__ = "https://github.com/jjrboucher/MS-Word-Parser"
-__date__ = "27 Sep 2026"
+__date__ = "23 Oct 2026"
 __author__ = (
     "Jacques Boucher - jjrboucher@gmail.com\nCorey Forman - corey@digitalsleuth.ca"
 )
