@@ -49,7 +49,7 @@ ORIGINAL = Scheme(
 )
 NAME_WORDS = {"github": "GitHub"}
 DEFAULT_SCHEME = "Nord"
-SETTINGS_ORGANIZATION = "digitalsleuth"
+SETTINGS_ORGANIZATION = "jjrboucher"
 SETTINGS_APPLICATION = "ms_word_parser"
 THEME_KEY = "appearance/theme"
 
