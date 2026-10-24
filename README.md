@@ -6,9 +6,11 @@
 Conduct a forensic analysis of one or more Microsoft Word docx/dotx/dotm files.
 
 #### Installation
-MS Word Parser is available for installation via pip as `ms-word-parser`:
+MS Word Parser is available for installation via pip as `ms-word-parser` or `ms-word-parser[gui]` if you plan to use the GUI:
 ```
 python3 -m pip install ms-word-parser
+
+python3 -m pip install ms-word-parser[gui]
 ```
 All requirements will automatically install when using this method.
 
@@ -181,3 +183,6 @@ The GitHub repository also contains a collection of sample SQLite statements to 
 parsed over 15k+ files with full parsing enabled. The rsids table in SQLite had over 14 million records. The Archived Files table had over 300,000 records. Due
 to limitations in Excel, the application will split outputs to a maximum of 1 million rows per worksheet. Thus, the rsids would be spread across 15 worksheets vs a
 single table in SQLite.
+
+## Third-Party Software
+The GUI colour schemes use code from [qt-themes](https://github.com/beatreichenbach/qt-themes) by Beat Reichenbach, which is vendored under `ms_word_parser/_vendor/qt_themes` and modified to work with PyQt6. It is used under the terms of its [MIT License](https://github.com/beatreichenbach/qt-themes/blob/main/LICENSE).
